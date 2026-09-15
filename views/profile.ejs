@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 个人设置 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260903a">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'profile' }) %>
+
+  <div class="container">
+    <div class="card profile-card">
+      <div class="card-title"><%- icon('user') %> 个人设置</div>
+      <div class="form-group">
+        <label>账号</label>
+        <input type="text" class="form-control" value="<%= user.username %>" disabled>
+      </div>
+      <div class="form-group">
+        <label>姓名</label>
+        <input type="text" class="form-control" value="<%= user.display_name %>" disabled>
+      </div>
+      <div class="form-group">
+        <label>角色</label>
+        <input type="text" class="form-control" value="<%= roleNames[user.role] || user.role %>" disabled>
+      </div>
+      <hr class="section-divider">
+      <div class="card-title profile-section-title">修改密码</div>
+      <div class="form-group">
+        <label for="oldPwd">原密码</label>
+        <input type="password" id="oldPwd" class="form-control" autocomplete="current-password">
+      </div>
+      <div class="form-group">
+        <label for="newPwd">新密码（至少12位，包含大小写字母、数字和符号）</label>
+        <input type="password" id="newPwd" class="form-control" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label for="newPwd2">确认新密码</label>
+        <input type="password" id="newPwd2" class="form-control" autocomplete="new-password">
+      </div>
+      <button class="btn btn-primary full-width" id="changePwdBtn">修改密码</button>
+    </div>
+  </div>
+
+  <script nonce="<%= cspNonce %>">
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+    async function changePwd() {
+      const old_password = document.getElementById('oldPwd').value;
+      const p1 = document.getElementById('newPwd').value;
+      const p2 = document.getElementById('newPwd2').value;
+      if (!old_password || !p1) { toast('请填写完整', 'error'); return; }
+      if (!(p1.length >= 12 && /[a-z]/.test(p1) && /[A-Z]/.test(p1) && /[0-9]/.test(p1) && /[^A-Za-z0-9\s]/.test(p1))) { toast('密码至少12位，包含大小写字母、数字和符号', 'error'); return; }
+      if (p1 !== p2) { toast('两次输入的新密码不一致', 'error'); return; }
+      const res = await fetch('/api/profile/password', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ old_password, new_password: p1 })
+      });
+      const d = await res.json();
+      if (d.success) {
+        toast('密码已修改');
+        document.getElementById('oldPwd').value = '';
+        document.getElementById('newPwd').value = '';
+        document.getElementById('newPwd2').value = '';
+      } else toast(d.msg || '修改失败', 'error');
+    }
+    document.getElementById('changePwdBtn').addEventListener('click', changePwd);
+  </script>
+</body>
+</html>

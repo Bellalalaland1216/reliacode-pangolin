@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClawMaster / 首页 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260903a">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'home' }) %>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>首页</h1>
+      <p>数据总览与快捷入口</p>
+    </div>
+
+    <!-- 数据概览 -->
+    <div class="overview-strip">
+      <div class="ov-item"><div class="ov-num"><%= stats.products %></div><div class="ov-label">产品总数</div></div>
+      <div class="ov-item"><div class="ov-num"><%= stats.boxes %></div><div class="ov-label">箱码总数</div></div>
+      <div class="ov-item"><div class="ov-num"><%= stats.items %></div><div class="ov-label">子码总数</div></div>
+      <div class="ov-item"><div class="ov-num success"><%= stats.shipped %></div><div class="ov-label">已发货箱数</div></div>
+      <div class="ov-item"><div class="ov-num success"><%= totalScans %></div><div class="ov-label">扫码总次数</div></div>
+      <div class="ov-item"><div class="ov-num danger"><%= stats.diversions %></div><div class="ov-label">串货预警</div></div>
+    </div>
+
+    <!-- 扫码地区排行榜 -->
+    <div class="section-title">扫码地区排行</div>
+    <div class="group-card">
+      <% if (!scanRegions || scanRegions.length === 0) { %>
+        <p class="empty-hint">暂无扫码数据</p>
+      <% } else { %>
+      <ol class="region-rank-list">
+        <% scanRegions.forEach((r, i) => { %>
+        <li class="region-rank-item">
+          <span class="region-rank-no <%= i < 3 ? 'top' : '' %>"><%= i + 1 %></span>
+          <span class="region-rank-name"><%= r.region %></span>
+          <span class="region-rank-count"><%= r.count %> 次</span>
+        </li>
+        <% }); %>
+      </ol>
+      <% } %>
+    </div>
+
+    <!-- 码使用概览 -->
+    <div class="section-title">码使用概览</div>
+    <div class="group-card">
+      <div class="code-usage-row">
+        <% const totalBoxItems = (stats.boxes||0) + (stats.items||0); const usedBoxItems = (stats.shipped||0) + (stats.scanned||0); const restBoxItems = (stats.inStockBoxes||0) + (stats.inStockItems||0); const usedPct = totalBoxItems > 0 ? Math.round(usedBoxItems*100/totalBoxItems) : 0; %>
+        <div class="code-usage-item">
+          <div class="cu-label">二维码使用总量</div>
+          <div class="cu-num"><%= totalBoxItems %> <span class="cu-unit">个</span></div>
+        </div>
+        <div class="code-usage-item">
+          <div class="cu-label">已用（发货/扫码）</div>
+          <div class="cu-num"><%= usedBoxItems %> <span class="cu-unit">个</span></div>
+        </div>
+        <div class="code-usage-item">
+          <div class="cu-label">剩余可用</div>
+          <div class="cu-num"><%= restBoxItems %> <span class="cu-unit">个</span></div>
+        </div>
+      </div>
+      <div class="code-usage-bar">
+        <progress class="cu-bar" max="100" value="<%= usedPct %>"></progress>
+        <div class="cu-bar-label">已使用 <%= usedPct %>%</div>
+      </div>
+    </div>
+
+    <!-- 快捷功能入口（App 图标网格） -->
+    <div class="section-title">快捷功能</div>
+    <div class="app-grid">
+      <a href="/admin/business" class="app-tile">
+        <span class="app-icon blue"><%- icon('grid') %></span>
+        <span class="app-label">业务中心</span>
+      </a>
+      <a href="/generate" class="app-tile">
+        <span class="app-icon purple"><%- icon('plus') %></span>
+        <span class="app-label">生成码</span>
+      </a>
+      <a href="/codes" class="app-tile">
+        <span class="app-icon red"><%- icon('database') %></span>
+        <span class="app-label">码查询</span>
+      </a>
+      <a href="/factory" class="app-tile">
+        <span class="app-icon teal"><%- icon('box') %></span>
+        <span class="app-label">工厂装箱</span>
+      </a>
+      <a href="/warehouse" class="app-tile">
+        <span class="app-icon green"><%- icon('truck') %></span>
+        <span class="app-label">品牌发货</span>
+      </a>
+      <a href="/distributors" class="app-tile">
+        <span class="app-icon orange"><%- icon('handshake') %></span>
+        <span class="app-label">代理商</span>
+      </a>
+      <a href="/alerts" class="app-tile">
+        <span class="app-icon red">
+          <%- icon('bell') %>
+          <% if (alertsUnread > 0) { %><span class="app-badge" data-count="<%= alertsUnread %>"></span><% } %>
+        </span>
+        <span class="app-label">预警中心</span>
+      </a>
+      <a href="/admin/me" class="app-tile">
+        <span class="app-icon gray"><%- icon('settings') %></span>
+        <span class="app-label">我的</span>
+      </a>
+    </div>
+
+    <!-- 手机扫码入口 -->
+    <div class="section-title">手机扫码入口</div>
+    <div class="group-card">
+      <div class="qr-entry-row">
+        <div class="qr-entry">
+          <div class="qr-entry-img">
+            <img src="/api/qr?data=<%= encodeURIComponent(factoryUrl) %>" alt="工厂入口二维码">
+          </div>
+          <div>
+            <div class="qr-entry-title">工厂装箱入口</div>
+            <div class="qr-entry-desc">工人微信扫码装箱</div>
+          </div>
+        </div>
+        <div class="qr-entry">
+          <div class="qr-entry-img">
+            <img src="/api/qr?data=<%= encodeURIComponent(entryUrl) %>" alt="仓库入口二维码">
+          </div>
+          <div>
+            <div class="qr-entry-title">品牌发货入口</div>
+            <div class="qr-entry-desc">仓库人员微信扫码发货</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 最近扫码记录 -->
+    <div class="section-title">最近扫码记录</div>
+    <div class="group-card">
+      <% if (recentScans.length === 0) { %>
+        <p class="empty-hint">暂无扫码记录</p>
+      <% } else { %>
+      <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>扫码码</th><th>产品</th><th>代理商</th><th>扫码区域</th><th>状态</th><th>时间</th><% if (user && (user.role === 'admin' || user.role === 'brand')) { %><th>操作</th><% } %>
+          </tr>
+        </thead>
+        <tbody>
+          <% recentScans.forEach(s => { %>
+          <tr>
+            <td class="td-mono"><%= s.item_code %></td>
+            <td><%= s.product_name || '-' %></td>
+            <td><%= s.distributor_name || '-' %></td>
+            <td><%= s.scan_location || '-' %></td>
+            <td>
+              <% if (s.is_diversion >= 2) { %><span class="tag tag-red">重度串货</span>
+              <% } else if (s.is_diversion === 1) { %><span class="tag tag-yellow">轻度串货</span>
+              <% } else { %><span class="tag tag-green">正常</span><% } %>
+            </td>
+            <td class="td-muted"><%= s.scanned_at %></td>
+            <% if (user && (user.role === 'admin' || user.role === 'brand')) { %>
+            <td class="no-wrap"><button class="btn btn-outline btn-sm del-scan-btn danger-action" type="button" data-log-id="<%= s.id %>">删除</button></td>
+            <% } %>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      </div>
+      <% } %>
+      <div class="group-card-foot">
+        <a href="/logs" class="btn btn-outline btn-sm">查看全部日志</a>
+      </div>
+    </div>
+  </div>
+
+  <script nonce="<%= cspNonce %>">
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+    document.querySelectorAll('.del-scan-btn').forEach(button => {
+      button.addEventListener('click', async () => {
+        if (!confirm('确定删除这条扫码记录？')) return;
+        const res = await fetch('/api/scan-logs/' + button.dataset.logId, { method: 'DELETE' });
+        const d = await res.json();
+        if (d.success) { toast('已删除'); setTimeout(() => location.reload(), 400); }
+        else toast(d.msg || '删除失败', 'error');
+      });
+    });
+  </script>
+</body>
+</html>

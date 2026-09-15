@@ -1,0 +1,10 @@
+[Unit]
+Description=Run a monthly ReliaCode restore drill
+
+[Timer]
+OnCalendar=monthly
+Persistent=true
+RandomizedDelaySec=2h
+
+[Install]
+WantedBy=timers.target

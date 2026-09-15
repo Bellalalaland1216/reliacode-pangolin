@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 码查询 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260907a">
+  <script src="/js/html5-qrcode.min.js"></script>
+  <script src="/js/scanner.js?v=20260831i"></script>
+</head>
+<body>
+  <%- include('partials/nav', { active: 'codes' }) %>
+
+  <div class="container">
+    <header class="page-heading">
+      <span class="eyebrow">码资产</span>
+      <h1>码查询</h1>
+      <p>检索、筛选、批量打印和导出生产码。</p>
+    </header>
+    <div class="card">
+      <div class="card-title">码查询</div>
+      <div class="codes-toolbar">
+        <div class="form-group codes-search-field">
+          <label for="searchKeyword" class="sr-only">搜索箱码或子码</label>
+          <input type="text" id="searchKeyword" class="form-control" placeholder="输入箱码或子码搜索">
+        </div>
+        <button id="scanCodeBtn" class="btn btn-outline no-wrap" type="button"><%- icon('camera') %> 扫码查询</button>
+        <div>
+          <label class="codes-type-label">
+            <input type="radio" name="codeType" value="box" checked aria-label="查询箱码"> 箱码
+            <input type="radio" name="codeType" value="item" class="codes-item-radio" aria-label="查询子码"> 子码
+          </label>
+        </div>
+        <label for="statusFilter" class="sr-only">筛选码状态</label>
+        <select id="statusFilter" class="form-control codes-status-filter">
+          <option value="">全部状态</option>
+          <option value="in_stock">在库</option>
+          <option value="shipped">已发货</option>
+          <option value="scanned">已扫码</option>
+          <option value="invalid">已作废</option>
+        </select>
+        <button id="searchCodesBtn" class="btn btn-primary" type="button">搜索</button>
+        <button id="openPrintDialogBtn" class="btn btn-outline" type="button"><%- icon('print') %> 批量打印</button>
+        <button id="exportExcelBtn" class="btn btn-outline" type="button"><%- icon('download') %> 导出 Excel</button>
+      </div>
+    </div>
+
+    <!-- 批量打印配置弹窗 -->
+    <div id="printModal" class="codes-modal-mask">
+      <div class="codes-modal">
+        <div class="codes-modal-title"><%- icon('print') %> 批量打印标签</div>
+        <div class="form-group">
+          <label for="printScope">打印范围</label>
+          <select id="printScope" class="form-control">
+            <option value="checked">勾选的码（本页）</option>
+            <option value="filtered">当前筛选的全部结果</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="printCols">每行标签数（列数）</label>
+          <select id="printCols" class="form-control">
+            <option value="2">2 列（大标签）</option>
+            <option value="3" selected>3 列</option>
+            <option value="4">4 列</option>
+            <option value="5">5 列（小标签）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="codes-check-label">
+            <input type="checkbox" id="printMeta" checked> 标签上显示产品名和批次号
+          </label>
+        </div>
+        <div class="form-group">
+          <label class="codes-check-label">
+            <input type="checkbox" id="printBrand" checked> 标签上显示品牌名
+          </label>
+        </div>
+        <div class="codes-modal-actions">
+          <button id="closePrintDialogBtn" class="btn btn-outline" type="button">取消</button>
+          <button id="doPrintBtn" class="btn btn-primary" type="button">生成打印页</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="resultCard">
+      <div class="card-title codes-result-title">
+        <span id="resultTitle"></span>
+        <button id="batchBtn" class="btn btn-outline btn-sm danger-action is-hidden" type="button"><%- icon('trash') %> 批量删除选中（<span id="selCount">0</span>）</button>
+      </div>
+      <div id="resultBody"></div>
+      <div id="pagination" class="pagination"></div>
+    </div>
+  </div>
+
+  <script nonce="<%= cspNonce %>">
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    function brandTag(name) {
+      if (!name) return '<span class="tag tag-gray">未归属</span>';
+      return '<span class="tag tag-blue">' + esc(name) + '</span>';
+    }
+    function statusTag(s) {
+      if (s === 'shipped') return '<span class="tag tag-blue">已发货</span>';
+      if (s === 'scanned') return '<span class="tag tag-green">已扫码</span>';
+      if (s === 'invalid') return '<span class="tag tag-red">已作废</span>';
+      return '<span class="tag tag-gray">在库</span>';
+    }
+
+    function actionBtns(type, row) {
+      const isInvalid = row.status === 'invalid';
+      let html = '<div class="code-actions">';
+      if (isInvalid) {
+        html += `<span class="tag tag-red">已作废</span>`;
+        html += `<button class="btn btn-outline btn-sm code-action-btn danger-action" type="button" data-action="delete" data-code-type="${type}" data-code-id="${Number(row.id)}" data-code-value="${esc(row.box_code || row.item_code)}">删除</button>`;
+      } else {
+        if (row.status === 'shipped' || row.status === 'scanned') {
+          html += `<button class="btn btn-outline btn-sm code-action-btn warning-action" type="button" data-action="invalidate" data-code-type="${type}" data-code-id="${Number(row.id)}" data-code-value="${esc(row.box_code || row.item_code)}">标记作废</button>`;
+        }
+        if (row.status === 'in_stock') {
+          html += `<button class="btn btn-outline btn-sm code-action-btn danger-action" type="button" data-action="delete" data-code-type="${type}" data-code-id="${Number(row.id)}" data-code-value="${esc(row.box_code || row.item_code)}">删除</button>`;
+        }
+      }
+      html += '</div>';
+      return html;
+    }
+
+    async function deleteCode(type, id, code) {
+      if (!confirm('确定要删除「' + code + '」吗？\n\n此操作不可恢复，删除后该码的记录将彻底消失。')) return;
+      const res = await fetch('/api/codes/' + type + '/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) { toast(data.msg); search(currentPage || 1); }
+      else toast(data.msg, 'error');
+    }
+
+    // ===== 批量删除 =====
+    function checkCell(type, row) {
+      const can = row.status === 'in_stock' || row.status === 'invalid';
+      return `<td class="codes-check-cell">${can ? `<input type="checkbox" class="row-check" data-id="${row.id}">` : ''}</td>`;
+    }
+    function checkHead() {
+      return '<th class="codes-check-head"><input type="checkbox" id="checkAll" title="全选本页可删除的码"></th>';
+    }
+    function bindChecks() {
+      document.querySelectorAll('.row-check').forEach(cb => cb.addEventListener('change', updateSelCount));
+      const master = document.getElementById('checkAll');
+      if (master) master.addEventListener('change', () => toggleAll(master));
+      updateSelCount();
+    }
+    function bindCodeActions() {
+      document.querySelectorAll('.code-action-btn').forEach(button => {
+        button.addEventListener('click', () => {
+          const args = [button.dataset.codeType, Number(button.dataset.codeId), button.dataset.codeValue];
+          return button.dataset.action === 'invalidate' ? invalidateCode(...args) : deleteCode(...args);
+        });
+      });
+    }
+    function toggleAll(master) {
+      document.querySelectorAll('.row-check').forEach(cb => { cb.checked = master.checked; });
+      updateSelCount();
+    }
+    function updateSelCount() {
+      const n = document.querySelectorAll('.row-check:checked').length;
+      document.getElementById('selCount').textContent = n;
+      document.getElementById('batchBtn').classList.toggle('is-hidden', n === 0);
+    }
+    async function batchDelete() {
+      const type = document.querySelector('input[name="codeType"]:checked').value;
+      const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(cb => parseInt(cb.dataset.id));
+      if (!ids.length) return toast('请先勾选要删除的码', 'error');
+      let msg = '确定要批量删除选中的 ' + ids.length + ' 个' + (type === 'box' ? '箱码' : '子码') + '吗？';
+      msg += '\n\n此操作不可恢复；已发货/已扫码/箱下有子码的会被自动跳过。';
+      if (!confirm(msg)) return;
+      const res = await fetch('/api/codes/batch-delete', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, ids })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.skipped && data.skipped.length) {
+          const detail = data.skipped.slice(0, 5).map(s => s.code + '（' + s.msg + '）').join('、');
+          toast(data.msg + '：' + detail + (data.skipped.length > 5 ? ' 等' : ''), 'error');
+        } else {
+          toast(data.msg);
+        }
+        search(currentPage || 1);
+      } else toast(data.msg || '批量删除失败', 'error');
+    }
+
+    async function invalidateCode(type, id, code) {
+      const reason = prompt('将「' + code + '」标记为作废？\n\n请输入作废原因（可选）：', '');
+      if (reason === null) return;
+      const res = await fetch('/api/codes/' + type + '/' + id + '/invalidate', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      });
+      const data = await res.json();
+      if (data.success) { toast(data.msg); search(currentPage || 1); }
+      else toast(data.msg, 'error');
+    }
+
+    let currentPage = 1;
+    let currentRows = [];   // 当前页码数据（打印勾选用）
+    let currentTotal = 0;   // 当前筛选总数
+    // 暴露到 window 方便 PC 浏览器在控制台排查「码查询」页卡住问题
+    window.addEventListener('error', e => {
+      console.error('[codes] 页面脚本错误:', e.message, e.filename, e.lineno);
+      const body = document.getElementById('resultBody');
+      if (body && !body.innerHTML.trim()) {
+        body.innerHTML = '<div class="codes-error">页面加载异常：' + esc(e.message || '未知错误') + '</div>';
+      }
+    });
+    async function search(page) {
+      currentPage = page;
+      const body = document.getElementById('resultBody');
+      try {
+        const keyword = document.getElementById('searchKeyword').value.trim();
+        const type = document.querySelector('input[name="codeType"]:checked').value;
+        const status = document.getElementById('statusFilter').value;
+        const params = new URLSearchParams({ type: type, page: page, keyword: keyword });
+        if (status) params.set('status', status);
+        const res = await fetch('/api/codes?' + params.toString());
+        const data = await res.json();
+        if (!data.success) {
+          body.innerHTML = '<p class="codes-query-error">查询失败：' + esc(data.msg || '未知错误') + '</p>';
+          return;
+        }
+
+      const title = document.getElementById('resultTitle');
+      const card = document.getElementById('resultCard');
+      currentTotal = data.total || 0;
+
+      if (type === 'box') {
+        currentRows = data.boxes;
+        title.textContent = '箱码列表（共 ' + data.total + ' 条）';
+        if (data.boxes.length === 0) {
+          document.getElementById('batchBtn').classList.add('is-hidden');
+          body.innerHTML = '<p class="codes-empty">无结果</p>';
+        } else {
+          body.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr>' + checkHead() + '<th>箱码</th><th>产品</th><th>归属品牌</th><th class="col-sm-hide">批次</th><th>数量</th><th>已扫码</th><th>状态</th><th class="col-sm-hide">创建时间</th><th>操作</th></tr></thead><tbody>' +
+            data.boxes.map(b => `<tr>
+              ${checkCell('box', b)}
+              <td class="code-cell"><a href="/v/${encodeURIComponent(b.box_code)}" target="_blank" rel="noopener">${esc(b.box_code)}</a></td>
+              <td>${b.product_name ? esc(b.product_name) : '<span class="tag tag-gray">未绑定</span>'}</td>
+              <td>${brandTag(b.brand_name)}</td>
+              <td class="col-sm-hide">${esc(b.batch_no || '-')}</td>
+              <td>${b.item_count}</td>
+              <td>${b.scanned_count || 0}</td>
+              <td>${statusTag(b.status)}</td>
+              <td class="col-sm-hide meta-cell">${esc(b.created_at)}</td>
+              <td>${actionBtns('box', b)}</td>
+            </tr>`).join('') + '</tbody></table></div>';
+          bindChecks();
+          bindCodeActions();
+        }
+      } else {
+        currentRows = data.items;
+        title.textContent = '子码列表（共 ' + data.total + ' 条）';
+        if (data.items.length === 0) {
+          document.getElementById('batchBtn').classList.add('is-hidden');
+          body.innerHTML = '<p class="codes-empty">无结果</p>';
+        } else {
+          body.innerHTML = '<div class="table-wrap"><table class="table"><thead><tr>' + checkHead() + '<th>子码</th><th class="col-sm-hide">箱码</th><th>产品</th><th>归属品牌</th><th>状态</th><th class="col-sm-hide">代理商</th><th class="col-sm-hide">创建时间</th><th>操作</th></tr></thead><tbody>' +
+            data.items.map(i => `<tr>
+              ${checkCell('item', i)}
+              <td class="code-cell"><a href="/v/${encodeURIComponent(i.item_code)}" target="_blank" rel="noopener">${esc(i.item_code)}</a></td>
+              <td class="col-sm-hide code-cell">${i.box_code ? `<a href="/v/${encodeURIComponent(i.box_code)}" target="_blank" rel="noopener">${esc(i.box_code)}</a>` : '<span class="tag tag-gray">未绑定</span>'}</td>
+              <td>${i.product_name ? esc(i.product_name) : '<span class="tag tag-gray">未绑定</span>'}</td>
+              <td>${brandTag(i.brand_name)}</td>
+              <td>${statusTag(i.status)}</td>
+              <td class="col-sm-hide">${esc(i.distributor_name || '-')}</td>
+              <td class="col-sm-hide meta-cell">${esc(i.created_at)}</td>
+              <td>${actionBtns('item', i)}</td>
+            </tr>`).join('') + '</tbody></table></div>';
+          bindChecks();
+          bindCodeActions();
+        }
+      }
+
+      const pgEl = document.getElementById('pagination');
+      pgEl.innerHTML = '';
+      for (let i = 1; i <= data.pages; i++) {
+        const a = document.createElement('a');
+        a.textContent = i;
+        if (i === page) a.className = 'active';
+        a.onclick = () => search(i);
+        pgEl.appendChild(a);
+      }
+      } catch (e) {
+        console.error('[codes] search 异常:', e);
+        body.innerHTML = '<div class="codes-error">加载失败：' + esc(e.message || '网络异常') + '</div>';
+      }
+    }
+
+    function exportExcel() {
+      const keyword = document.getElementById('searchKeyword').value.trim();
+      const type = document.querySelector('input[name="codeType"]:checked').value;
+      const status = document.getElementById('statusFilter').value;
+      const params = new URLSearchParams({ type: type, keyword: keyword });
+      if (status) params.set('status', status);
+      window.location.href = '/api/export/codes?' + params.toString();
+    }
+
+    // ===== 批量打印标签（手工贴）=====
+    function openPrintDialog() {
+      const checkedN = document.querySelectorAll('.row-check:checked').length;
+      document.getElementById('printScope').options[0].textContent = '勾选的码（本页 ' + checkedN + ' 个）';
+      document.getElementById('printScope').options[1].textContent = '当前筛选的全部结果（' + currentTotal + ' 个）';
+      document.getElementById('printScope').value = checkedN > 0 ? 'checked' : 'filtered';
+      document.getElementById('printCols').value = document.querySelector('input[name="codeType"]:checked').value === 'box' ? '3' : '4';
+      document.getElementById('printModal').classList.add('is-open');
+    }
+    function closePrintDialog() { document.getElementById('printModal').classList.remove('is-open'); }
+
+    async function doPrint() {
+      const type = document.querySelector('input[name="codeType"]:checked').value;
+      const scope = document.getElementById('printScope').value;
+      const cols = parseInt(document.getElementById('printCols').value) || 3;
+      const showMeta = document.getElementById('printMeta').checked;
+      const showBrand = document.getElementById('printBrand').checked;
+      const isBox = type === 'box';
+      const codeKey = isBox ? 'box_code' : 'item_code';
+
+      let rows = [];
+      if (scope === 'checked') {
+        const ids = Array.from(document.querySelectorAll('.row-check:checked')).map(cb => parseInt(cb.dataset.id));
+        rows = currentRows.filter(r => ids.includes(r.id));
+        if (!rows.length) { closePrintDialog(); return toast('请先勾选要打印的码', 'error'); }
+      } else {
+        const keyword = document.getElementById('searchKeyword').value.trim();
+        const status = document.getElementById('statusFilter').value;
+        const params = new URLSearchParams({ type: type, keyword: keyword, all: '1' });
+        if (status) params.set('status', status);
+        const res = await fetch('/api/codes?' + params.toString());
+        const data = await res.json();
+        if (!data.success) { closePrintDialog(); return toast('取数失败', 'error'); }
+        rows = data.boxes || data.items || [];
+        if (!rows.length) { closePrintDialog(); return toast('当前筛选没有码可打印', 'error'); }
+        if (rows.length >= 5000) toast('数量超过5000，仅打印前5000个', 'error');
+      }
+      closePrintDialog();
+      renderPrintPage(rows, cols, showMeta, showBrand, isBox, codeKey);
+    }
+
+    function renderPrintPage(rows, cols, showMeta, showBrand, isBox, codeKey) {
+      const siteBrand = <%- JSON.stringify(brand || '') %>;
+      const labels = rows.map(r => {
+        const code = r[codeKey];
+        const brandName = r.brand_name || siteBrand || '';
+        const brandTxt = (showBrand && brandName) ? `<div class="brand-txt">${esc(brandName)}</div>` : '';
+        const meta = showMeta ? `<div class="sub">${esc(r.product_name || '未绑定产品')}${r.batch_no ? ' · 批次 ' + esc(r.batch_no) : ''}</div>` : '';
+        return `<div class="label">${brandTxt}<img src="/qr/${code}.png" alt=""><div class="code-txt">${esc(code)}</div>${meta}</div>`;
+      }).join('');
+
+      const html = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>ClawMaster / 打印${isBox ? '箱码' : '子码'}标签</title>
+<style nonce="<%= cspNonce %>">
+  @page { size: A4; margin: 8mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Microsoft YaHei", sans-serif; }
+  .grid { display: grid; grid-template-columns: repeat(${cols}, 1fr); gap: 3mm; }
+  .label { border: 1px dashed #000; padding: 2.5mm 1.5mm; text-align: center; page-break-inside: avoid; break-inside: avoid; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .label img { width: 100%; max-width: ${(isBox ? 34 : 26)}mm; }
+  .code-txt { font-family: Consolas, monospace; font-weight: bold; font-size: ${isBox ? '10pt' : '8.5pt'}; letter-spacing: .5px; word-break: break-all; margin-top: 1mm; }
+  .brand-txt { font-family: "Microsoft YaHei", sans-serif; font-weight: bold; font-size: ${isBox ? '11pt' : '9pt'}; color: #000; margin-bottom: 1mm; }
+  .sub { font-size: 7pt; color: #000; margin-top: .5mm; }
+  .tip { position: fixed; top: 6px; right: 10px; font-size: 14px; background: #fff; color: #000; border: 1px solid #000; padding: 8px 14px; border-radius: 6px; z-index: 9; }
+  @media print { .tip { display: none; } }
+</style></head><body>
+<button class="tip" type="button">点击打印（共 ${rows.length} 个标签，每行 ${cols} 个）</button>
+<div class="grid">${labels}</div>
+</body></html>`;
+
+      const w = window.open('', '_blank');
+      if (!w) return toast('浏览器拦截了弹窗，请允许弹窗后重试', 'error');
+      w.document.write(html);
+      w.document.close();
+      w.document.querySelector('.tip').addEventListener('click', () => w.print());
+      const images = [...w.document.querySelectorAll('.label img')];
+      let pending = images.length;
+      const done = () => {
+        pending--;
+        if (pending <= 0) setTimeout(() => w.print(), 300);
+      };
+      if (!pending) setTimeout(() => w.print(), 300);
+      images.forEach(image => {
+        if (image.complete) done();
+        else {
+          image.addEventListener('load', done, { once: true });
+          image.addEventListener('error', done, { once: true });
+        }
+      });
+    }
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // 从 URL 读取初始筛选（首页统计卡跳转过来）
+    const urlParams = new URLSearchParams(window.location.search);
+    const initType = urlParams.get('type');
+    const initStatus = urlParams.get('status');
+    if (initType === 'item') document.querySelector('input[name="codeType"][value="item"]').checked = true;
+    if (initStatus) document.getElementById('statusFilter').value = initStatus;
+
+    document.getElementById('searchCodesBtn').addEventListener('click', () => search(1));
+    document.getElementById('openPrintDialogBtn').addEventListener('click', openPrintDialog);
+    document.getElementById('exportExcelBtn').addEventListener('click', exportExcel);
+    document.getElementById('closePrintDialogBtn').addEventListener('click', closePrintDialog);
+    document.getElementById('doPrintBtn').addEventListener('click', doPrint);
+    document.getElementById('batchBtn').addEventListener('click', batchDelete);
+    document.getElementById('searchKeyword').addEventListener('keydown', event => {
+      if (event.key === 'Enter') search(1);
+    });
+
+    // 相机扫码查询：识别到码后填入搜索框并自动搜索
+    document.getElementById('scanCodeBtn').addEventListener('click', () => {
+      openScanner({
+        title: '扫描箱码或子码查询',
+        continuous: false,
+        onScanned: (code) => {
+          if (!code) return;
+          document.getElementById('searchKeyword').value = code;
+          search(1);
+        }
+      });
+    });
+
+    search(1);
+  </script>
+</body>
+</html>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 穿山甲溯源大师 · 注册</title>
+  <style nonce="<%= cspNonce %>">
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: #f5f5f7; color: #1f1f1f; padding: 20px 0; }
+    .reg-box { background: #fff; border-radius: 16px; padding: 36px; width: 400px; max-width: 92vw;
+      border: 1px solid #e5e5e7; box-shadow: 0 12px 36px rgba(15,23,42,.08); }
+    .reg-box .logo { width: 64px; height: 64px; margin: 0 auto 10px; border: 1px solid #d9ded8; border-radius: 12px; overflow: hidden; background: #f5f6f3; }
+    .reg-box .logo img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .reg-box h1 { text-align: center; font-size: 19px; color: #1f1f1f; margin-bottom: 4px; }
+    .reg-box .sub { text-align: center; font-size: 12px; color: #6e6e73; margin-bottom: 22px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 13px; color: #333; margin-bottom: 6px; }
+    .form-group input, .form-group select { width: 100%; padding: 11px 12px; border: 1px solid #dfe3e8; border-radius: 10px;
+      font-size: 15px; outline: none; transition: border .2s; }
+    .form-group input:focus, .form-group select:focus { border-color: #1a73e8; outline: 3px solid rgba(26,115,232,.14); outline-offset: 0; }
+    .btn-reg { width: 100%; padding: 12px; background: #1a73e8; color: #fff; border: 1px solid #1a73e8;
+      border-radius: 10px; font-size: 16px; cursor: pointer; margin-top: 4px; font-weight: 600; }
+    .btn-reg:disabled { opacity: .6; cursor: not-allowed; }
+    .btn-check { padding: 8px 16px; background: #eef6ff; color: #1a73e8; border: 1px solid #c8ddff;
+      border-radius: 8px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+    .msg { border-radius: 8px; padding: 10px 12px; font-size: 13px; margin-bottom: 14px; }
+    .msg.error { background: #fff4f3; color: #b42318; border: 1px solid #ffd0cc; }
+    .msg.ok { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+    .role-banner { display: none; background: #eef6ff; border: 1px solid #c8ddff; border-radius: 10px; padding: 10px 12px;
+      font-size: 13px; color: #1a73e8; margin-bottom: 14px; }
+    .role-banner.is-visible { display:block; }
+    .back { margin-top: 16px; text-align: center; font-size: 13px; }
+    .back a { color: #1a73e8; text-decoration: none; font-weight: 500; }
+    .tip { margin-top: 14px; font-size: 12px; color: #6e6e73; text-align: center; line-height: 1.8; }
+      .is-hidden { display: none !important; }
+      .ui-icon { width: 1.1em; height: 1.1em; display: inline-block; flex: 0 0 auto; vertical-align: -0.16em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .ui-icon-lg { width: 2.25rem; height: 2.25rem; }
+    svg:not(.qr-code):not(.label-qr) { fill: none; stroke: currentColor; }
+  </style>
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260903a">
+</head>
+<body>
+  <div class="reg-box">
+    <div class="logo"><img src="/icons/pangolin-photo.png?v=20260905" alt="穿山甲真实动物图标"></div>
+    <h1><%= brand %></h1>
+    <div class="sub">合作方自助注册（需总部邀请码）</div>
+    <div id="msg" class="msg error is-hidden"></div>
+    <div id="roleBanner" class="role-banner"></div>
+
+    <div class="form-group invite-row">
+      <div class="invite-field">
+        <label for="fCode">邀请码</label>
+        <input type="text" id="fCode" value="<%= code %>" placeholder="总部发放的邀请码" class="uppercase-input">
+      </div>
+      <button type="button" class="btn-check" id="checkCodeBtn">验证</button>
+    </div>
+
+    <div id="regForm" class="is-hidden">
+      <div class="form-group">
+        <label for="fUsername">账号（3-20位字母/数字/下划线）</label>
+        <input type="text" id="fUsername" placeholder="登录用账号，如 gd_chaye">
+      </div>
+      <div class="form-group">
+        <label for="fPassword">密码（至少12位，包含大小写字母、数字和符号）</label>
+        <input type="password" id="fPassword" placeholder="请设置密码">
+      </div>
+      <div class="form-group">
+        <label for="fPassword2">密码确认</label>
+        <input type="password" id="fPassword2" placeholder="再输入一次密码">
+      </div>
+      <div class="form-group">
+        <label id="companyLabel" for="fCompany">公司/工厂名称</label>
+        <input type="text" id="fCompany" placeholder="如：云山茶业广州工厂">
+      </div>
+      <div class="is-hidden" id="regionGroup">
+        <div class="form-group"><label for="fCountry">国家</label><select id="fCountry"><option value="中国">中国</option></select></div>
+        <div class="form-group"><label for="fProvince">省/自治区/特别行政区</label><select id="fProvince"><option value="">请选择省级地区</option></select></div>
+        <div class="form-group"><label for="fCity">市/州/地区</label><select id="fCity" disabled><option value="">请先选择省级地区</option></select></div>
+      </div>
+      <div class="form-group">
+        <label id="contactLabel" for="fContact">联系人/电话（选填）</label>
+        <input type="text" id="fContact" placeholder="选填">
+      </div>
+      <div class="form-group" id="phoneGroup">
+        <label for="fPhone">手机号（<span id="phoneReq">工厂注册必填</span>）</label>
+        <input type="tel" id="fPhone" placeholder="11位手机号" maxlength="11">
+      </div>
+      <button type="button" class="btn-reg" id="btnReg">注 册</button>
+    </div>
+
+    <div class="back"><a href="/login"><%- icon('arrow-left') %> 返回登录</a></div>
+    <div class="tip">没有邀请码请联系总部获取<br>消费者扫码验证无需注册</div>
+  </div>
+
+  <script nonce="<%= cspNonce %>">
+    let invRole = '';
+    let regionCatalog = {};
+    const msgEl = document.getElementById('msg');
+    const roleEl = document.getElementById('roleBanner');
+    function fillRegistrationCities() {
+      const province = document.getElementById('fProvince').value;
+      const city = document.getElementById('fCity');
+      city.replaceChildren(new Option(province ? '请选择市级地区' : '请先选择省级地区', ''));
+      (regionCatalog[province] || []).forEach(name => city.add(new Option(name, name)));
+      city.disabled = !province;
+    }
+    async function loadRegistrationRegions() {
+      const response = await fetch('/api/regions');
+      const data = await response.json();
+      regionCatalog = data.countries?.[0]?.provinces || {};
+      const province = document.getElementById('fProvince');
+      Object.keys(regionCatalog).forEach(name => province.add(new Option(name, name)));
+    }
+    function showMsg(text, ok) {
+      msgEl.textContent = text;
+      msgEl.className = 'msg ' + (ok ? 'ok' : 'error');
+      msgEl.classList.toggle('is-hidden', !text);
+    }
+    async function checkCode() {
+      const code = document.getElementById('fCode').value.trim().toUpperCase();
+      if (!code) return showMsg('请输入邀请码', false);
+      const res = await fetch('/api/register/check-code', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const d = await res.json();
+      if (!d.success) {
+        invRole = '';
+        roleEl.classList.remove('is-visible');
+        document.getElementById('regForm').classList.add('is-hidden');
+        return showMsg(d.msg, false);
+      }
+      invRole = d.role;
+      showMsg('', true);
+      roleEl.textContent = d.role === 'factory'
+        ? '邀请码有效：工厂注册（注册后可登录装箱作业，品牌旗下码均可扫码装箱）'
+        : (d.role === 'distributor'
+          ? '邀请码有效：代理商注册（注册后可登录自助端查看自己的库存与扫码）'
+          : '邀请码有效：品牌管理员注册（注册后管理所属品牌，不能直接生成箱码或子码）');
+      roleEl.classList.add('is-visible');
+      document.getElementById('regForm').classList.remove('is-hidden');
+      document.getElementById('regionGroup').classList.toggle('is-hidden', d.role !== 'distributor');
+      document.getElementById('companyLabel').textContent = d.role === 'factory' ? '归属工厂（由邀请码固定）' : (d.role === 'brand' ? '管理员姓名或企业名称' : '公司名称');
+      // 工厂角色：工厂由总部建档并随邀请码固定，改为只读展示，不允许装箱人员自行填写
+      const companyInput = document.getElementById('fCompany');
+      if (d.role === 'factory') {
+        if (d.factory_name) {
+          companyInput.value = d.factory_name;
+          companyInput.readOnly = true;
+          companyInput.style.background = '#f5f5f7';
+          companyInput.style.color = '#6e6e73';
+        } else {
+          companyInput.readOnly = false;
+          companyInput.style.background = '';
+          companyInput.style.color = '';
+        }
+      } else {
+        companyInput.readOnly = false;
+        companyInput.value = '';
+        companyInput.style.background = '';
+        companyInput.style.color = '';
+      }
+      document.getElementById('contactLabel').textContent = d.role === 'factory' ? '联系人姓名（工厂注册必填）' : '联系人/电话（选填）';
+      document.getElementById('fContact').placeholder = d.role === 'factory' ? '请填写联系人姓名' : '选填';
+      document.getElementById('phoneReq').textContent = d.role === 'factory' ? '工厂注册必填' : '选填';
+    }
+    document.getElementById('checkCodeBtn').addEventListener('click', checkCode);
+    document.getElementById('btnReg').addEventListener('click', doRegister);
+
+    async function doRegister() {
+      const body = {
+        code: document.getElementById('fCode').value.trim().toUpperCase(),
+        username: document.getElementById('fUsername').value.trim(),
+        password: document.getElementById('fPassword').value,
+        company: document.getElementById('fCompany').value.trim(),
+        country: document.getElementById('fCountry').value,
+        province: document.getElementById('fProvince').value,
+        city: document.getElementById('fCity').value,
+        contact: document.getElementById('fContact').value.trim(),
+        phone: document.getElementById('fPhone').value.trim()
+      };
+      if (!body.username) return showMsg('请填写账号', false);
+      if (!(body.password.length >= 12 && /[a-z]/.test(body.password) && /[A-Z]/.test(body.password) && /[0-9]/.test(body.password) && /[^A-Za-z0-9\s]/.test(body.password))) return showMsg('密码至少12位，包含大小写字母、数字和符号', false);
+      if (body.password !== document.getElementById('fPassword2').value) return showMsg('两次密码不一致', false);
+      if (!body.company) return showMsg('请填写公司/工厂名称', false);
+      if (invRole === 'distributor' && (!body.country || !body.province || !body.city)) return showMsg('请选择完整的国家、省和市', false);
+      if (invRole === 'factory') {
+        if (!body.contact) return showMsg('请填写联系人姓名', false);
+        if (!/^1\d{10}$/.test(body.phone)) return showMsg('请填写正确的11位手机号', false);
+      }
+
+      const btn = document.getElementById('btnReg');
+      btn.disabled = true; btn.textContent = '注册中…';
+      try {
+        const res = await fetch('/api/register', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const d = await res.json();
+        if (d.success) {
+          showMsg('注册成功！即将跳转登录页，请用新账号「' + d.username + '」登录', true);
+          setTimeout(() => location.href = '/login', 1800);
+        } else {
+          showMsg(d.msg || '注册失败', false);
+          btn.disabled = false; btn.textContent = '注 册';
+        }
+      } catch (e) {
+        showMsg('网络异常，请重试', false);
+        btn.disabled = false; btn.textContent = '注 册';
+      }
+    }
+    // 从链接带码进入时自动校验
+    if (document.getElementById('fCode').value) checkCode();
+    document.getElementById('fProvince').addEventListener('change', fillRegistrationCities);
+    loadRegistrationRegions().catch(() => showMsg('地区目录加载失败，请刷新后重试', false));
+  </script>
+</body>
+</html>

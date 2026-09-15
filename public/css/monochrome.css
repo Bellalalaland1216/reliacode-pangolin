@@ -1,0 +1,134 @@
+:root {
+  color-scheme: light;
+  --primary: #007aff !important;
+  --primary-dark: #0062cc !important;
+  --primary-light: #eef6ff !important;
+  --bg: #f5f5f7 !important;
+  --card-bg: #fff !important;
+  --text: #000 !important;
+  --text-light: #6e6e73 !important;
+  --border: #d2d2d7 !important;
+  --success: #248a3d !important;
+  --warning: #b85c00 !important;
+  --danger: #d70015 !important;
+}
+
+html, body, .h5-body, .page, .page-container, .content, .main,
+.topbar, .topbar-inner, .bottom-nav, .card, .panel, .section,
+.login-box, .reg-box, .modal, .modal-content, .h5-card,
+.brand-header, .brand-footer, .toolbar, .print-area,
+.brand-hero, .prize-card, .prize-card.thanks,
+.table-wrap, table, thead, tbody, tr, td, th,
+.big-status, .role-banner, .msg, .error, .scan-times,
+.product-panel, .form-card, .stats-card, .stat-item {
+  background: #fff !important;
+  background-image: none !important;
+  color: #000 !important;
+  border-color: #e5e5e7 !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.035) !important;
+}
+
+.brand-hero::before {
+  display: none !important;
+}
+
+.brand-hero,
+.brand-footer,
+.prize-card,
+.prize-card.thanks {
+  border-color: #000 !important;
+}
+
+button, .btn, a.btn, input, select, textarea, .form-control,
+.tag, .badge, .tn-badge, .avatar-circle, .car-dots span,
+.mi-icon, .bn-icon, code {
+  color: #000 !important;
+  background: #fff !important;
+  background-image: none !important;
+  border: 1px solid #d2d2d7 !important;
+  box-shadow: 0 1px 1px rgba(0,0,0,.025) !important;
+}
+
+button:hover, .btn:hover, a.btn:hover,
+.topnav a.active,
+.bottom-nav a.active, [aria-current="page"], input[type="submit"] {
+  border-color: currentColor !important;
+}
+
+button:hover, .btn:hover, a.btn:hover {
+  outline: 2px solid #000 !important;
+  outline-offset: 2px;
+}
+
+.topnav a.active, .bottom-nav a.active, [aria-current="page"] {
+  box-shadow: inset 0 -3px #000 !important;
+  font-weight: 700;
+}
+
+.pagination a.active {
+  color: #000 !important;
+  background: #fff !important;
+  border-color: #000 !important;
+  box-shadow: inset 0 -3px #000 !important;
+  font-weight: 700;
+}
+
+.modal-mask, #printModal, #editModal {
+  background: #fff !important;
+}
+
+a { text-decoration-color: currentColor; }
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid #000 !important;
+  outline-offset: 2px;
+  border-color: #000 !important;
+  box-shadow: none !important;
+}
+
+button, .btn, a.btn, select,
+input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]) {
+  min-height: 44px;
+}
+
+button:focus-visible, .btn:focus-visible, a:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 3px solid #000 !important;
+  outline-offset: 3px !important;
+}
+
+input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--primary);
+}
+::placeholder { color: #6e6e73 !important; opacity: 1; }
+
+.progress, .progress-track { background: #fff !important; border: 1px solid #000 !important; }
+.progress-bar, #progressBar { background: var(--primary) !important; }
+
+svg, .icon { color: currentColor; }
+svg:not(.qr-code) { fill: none; stroke: currentColor; }
+img, video, canvas, .qr-code { forced-color-adjust: none; }
+
+.ui-icon {
+  width: 1.1em;
+  height: 1.1em;
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: -0.16em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ui-icon-lg { width: 2.25rem; height: 2.25rem; }
+.reg-link a, .back a { display: inline-flex; align-items: center; gap: .35em; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+@media print {
+  html, body, .print-area, .label { background: #fff !important; color: #000 !important; }
+  .toolbar { display: none !important; }
+}

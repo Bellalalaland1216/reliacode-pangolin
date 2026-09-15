@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#0b6e4f">
+  <title>ClawMaster / 穿山甲溯源大师 · 登录</title>
+  <style nonce="<%= cspNonce %>">
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --brand: #0b6e4f;
+      --brand-2: #1d9e6f;
+      --ink: #1f2d27;
+      --muted: #6b7a72;
+      --line: #e3e8e4;
+      --bg: #f6f8f6;
+    }
+    body {
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      background: var(--bg); color: var(--ink); padding: 0;
+    }
+    .shell {
+      width: 100%; max-width: 1000px; min-height: 600px;
+      display: grid; grid-template-columns: 1.1fr 1fr;
+      background: #fff; border-radius: 20px; overflow: hidden;
+      box-shadow: 0 24px 60px rgba(11, 46, 33, .14);
+      margin: 24px;
+    }
+    /* 左侧品牌区 */
+    .brand-panel {
+      background: linear-gradient(150deg, #063a2a 0%, #0b6e4f 55%, #12876a 100%);
+      color: #fff; padding: 56px 48px; position: relative; overflow: hidden;
+      display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .brand-panel::before {
+      content: ""; position: absolute; inset: 0;
+      background:
+        radial-gradient(600px 300px at 110% -10%, rgba(255,255,255,.14), transparent 60%),
+        radial-gradient(500px 300px at -20% 110%, rgba(29,158,111,.5), transparent 60%);
+      pointer-events: none;
+    }
+    .brand-logo { position: relative; display: flex; align-items: center; gap: 12px; }
+    .brand-logo .mark {
+      width: 46px; height: 46px; border-radius: 12px; background: #fff;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,.18);
+    }
+    .brand-logo .mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .brand-logo .name { font-size: 21px; font-weight: 600; letter-spacing: .5px; }
+    .brand-logo .sub { font-size: 12px; opacity: .7; letter-spacing: 2px; }
+    .brand-mid { position: relative; margin: 32px 0; }
+    .brand-mid .slogan { font-size: 15px; opacity: .85; margin-bottom: 22px; letter-spacing: .3px; }
+    .brand-mid h2 { font-size: 34px; line-height: 1.45; font-weight: 700; letter-spacing: .5px; }
+    .brand-foot { position: relative; font-size: 13px; opacity: .78; line-height: 1.9; }
+    .brand-foot .dots { display: flex; gap: 18px; margin-top: 6px; }
+    .brand-foot .dots span { display: inline-flex; align-items: center; gap: 6px; }
+    .brand-foot .dots i {
+      width: 6px; height: 6px; border-radius: 50%; background: #7be0b6; display: inline-block;
+    }
+    /* 右侧登录区 */
+    .form-panel { padding: 56px 52px; display: flex; flex-direction: column; justify-content: center; }
+    .form-panel h1 { font-size: 27px; font-weight: 700; margin-bottom: 6px; }
+    .form-panel .hint { font-size: 13px; color: var(--muted); margin-bottom: 30px; line-height: 1.6; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: #33423a; margin-bottom: 8px; }
+    .input-wrap { position: relative; }
+    .form-group input {
+      width: 100%; padding: 13px 14px; border: 1.5px solid var(--line); border-radius: 12px;
+      font-size: 15px; outline: none; transition: border .2s, box-shadow .2s; background: #fbfcfb; color: var(--ink);
+    }
+    .form-group input:focus { border-color: var(--brand-2); background: #fff;
+      box-shadow: 0 0 0 4px rgba(18, 135, 106, .10); }
+    .form-group input::placeholder { color: #b6c0ba; }
+    .remember-row { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 22px; font-size: 13px; color: var(--muted); }
+    .remember-row label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); }
+    .remember-row input { width: 17px; height: 17px; accent-color: var(--brand); }
+    .btn-login {
+      width: 100%; padding: 14px; background: linear-gradient(135deg, #0b6e4f, #12876a);
+      color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 700;
+      cursor: pointer; letter-spacing: 1px; transition: opacity .2s, transform .1s; box-shadow: 0 10px 24px rgba(11,110,79,.28);
+    }
+    .btn-login:hover { opacity: .93; }
+    .btn-login:active { transform: translateY(1px); }
+    .error {
+      background: #fff4f3; color: #b42318; border: 1px solid #ffd0cc; border-radius: 10px;
+      padding: 11px 14px; font-size: 13px; margin-bottom: 18px; line-height: 1.5;
+    }
+    .links { margin-top: 24px; display: flex; flex-direction: column; gap: 10px; }
+    .links a { color: var(--brand); text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+    .links a:hover { text-decoration: underline; }
+    .links .consumer-entry { color: var(--muted); }
+    .tip { margin-top: 20px; font-size: 12px; color: #9aa79f; line-height: 1.7; }
+    .is-hidden { display: none !important; }
+    .ui-icon { width: 1.1em; height: 1.1em; display: inline-block; flex: 0 0 auto; vertical-align: -0.16em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .ui-icon-lg { width: 2.25rem; height: 2.25rem; }
+    svg:not(.qr-code):not(.label-qr) { fill: none; stroke: currentColor; }
+    /* 移动端：上下布局 */
+    @media (max-width: 760px) {
+      .shell { grid-template-columns: 1fr; min-height: auto; margin: 12px; }
+      .brand-panel { padding: 40px 28px; }
+      .brand-mid h2 { font-size: 26px; }
+      .brand-mid { margin: 24px 0; }
+      .form-panel { padding: 36px 28px; }
+    }
+  </style>
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260903a">
+</head>
+<body>
+  <div class="shell">
+    <!-- 左侧品牌宣传区 -->
+    <div class="brand-panel">
+      <div class="brand-logo">
+        <div class="mark"><img src="/icons/pangolin-photo.png?v=20260905" alt="穿山甲真实动物图标" width="46" height="46"></div>
+        <div>
+          <div class="name">ClawMaster / 穿山甲溯源大师</div>
+          <div class="sub">TRACEABILITY OPERATIONS</div>
+        </div>
+      </div>
+      <div class="brand-mid">
+        <div class="slogan">让每一次扫码，都成为可验证的信任。</div>
+        <h2>一物一码<br>从生产到消费者<br>全程可追溯。</h2>
+      </div>
+      <div class="brand-foot">
+        <div class="dots">
+          <span><i></i>过程可溯源</span>
+          <span><i></i>数据自动化</span>
+          <span><i></i>管理远程化</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧登录区 -->
+    <div class="form-panel">
+      <h1>欢迎回来</h1>
+      <div class="hint">同一企业账号体系，请使用总部分配的账号登录。</div>
+      <% if (error) { %><div class="error"><%= error %></div><% } %>
+      <form method="POST" action="/login">
+        <div class="form-group">
+          <label for="loginUsername">账号</label>
+          <div class="input-wrap">
+            <input id="loginUsername" type="text" name="username" autofocus autocomplete="username" placeholder="请输入账号">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">密码</label>
+          <div class="input-wrap">
+            <input id="loginPassword" type="password" name="password" autocomplete="current-password" placeholder="请输入密码">
+          </div>
+        </div>
+        <div class="remember-row">
+          <label for="rememberLogin">
+            <input id="rememberLogin" type="checkbox" name="remember" value="1" checked>
+            <span>记住登录状态（30 天）</span>
+          </label>
+        </div>
+        <button type="submit" class="btn-login">登 录</button>
+      </form>
+      <div class="links">
+        <a href="/register">有邀请码？注册账号 <%- icon('arrow-right') %></a>
+        <a href="/v" class="consumer-entry">消费者溯源查询入口 <%- icon('arrow-right') %></a>
+      </div>
+      <div class="tip">消费者扫码验证无需登录<br>合作工厂 / 代理商凭总部邀请码注册</div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 码生成 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260903a">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'generate' }) %>
+
+  <div class="container">
+    <!-- 产品管理 -->
+    <div class="card function-card function-product">
+      <div class="product-section-heading">
+        <div>
+          <div class="card-title">产品管理</div>
+          <p class="section-help">维护产品基础资料、消费者可见内容与扫码展示。</p>
+        </div>
+        <button id="addProductBtn" class="btn btn-primary" type="button" aria-haspopup="dialog">新增产品</button>
+      </div>
+      <p class="form-help">箱规 = 每箱装几个；归属工厂仅作管理参考。批次在生码时创建或选择，不再固化在产品定义中。</p>
+      <div class="table-wrap">
+      <table class="table" id="productTable">
+        <thead>
+          <tr><th>产品名称</th><th class="col-sm-hide">ENA13条码</th><th class="col-sm-hide">规格</th><th class="col-sm-hide">批次</th><th>箱规</th><th class="col-sm-hide">归属工厂</th><% if (user && user.role === 'admin') { %><th class="col-sm-hide">归属品牌</th><% } %><th class="col-sm-hide">创建时间</th><th class="action-column">操作</th></tr>
+        </thead>
+        <tbody>
+          <% products.forEach(p => { %>
+          <tr>
+            <td><%= p.name %></td>
+            <td class="col-sm-hide td-mono"><%= p.ena13 || '-' %></td>
+            <td class="col-sm-hide"><%= p.spec || '-' %></td>
+            <td class="col-sm-hide"><%= p.batch_no || '-' %></td>
+            <td><%= p.box_size ? p.box_size + ' 个/箱' : '-' %></td>
+            <td class="col-sm-hide"><%= p.factory_name || '总部' %></td>
+            <% if (user && user.role === 'admin') { %><td class="col-sm-hide"><%= p.brand_name || '-' %></td><% } %>
+            <td class="col-sm-hide meta-cell"><%= p.created_at %></td>
+            <td><div class="product-row-actions"><button class="btn btn-outline btn-sm report-product-btn" type="button" data-product-id="<%= p.id %>" data-product-name="<%= p.name %>">报告</button><button class="btn btn-outline btn-sm edit-product-btn" type="button" data-product-id="<%= p.id %>">编辑</button><button class="btn btn-outline btn-sm delete-product-btn danger-action" type="button" data-product-id="<%= p.id %>" data-product-name="<%= p.name %>">删除</button></div></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <div id="productModal" class="product-modal-mask" role="presentation" aria-hidden="true">
+      <section class="product-modal" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
+        <header class="product-modal-header">
+          <div>
+            <p class="product-modal-eyebrow">产品配置</p>
+            <h2 id="productModalTitle">新增产品</h2>
+          </div>
+          <button id="closeProductModalBtn" class="icon-button" type="button" aria-label="关闭新增产品窗口"><%- icon('xmark') %></button>
+        </header>
+        <div class="product-modal-body">
+          <nav class="product-step-nav" aria-label="产品配置步骤">
+            <button class="product-step is-active" type="button" data-step="basic" aria-current="step"><span>1</span>基本信息</button>
+            <button class="product-step" type="button" data-step="media"><span>2</span>产品图片</button>
+            <button class="product-step" type="button" data-step="trace"><span>3</span>溯源流程</button>
+            <button class="product-step" type="button" data-step="campaign"><span>4</span>营销内容</button>
+            <button class="product-step product-preview-step" type="button" data-step="preview"><span>5</span>扫码预览</button>
+          </nav>
+
+          <form id="productForm" class="product-workspace" novalidate>
+            <div class="product-editor-pane">
+              <section class="product-step-panel is-active" data-panel="basic">
+                <div class="section-kicker">基础资料</div>
+                <h3>定义消费者识别的产品</h3>
+                <div class="product-form-grid">
+                  <div class="form-group product-grid-wide">
+                    <label for="pName">产品名称</label>
+                    <input type="text" id="pName" class="form-control" placeholder="例如：谷饲牛腩" maxlength="80" required autocomplete="off">
+                  </div>
+                  <div class="form-group">
+                    <label for="pEna13">ENA13 条形码编号</label>
+                    <input type="text" id="pEna13" class="form-control" placeholder="例如：6978147612841" maxlength="32" inputmode="numeric" autocomplete="off">
+                    <p class="form-help">全球通用 EAN-13 商品条码，选填。</p>
+                  </div>
+                  <div class="form-group">
+                    <label for="pSpec">规格</label>
+                    <input type="text" id="pSpec" class="form-control" placeholder="例如：500g/盒" maxlength="80">
+                  </div>
+                  <div class="form-group">
+                    <label for="pBoxSize">默认箱规</label>
+                    <input type="number" id="pBoxSize" class="form-control" placeholder="例如：8" min="1" max="100000">
+                  </div>
+                  <div class="form-group">
+                    <label for="pFactory">归属工厂</label>
+                    <select id="pFactory" class="form-control">
+          <option value="">归属工厂（总部）</option>
+          <% factories.forEach(f => { %>
+            <option value="<%= f.id %>" data-brand-id="<%= f.brand_id || '' %>"><%= f.name %></option>
+          <% }); %>
+                    </select>
+                  </div>
+        <% if (user && user.role === 'admin') { %>
+                  <div class="form-group">
+                    <label for="pBrand">归属品牌</label>
+                    <select id="pBrand" class="form-control" required>
+                      <option value="">请选择归属品牌</option>
+          <% brands.forEach(b => { %>
+                      <option value="<%= b.id %>"><%= b.name %></option>
+          <% }); %>
+                    </select>
+                  </div>
+        <% } %>
+                </div>
+              </section>
+
+              <section class="product-step-panel" data-panel="media" hidden>
+                <div class="section-kicker">产品图片</div>
+                <h3>建立可信、清晰的产品印象</h3>
+                <p class="form-help">支持 JPEG、PNG、WebP，最多 6 张，每张不超过 5 MB。第一张将作为默认封面。</p>
+                <label class="product-upload-zone" for="pImages">
+                  <%- icon('camera') %>
+                  <strong>选择或拖放产品图片</strong>
+                  <span>图片内容可保留真实色彩，界面控件保持黑白。</span>
+                </label>
+                <input id="pImages" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+                <div id="productImageList" class="product-image-list" aria-live="polite"></div>
+              </section>
+
+              <section class="product-step-panel" data-panel="trace" hidden>
+                <div class="section-kicker">溯源流程</div>
+                <h3>选择消费者可见的履历阶段</h3>
+                <p class="form-help">勾选要公开的阶段，并可为每个阶段补充文字说明和图片（可选，有就填）。</p>
+                <div class="trace-stage-list">
+                  <% [['origin','原料来源','展示原料供应方及模糊化产地'],['processing','加工生产','展示加工节点和生产时间'],['quality','质量检验','展示检验结论及公开凭证'],['warehouse','仓储入库','展示入库节点和时间'],['shipping','物流发货','展示流通过程中的关键节点']].forEach((stage, index) => { %>
+                  <div class="trace-stage-row" data-stage="<%= stage[0] %>">
+                    <label class="trace-stage-toggle">
+                      <input type="checkbox" name="traceStage" value="<%= stage[0] %>" <%= index < 3 ? 'checked' : '' %>>
+                      <span class="trace-stage-info"><strong><%= stage[1] %></strong><small><%= stage[2] %></small></span>
+                    </label>
+                    <div class="trace-stage-detail">
+                      <textarea class="form-control trace-content" data-stage="<%= stage[0] %>" rows="2" maxlength="5000" placeholder="<%= stage[1] %>文字说明（可选，有就填）"></textarea>
+                      <div class="trace-image-upload">
+                        <input type="file" class="trace-img-input" data-stage="<%= stage[0] %>" accept="image/jpeg,image/png,image/webp" hidden>
+                        <button type="button" class="btn btn-outline btn-sm trace-img-btn" data-stage="<%= stage[0] %>">上传图片</button>
+                        <span class="trace-img-preview" data-stage="<%= stage[0] %>"></span>
+                      </div>
+                    </div>
+                  </div>
+                  <% }); %>
+                </div>
+              </section>
+
+              <section class="product-step-panel" data-panel="campaign" hidden>
+                <div class="section-kicker">营销内容</div>
+                <h3>添加与验证信息明确分隔的品牌活动</h3>
+                <div class="form-group">
+                  <label for="campaignImage">活动图片</label>
+                  <input id="campaignImage" class="form-control" type="file" accept="image/jpeg,image/png,image/webp">
+                  <p class="form-help">支持 JPEG、PNG、WebP，单张不超过 5 MB。</p>
+                </div>
+                <div class="form-group">
+                  <label for="campaignTitle">活动标题</label>
+                  <input id="campaignTitle" class="form-control" maxlength="80" placeholder="例如：了解本批次产地故事">
+                </div>
+                <div class="form-group">
+                  <label for="campaignDescription">活动说明</label>
+                  <textarea id="campaignDescription" class="form-control" rows="4" maxlength="300" placeholder="使用简短、准确的纯文本介绍活动"></textarea>
+                </div>
+                <div class="form-group">
+                  <label for="campaignUrl">活动链接</label>
+                  <input id="campaignUrl" class="form-control" type="url" inputmode="url" placeholder="https://example.com/activity">
+                </div>
+                <p class="form-help">营销内容保存后进入待审核状态，审核通过前不会出现在公开扫码页。</p>
+                <div id="marketingReviewPanel" class="marketing-review-panel" hidden>
+                  <span>审核状态：<strong id="marketingReviewStatus">待审核</strong></span>
+                  <% if (user && (user.role === 'admin' || user.role === 'brand')) { %>
+                  <div><button class="btn btn-outline btn-sm marketing-review-btn success-action" type="button" data-review-status="approved">通过</button><button class="btn btn-outline btn-sm marketing-review-btn danger-action" type="button" data-review-status="rejected">拒绝</button></div>
+                  <% } %>
+                </div>
+              </section>
+
+              <section class="product-step-panel product-mobile-preview-panel" data-panel="preview" hidden>
+                <div class="section-kicker">扫码预览</div>
+                <h3>消费者页面实时预览</h3>
+                <div id="mobilePreviewMount"></div>
+              </section>
+            </div>
+
+            <aside class="product-preview-pane" aria-label="消费者扫码页实时预览">
+              <div class="phone-preview">
+                <div class="phone-preview-bar"><span></span><strong>溯源码验证</strong><span></span></div>
+                <div class="phone-preview-cover" id="previewCover"><span>产品图片</span></div>
+                <div class="phone-preview-content">
+                  <span class="preview-verified">验证通过</span>
+                  <h4 id="previewName">产品名称</h4>
+                  <p id="previewSpec">产品规格将在这里展示</p>
+                  <div class="preview-trace-title">可信履历</div>
+                  <ol id="previewTrace" class="preview-trace"></ol>
+                  <div id="previewCampaign" class="preview-campaign" hidden>
+                    <small>品牌活动</small>
+                    <strong id="previewCampaignTitle"></strong>
+                    <p id="previewCampaignDescription"></p>
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </form>
+        </div>
+        <footer class="product-modal-footer">
+          <p id="productFormStatus" role="status" aria-live="polite"></p>
+          <div>
+            <button id="previousProductStepBtn" class="btn btn-outline" type="button" disabled>上一步</button>
+            <button id="nextProductStepBtn" class="btn btn-outline" type="button">下一步</button>
+            <button id="saveProductBtn" class="btn btn-primary" type="submit" form="productForm">保存产品</button>
+          </div>
+        </footer>
+      </section>
+    </div>
+
+    <!-- 检测报告弹窗 -->
+    <div id="reportModal" class="product-modal-mask" role="presentation" aria-hidden="true">
+      <section class="product-modal" role="dialog" aria-modal="true" aria-labelledby="reportModalTitle">
+        <header class="product-modal-header">
+          <div>
+            <p class="product-modal-eyebrow">检测报告</p>
+            <h2 id="reportModalTitle">检测报告</h2>
+          </div>
+          <button id="closeReportModalBtn" class="icon-button" type="button" aria-label="关闭检测报告窗口"><%- icon('xmark') %></button>
+        </header>
+        <div class="product-modal-body report-modal-body">
+          <div class="form-group">
+            <label for="reportBatch">批次号（选填）</label>
+            <input type="text" id="reportBatch" class="form-control" placeholder="例如：20260814" maxlength="64">
+          </div>
+          <div class="form-group">
+            <label for="reportFile" class="product-upload-zone report-upload-zone">
+              <%- icon('clipboard') %>
+              <strong>选择检测报告图片</strong>
+              <span>支持 JPEG、PNG、WebP，最多 9 张，单张不超过 5 MB。</span>
+            </label>
+            <input id="reportFile" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" multiple>
+          </div>
+          <div id="reportList" class="report-list" aria-live="polite"></div>
+        </div>
+      </section>
+    </div>
+
+    <% if (user && user.role === 'brand') { %>
+    <div class="card generation-policy-notice" role="status">
+      <div class="card-title">生码权限已关闭</div>
+      <p class="section-help">品牌管理员可以继续维护产品、批次、溯源内容和营销内容；箱码与子码须由已授权的品牌工作账号或平台管理员生成。</p>
+    </div>
+    <% } %>
+
+    <!-- 生成箱码 -->
+    <div class="card function-card function-trace brand-generation-disabled" <%= user && user.role === 'brand' ? 'hidden aria-hidden="true"' : '' %>>
+      <div class="card-title">① 生成箱码（父码）</div>
+      <p class="section-help">生成后打印箱码标签，随子码标签一起发往生产工厂。<strong>产品可不选</strong>：不选=空白箱码，工厂装箱扫箱码时再选产品+箱规，更灵活</p>
+      <div class="generation-grid">
+        <div class="form-group">
+          <label>选择产品（选填）</label>
+          <select id="boxProduct" class="form-control">
+            <option value="">不选（装箱时再定）</option>
+            <% products.forEach(p => { %>
+              <option value="<%= p.id %>"><%= p.name %> <% if(p.spec) { %>(<%= p.spec %>)<% } %></option>
+            <% }); %>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>批次号（选择产品后必填）</label>
+          <input type="text" id="boxBatch" class="form-control" placeholder="如：20260814">
+        </div>
+        <div class="form-group batch-trace-field"><label for="boxOriginTitle">原料来源标题</label><input id="boxOriginTitle" class="form-control" maxlength="100" placeholder="例如：原料入厂"></div>
+        <div class="form-group batch-trace-field"><label for="boxOriginLocation">公开地区</label><input id="boxOriginLocation" class="form-control" maxlength="120" placeholder="例如：内蒙古自治区"></div>
+        <div class="form-group batch-trace-field"><label for="boxOriginTime">发生时间</label><input id="boxOriginTime" class="form-control" type="datetime-local"></div>
+        <% if (user && user.role === 'admin') { %>
+        <div class="form-group">
+          <label>归属品牌（必选）</label>
+          <select id="boxBrand" class="form-control">
+            <option value="">请选择归属品牌</option>
+            <% brands.forEach(b => { %>
+              <option value="<%= b.id %>"><%= b.name %></option>
+            <% }); %>
+          </select>
+        </div>
+        <% } %>
+        <div class="form-group">
+          <label>箱数</label>
+          <input type="number" id="boxCount" class="form-control" value="1" min="1">
+        </div>
+      </div>
+      <button id="genBoxesBtn" class="btn btn-primary" type="button" <%= user && user.role === 'brand' ? 'disabled' : '' %>>生成箱码</button>
+      <span id="boxGenStatus" class="generation-status"></span>
+    </div>
+
+    <!-- 生成子码 -->
+    <div class="card function-card function-code brand-generation-disabled" <%= user && user.role === 'brand' ? 'hidden aria-hidden="true"' : '' %>>
+      <div class="card-title">② 生成子码</div>
+      <p class="section-help">生成后打印子码标签发给工厂。<strong>产品可不选</strong>：不选=空白子码，装箱扫码时自动跟随箱码产品</p>
+      <div class="generation-grid">
+        <div class="form-group">
+          <label>选择产品（选填）</label>
+          <select id="itemProduct" class="form-control">
+            <option value="">不选（装箱时再定）</option>
+            <% products.forEach(p => { %>
+              <option value="<%= p.id %>"><%= p.name %> <% if(p.spec) { %>(<%= p.spec %>)<% } %></option>
+            <% }); %>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>批次号（选择产品后必填）</label>
+          <input type="text" id="itemBatch" class="form-control" placeholder="如：20260814">
+        </div>
+        <div class="form-group batch-trace-field"><label for="itemOriginTitle">原料来源标题</label><input id="itemOriginTitle" class="form-control" maxlength="100" placeholder="例如：原料入厂"></div>
+        <div class="form-group batch-trace-field"><label for="itemOriginLocation">公开地区</label><input id="itemOriginLocation" class="form-control" maxlength="120" placeholder="例如：内蒙古自治区"></div>
+        <div class="form-group batch-trace-field"><label for="itemOriginTime">发生时间</label><input id="itemOriginTime" class="form-control" type="datetime-local"></div>
+        <% if (user && user.role === 'admin') { %>
+        <div class="form-group">
+          <label>归属品牌（必选）</label>
+          <select id="itemBrand" class="form-control">
+            <option value="">请选择归属品牌</option>
+            <% brands.forEach(b => { %>
+              <option value="<%= b.id %>"><%= b.name %></option>
+            <% }); %>
+          </select>
+        </div>
+        <% } %>
+        <div class="form-group">
+          <label>数量</label>
+          <input type="number" id="itemCount" class="form-control" value="8" min="1">
+        </div>
+      </div>
+      <button id="genItemsBtn" class="btn btn-primary" type="button" <%= user && user.role === 'brand' ? 'disabled' : '' %>>生成子码</button>
+      <span id="itemGenStatus" class="generation-status"></span>
+    </div>
+
+    <!-- 生成结果 -->
+    <div id="resultArea" class="is-hidden brand-generation-disabled" <%= user && user.role === 'brand' ? 'hidden aria-hidden="true"' : '' %>>
+      <div class="card function-card function-result">
+        <div class="card-title">生成结果 <span id="resultCount"></span></div>
+        <div class="result-actions">
+          <button id="printLabelsBtn" class="btn btn-primary btn-sm" type="button"><%- icon('tag') %> 打印标签</button>
+          <button id="printPageBtn" class="btn btn-outline btn-sm" type="button">打印本页</button>
+          <button id="downloadAllBtn" class="btn btn-outline btn-sm" type="button">下载全部二维码</button>
+        </div>
+        <div id="codeList"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/scanner.js?v=20260831i"></script>
+  <script nonce="<%= cspNonce %>">
+    const escapeHtml = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const safeQrUrl = value => /^\/qr\/[A-Za-z0-9._-]+\.png$/.test(String(value || '')) ? String(value) : '';
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    // 产品配置窗口
+    const productModal = document.getElementById('productModal');
+    const productForm = document.getElementById('productForm');
+    const productSteps = ['basic', 'media', 'trace', 'campaign', 'preview'];
+    const currentRole = <%- JSON.stringify(user && user.role || '') %>;
+    const stageNames = { origin: '原料来源', processing: '加工生产', quality: '质量检验', warehouse: '仓储入库', shipping: '物流发货' };
+    let productStepIndex = 0;
+    let productImages = [];
+    let campaignImageFile = null;
+    let campaignImageUrl = '';
+    const traceStageMedia = {}; // { origin: {file:null, url:''}, ... }
+    let editingProductId = null;
+    let editingProductVersion = null;
+    let productFormDirty = false;
+    let modalReturnFocus = null;
+    const previewMedia = window.matchMedia('(max-width: 900px)');
+
+    function placeProductPreview() {
+      const preview = document.querySelector('.phone-preview');
+      const destination = previewMedia.matches ? document.getElementById('mobilePreviewMount') : document.querySelector('.product-preview-pane');
+      if (preview && destination && preview.parentElement !== destination) destination.appendChild(preview);
+    }
+
+    function setProductStep(step) {
+      const nextIndex = productSteps.indexOf(step);
+      if (nextIndex < 0) return;
+      productStepIndex = nextIndex;
+      document.querySelectorAll('.product-step').forEach(button => {
+        const active = button.dataset.step === step;
+        button.classList.toggle('is-active', active);
+        if (active) button.setAttribute('aria-current', 'step');
+        else button.removeAttribute('aria-current');
+      });
+      document.querySelectorAll('.product-step-panel').forEach(panel => {
+        const active = panel.dataset.panel === step;
+        panel.hidden = !active;
+        panel.classList.toggle('is-active', active);
+      });
+      document.getElementById('previousProductStepBtn').disabled = productStepIndex === 0;
+      document.getElementById('nextProductStepBtn').disabled = productStepIndex === productSteps.length - 1;
+      updateProductPreview();
+    }
+
+    function resetProductEditor() {
+      productImages.forEach(entry => { if (entry.file) URL.revokeObjectURL(entry.url); });
+      productImages = [];
+      campaignImageFile = null;
+      campaignImageUrl = '';
+      editingProductId = null;
+      editingProductVersion = null;
+      productForm.reset();
+      document.querySelectorAll('input[name="traceStage"]').forEach((input, index) => { input.checked = index < 3; });
+      Object.keys(stageNames).forEach(k => { traceStageMedia[k] = { file: null, url: '' }; });
+      document.querySelectorAll('.trace-content').forEach(ta => { ta.value = ''; });
+      clearTraceImagePreview();
+      document.getElementById('marketingReviewPanel').hidden = true;
+      document.getElementById('productFormStatus').textContent = '';
+      document.getElementById('saveProductBtn').disabled = false;
+      document.getElementById('productModalTitle').textContent = '新增产品';
+      renderProductImages();
+      productFormDirty = false;
+    }
+
+    function openProductModal() {
+      resetProductEditor();
+      // 管理员新增产品：若当前只有一个已启用品牌，自动默认选中，避免漏选导致报错
+      const brandSel = document.getElementById('pBrand');
+      if (brandSel) {
+        const valid = Array.from(brandSel.options).filter(o => o.value);
+        if (valid.length === 1) brandSel.value = valid[0].value;
+      }
+      modalReturnFocus = document.activeElement;
+      productModal.classList.add('is-open');
+      productModal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('modal-open');
+      placeProductPreview();
+      setProductStep('basic');
+      requestAnimationFrame(() => document.getElementById('pName').focus());
+    }
+
+    async function editProduct(productId) {
+      modalReturnFocus = document.activeElement;
+      let response;
+      let data;
+      try {
+        response = await fetch(`/api/products/${productId}/content`, { headers: { Accept: 'application/json' } });
+        data = await response.json();
+      } catch (_error) {
+        return toast('产品内容加载失败，请检查网络后重试', 'error');
+      }
+      if (!response.ok || !data.success) return toast(data.msg || '产品内容加载失败', 'error');
+      resetProductEditor();
+      editingProductId = Number(productId);
+      editingProductVersion = Number(data.product.version || 1);
+      document.getElementById('productModalTitle').textContent = '编辑产品';
+      document.getElementById('pName').value = data.product.name || '';
+      document.getElementById('pSpec').value = data.product.spec || '';
+      document.getElementById('pEna13').value = data.product.ena13 || '';
+      document.getElementById('pBoxSize').value = data.product.box_size || '';
+      document.getElementById('pFactory').value = data.product.factory_id || '';
+      const brand = document.getElementById('pBrand');
+      if (brand) brand.value = data.product.brand_id || '';
+      productImages = (data.media || []).map(row => ({ url: row.url, alt_text: row.alt_text || '', existing: true }));
+      const enabled = new Set((data.templates || []).filter(row => row.enabled).map(row => row.stage_key));
+      document.querySelectorAll('input[name="traceStage"]').forEach(input => { input.checked = enabled.has(input.value); });
+      clearTraceImagePreview();
+      (data.templates || []).forEach(row => {
+        const k = row.stage_key;
+        traceStageMedia[k] = { file: null, url: row.image_url || '' };
+        const ta = document.querySelector(`.trace-content[data-stage="${k}"]`);
+        if (ta) ta.value = row.content || '';
+        renderTraceImagePreview(k);
+      });
+      const marketing = data.marketing || {};
+      campaignImageUrl = marketing.image_url || '';
+      document.getElementById('campaignTitle').value = marketing.title || '';
+      document.getElementById('campaignDescription').value = marketing.description || '';
+      document.getElementById('campaignUrl').value = marketing.target_url || '';
+      if (data.marketing) {
+        document.getElementById('marketingReviewPanel').hidden = false;
+        document.getElementById('marketingReviewStatus').textContent = ({pending:'待审核',approved:'已通过',rejected:'已拒绝'})[marketing.review_status] || marketing.review_status || '待审核';
+      }
+      productModal.classList.add('is-open');
+      productModal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('modal-open');
+      placeProductPreview();
+      renderProductImages();
+      setProductStep('basic');
+      productFormDirty = false;
+      requestAnimationFrame(() => document.getElementById('pName').focus());
+    }
+
+    function closeProductModal(force) {
+      if (!force && productFormDirty && !confirm('当前产品配置尚未保存，确定关闭吗？')) return;
+      productModal.classList.remove('is-open');
+      productModal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('modal-open');
+      if (modalReturnFocus) modalReturnFocus.focus();
+    }
+
+    function renderProductImages() {
+      const list = document.getElementById('productImageList');
+      list.replaceChildren();
+      productImages.forEach((entry, index) => {
+        const card = document.createElement('div');
+        card.className = 'product-image-card';
+        const image = document.createElement('img');
+        image.src = entry.url;
+        image.alt = entry.file?.name || entry.alt_text || `产品图片 ${index + 1}`;
+        const label = document.createElement('span');
+        label.textContent = index === 0 ? '封面' : `${index + 1}`;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'product-image-remove';
+        remove.dataset.imageIndex = String(index);
+        remove.setAttribute('aria-label', `移除图片 ${index + 1}`);
+        remove.textContent = '移除';
+        card.append(image, label);
+        if (index > 0) {
+          const cover = document.createElement('button');
+          cover.type = 'button';
+          cover.className = 'product-image-cover';
+          cover.dataset.imageIndex = String(index);
+          cover.setAttribute('aria-label', `将图片 ${index + 1} 设为封面`);
+          cover.textContent = '设为封面';
+          card.appendChild(cover);
+        }
+        card.appendChild(remove);
+        list.appendChild(card);
+      });
+      updateProductPreview();
+    }
+
+    function addProductImages(files) {
+      const validTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+      for (const file of files) {
+        if (productImages.length >= 6) return toast('产品图片最多上传 6 张', 'error');
+        if (!validTypes.has(file.type) || file.size > 5 * 1024 * 1024) {
+          toast(`图片「${file.name}」格式不支持或超过 5 MB`, 'error');
+          continue;
+        }
+        productImages.push({ file, url: URL.createObjectURL(file) });
+      }
+      productFormDirty = true;
+      renderProductImages();
+    }
+
+    function updateProductPreview() {
+      document.getElementById('previewName').textContent = document.getElementById('pName').value.trim() || '产品名称';
+      document.getElementById('previewSpec').textContent = document.getElementById('pSpec').value.trim() || '产品规格将在这里展示';
+      const cover = document.getElementById('previewCover');
+      cover.replaceChildren();
+      if (productImages[0]) {
+        const image = document.createElement('img');
+        image.src = productImages[0].url;
+        image.alt = '产品封面预览';
+        cover.appendChild(image);
+      } else {
+        const placeholder = document.createElement('span');
+        placeholder.textContent = '产品图片';
+        cover.appendChild(placeholder);
+      }
+      const trace = document.getElementById('previewTrace');
+      trace.replaceChildren();
+      document.querySelectorAll('input[name="traceStage"]:checked').forEach(input => {
+        const item = document.createElement('li');
+        item.textContent = stageNames[input.value] || input.value;
+        trace.appendChild(item);
+      });
+      if (!trace.children.length) {
+        const item = document.createElement('li');
+        item.textContent = '尚未选择公开履历阶段';
+        trace.appendChild(item);
+      }
+      const campaignTitle = document.getElementById('campaignTitle').value.trim();
+      const campaignDescription = document.getElementById('campaignDescription').value.trim();
+      const campaign = document.getElementById('previewCampaign');
+      campaign.hidden = !campaignTitle && !campaignDescription;
+      document.getElementById('previewCampaignTitle').textContent = campaignTitle;
+      document.getElementById('previewCampaignDescription').textContent = campaignDescription;
+    }
+
+    function renderTraceImagePreview(stage) {
+      const preview = document.querySelector(`.trace-img-preview[data-stage="${stage}"]`);
+      if (!preview) return;
+      const m = traceStageMedia[stage];
+      if (m && (m.file || m.url)) {
+        const src = m.file ? URL.createObjectURL(m.file) : m.url;
+        preview.innerHTML = `<img src="${src}" alt="溯源图片">`;
+      } else {
+        preview.innerHTML = '';
+      }
+    }
+    function clearTraceImagePreview() {
+      document.querySelectorAll('.trace-img-preview').forEach(el => { el.innerHTML = ''; });
+    }
+
+    function requestKey(prefix) {
+      return `${prefix}-${Date.now()}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(16)}`;
+    }
+
+    async function saveProductEnhancements(productId) {
+      const newMedia = productImages.filter(entry => entry.file);
+      const uploadedUrls = [];
+      if (newMedia.length) {
+        const uploadBody = new FormData();
+        newMedia.forEach(entry => uploadBody.append('files', entry.file));
+        const upload = await fetch(`/api/products/${productId}/upload-images`, { method: 'POST', body: uploadBody });
+        const uploaded = await upload.json();
+        if (!upload.ok || !uploaded.success) throw new Error(uploaded.msg || '产品图片上传失败');
+        uploadedUrls.push(...uploaded.urls);
+      }
+      let uploadIndex = 0;
+      const media = productImages.map((entry, index) => entry.file
+        ? { url: uploadedUrls[uploadIndex++], alt_text: entry.file.name, is_cover: index === 0 }
+        : { url: entry.url, alt_text: entry.alt_text || '', is_cover: index === 0 });
+      const mediaResponse = await fetch(`/api/products/${productId}/media`, {
+        method: 'PUT', headers: {'Content-Type':'application/json', 'Idempotency-Key':requestKey('product-media')}, body: JSON.stringify({media})
+      });
+      const mediaPayload = await mediaResponse.json();
+      if (!mediaResponse.ok || !mediaPayload.success) throw new Error(mediaPayload.msg || '产品图片保存失败');
+
+      // 收集溯源项图片，批量上传（有图的才上传）
+      const traceImgFiles = [];
+      Object.keys(stageNames).forEach(k => {
+        const m = traceStageMedia[k];
+        if (m && m.file) traceImgFiles.push({ stage: k, file: m.file });
+      });
+      const traceImgUrls = {};
+      if (traceImgFiles.length) {
+        const uploadBody = new FormData();
+        traceImgFiles.forEach(item => uploadBody.append('files', item.file));
+        const upload = await fetch(`/api/products/${productId}/upload-images`, { method: 'POST', body: uploadBody });
+        const uploaded = await upload.json();
+        if (!upload.ok || !uploaded.success) throw new Error(uploaded.msg || '溯源图片上传失败');
+        traceImgFiles.forEach((item, idx) => { traceImgUrls[item.stage] = uploaded.urls[idx] || ''; });
+      }
+      const stages = [...document.querySelectorAll('input[name="traceStage"]:checked')].map(input => {
+        const k = input.value;
+        const ta = document.querySelector(`.trace-content[data-stage="${k}"]`);
+        const m = traceStageMedia[k] || {};
+        return {
+          stage_key: k,
+          title: stageNames[k] || k,
+          public_label: stageNames[k] || k,
+          content: ta ? ta.value.trim() : '',
+          image_url: traceImgUrls[k] || m.url || '',
+          enabled: true
+        };
+      });
+      const traceResponse = await fetch(`/api/products/${productId}/trace-template`, {
+        method: 'PUT', headers: {'Content-Type':'application/json', 'Idempotency-Key':requestKey('product-trace')}, body: JSON.stringify({stages})
+      });
+      const tracePayload = await traceResponse.json();
+      if (!traceResponse.ok || !tracePayload.success) throw new Error(tracePayload.msg || '溯源模板保存失败');
+
+      if (campaignImageFile) {
+        const uploadBody = new FormData();
+        uploadBody.append('files', campaignImageFile);
+        const upload = await fetch(`/api/products/${productId}/upload-images`, { method: 'POST', body: uploadBody });
+        const uploaded = await upload.json();
+        if (!upload.ok || !uploaded.success) throw new Error(uploaded.msg || '活动图片上传失败');
+        campaignImageUrl = uploaded.urls[0] || campaignImageUrl;
+      }
+      const marketing = {
+        image_url: campaignImageUrl,
+        title: document.getElementById('campaignTitle').value.trim(),
+        description: document.getElementById('campaignDescription').value.trim(),
+        target_url: document.getElementById('campaignUrl').value.trim(),
+        enabled: true
+      };
+      if (marketing.image_url || marketing.title || marketing.description || marketing.target_url) {
+        const marketingResponse = await fetch(`/api/products/${productId}/marketing`, {
+          method: 'PUT', headers: {'Content-Type':'application/json', 'Idempotency-Key':requestKey('product-marketing')}, body: JSON.stringify(marketing)
+        });
+        const marketingPayload = await marketingResponse.json();
+        if (!marketingResponse.ok || !marketingPayload.success) throw new Error(marketingPayload.msg || '营销内容保存失败');
+      }
+    }
+
+    async function addProduct(event) {
+      event.preventDefault();
+      const name = document.getElementById('pName').value.trim();
+      const spec = document.getElementById('pSpec').value.trim();
+      const ena13 = document.getElementById('pEna13').value.trim();
+      const boxSize = parseInt(document.getElementById('pBoxSize').value) || 0;
+      const factory_id = parseInt(document.getElementById('pFactory').value) || null;
+      const brandSel = document.getElementById('pBrand');
+      const brand_id = brandSel ? (parseInt(brandSel.value) || null) : null;
+      const campaignUrl = document.getElementById('campaignUrl').value.trim();
+      if (!name) { setProductStep('basic'); document.getElementById('pName').focus(); return toast('请输入产品名称', 'error'); }
+      if (!factory_id && !brand_id && brandSel) { setProductStep('basic'); brandSel.focus(); return toast('请选择「归属品牌」或「归属工厂」', 'error'); }
+      if (factory_id && !brand_id && brandSel) { setProductStep('basic'); brandSel.focus(); return toast('所选工厂未归属品牌，请在下拉框选择「归属品牌」', 'error'); }
+      if (campaignUrl && !/^https:\/\//i.test(campaignUrl)) { setProductStep('campaign'); document.getElementById('campaignUrl').focus(); return toast('活动链接必须使用 HTTPS', 'error'); }
+      const saveButton = document.getElementById('saveProductBtn');
+      const status = document.getElementById('productFormStatus');
+      saveButton.disabled = true;
+      status.textContent = '正在保存产品…';
+      const res = await fetch(editingProductId ? `/api/products/${editingProductId}` : '/api/products', {
+        method: editingProductId ? 'PUT' : 'POST',
+        headers: {'Content-Type':'application/json', 'Idempotency-Key':requestKey('product-create')},
+        body: JSON.stringify({name, spec, ena13, batch_no: '', box_size: boxSize, factory_id, brand_id, version: editingProductVersion})
+      });
+      const data = await res.json();
+      if (!data.success) {
+        saveButton.disabled = false;
+        status.textContent = data.code === 'VERSION_CONFLICT' ? '产品已被其他用户修改，请重新打开后编辑' : (data.msg || '保存失败');
+        return toast(status.textContent, 'error');
+      }
+      const savedId = editingProductId || data.id;
+      try {
+        await saveProductEnhancements(savedId);
+        productFormDirty = false;
+        status.textContent = '产品及展示内容已保存';
+        toast(editingProductId ? '产品更新成功' : '产品添加成功');
+      } catch (error) {
+        productFormDirty = false;
+        status.textContent = '基础产品已保存；图片、履历或营销内容等待服务同步';
+        toast('基础产品已保存，扩展内容暂未同步', 'error');
+      }
+      setTimeout(() => location.reload(), 1200);
+    }
+
+    async function deleteProduct(id, name) {
+      if (!confirm('确定要删除产品「' + name + '」吗？\n\n仅在该产品下没有任何箱码/子码时才可删除，否则请先到「码查询」删除/作废相关码。')) return;
+      const res = await fetch('/api/products/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) { toast(data.msg); setTimeout(() => location.reload(), 600); }
+      else toast(data.msg, 'error');
+    }
+
+    async function reviewMarketing(status) {
+      if (!editingProductId) return;
+      const response = await fetch(`/api/products/${editingProductId}/marketing/review`, {
+        method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status})
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) return toast(data.msg || '审核失败', 'error');
+      document.getElementById('marketingReviewStatus').textContent = status === 'approved' ? '已通过' : '已拒绝';
+      toast(status === 'approved' ? '营销内容已通过' : '营销内容已拒绝');
+    }
+
+    async function prepareProductBatch(kind, productId, batchNo) {
+      if (!productId) return;
+      if (!batchNo) throw new Error('选择产品后必须填写批次号');
+      const title = document.getElementById(`${kind}OriginTitle`).value.trim();
+      const location = document.getElementById(`${kind}OriginLocation`).value.trim();
+      const occurred = document.getElementById(`${kind}OriginTime`).value;
+      if (!title || !location || !occurred) throw new Error('产品批次必须填写原料来源标题、公开地区和发生时间');
+      let contentResponse = await fetch(`/api/products/${productId}/content`);
+      let content = await contentResponse.json();
+      if (!contentResponse.ok || !content.success) throw new Error(content.msg || '批次资料读取失败');
+      let batch = (content.batches || []).find(row => row.batch_no === batchNo);
+      const canPublishBatch = currentRole === 'admin' || currentRole === 'brand';
+      if (!canPublishBatch && (!batch || batch.status !== 'published')) throw new Error('该批次尚未发布，请由品牌管理员先完成批次履历并发布');
+      if (!batch) {
+        const createdResponse = await fetch(`/api/products/${productId}/batches`, {
+          method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({batch_no:batchNo, production_date:occurred.slice(0,10)})
+        });
+        const created = await createdResponse.json();
+        if (!createdResponse.ok || !created.success) throw new Error(created.msg || '批次创建失败');
+        batch = { id:created.id, version:created.version, status:'draft' };
+      }
+      const traceResponse = await fetch(`/api/batches/${batch.id}/trace`);
+      const traceData = await traceResponse.json();
+      if (!traceResponse.ok || !traceData.success) throw new Error(traceData.msg || '批次履历读取失败');
+      const occurredIso = new Date(occurred).toISOString();
+      const exists = (traceData.trace || []).some(row => row.stage_key === 'origin' && row.title === title && row.public_location === location && row.occurred_at === occurredIso);
+      if (!canPublishBatch && !exists) throw new Error('已发布批次中没有匹配的原料来源履历，请联系品牌管理员');
+      if (!exists) {
+        const entryResponse = await fetch(`/api/batches/${batch.id}/trace`, {
+          method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({stage_key:'origin',title,public_location:location,occurred_at:occurredIso,published:false})
+        });
+        const entry = await entryResponse.json();
+        if (!entryResponse.ok || !entry.success) throw new Error(entry.msg || '批次履历保存失败');
+      }
+      if (batch.status !== 'published' || !exists) {
+        const publishResponse = await fetch(`/api/batches/${batch.id}/publish`, {
+          method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({version:batch.version})
+        });
+        const published = await publishResponse.json();
+        if (!publishResponse.ok || !published.success) throw new Error(published.msg || '批次发布失败');
+      }
+    }
+
+    // 生成箱码（产品可选：不选=空白箱码）
+    async function genBoxes() {
+      const product_id = document.getElementById('boxProduct').value;
+      const batch_no = document.getElementById('boxBatch').value.trim();
+      const box_count = document.getElementById('boxCount').value;
+      const brandEl = document.getElementById('boxBrand');
+      const brand_id = brandEl ? brandEl.value : '';
+      if (brandEl && !brand_id) return toast('请选择归属品牌', 'error');
+      document.getElementById('boxGenStatus').textContent = '正在生成...';
+      try { await prepareProductBatch('box', product_id, batch_no); }
+      catch (error) { document.getElementById('boxGenStatus').textContent = ''; return toast(error.message, 'error'); }
+      const res = await fetch('/api/codes/generate/boxes', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({product_id: product_id || null, batch_no, box_count, brand_id: brand_id || null})
+      });
+      const data = await res.json();
+      document.getElementById('boxGenStatus').textContent = '';
+      if (!data.success) return toast(data.msg || '生成失败', 'error');
+      toast(`成功生成 ${data.count} 个箱码${product_id ? '' : '（空白码，装箱时再选产品）'}`);
+      showResult(data.generated);
+    }
+
+    // 生成子码（产品可选：不选=空白子码）
+    async function genItems() {
+      const product_id = document.getElementById('itemProduct').value;
+      const batch_no = document.getElementById('itemBatch').value.trim();
+      const item_count = document.getElementById('itemCount').value;
+      const brandEl = document.getElementById('itemBrand');
+      const brand_id = brandEl ? brandEl.value : '';
+      if (brandEl && !brand_id) return toast('请选择归属品牌', 'error');
+      document.getElementById('itemGenStatus').textContent = '正在生成...';
+      try { await prepareProductBatch('item', product_id, batch_no); }
+      catch (error) { document.getElementById('itemGenStatus').textContent = ''; return toast(error.message, 'error'); }
+      const res = await fetch('/api/codes/generate/items', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({product_id: product_id || null, batch_no, item_count, brand_id: brand_id || null})
+      });
+      const data = await res.json();
+      document.getElementById('itemGenStatus').textContent = '';
+      if (!data.success) return toast(data.msg || '生成失败', 'error');
+      toast(`成功生成 ${data.count} 个子码${product_id ? '' : '（空白码，装箱时跟随箱码产品）'}`);
+      showResult(data.generated);
+    }
+
+    // 显示生成结果
+    let lastCodes = [];
+    function showResult(codes) {
+      lastCodes = codes;
+      const area = document.getElementById('resultArea');
+      const list = document.getElementById('codeList');
+      area.classList.remove('is-hidden');
+      document.getElementById('resultCount').textContent = `（${codes.length}个）`;
+      list.innerHTML = `
+        <div class="code-list">
+          ${codes.map(c => `
+            <div class="code-item">
+              <img src="${escapeHtml(safeQrUrl(c.qr_url))}" alt="码">
+              <div class="code-text">${escapeHtml(c.box_code || c.item_code)}</div>
+              <div class="code-kind">${c.box_code ? '箱码' : '子码'}</div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      area.scrollIntoView({behavior:'smooth'});
+    }
+
+    // 跳转标签打印页（A4网格，可适配贴纸）
+    function printLabels() {
+      if (!lastCodes.length) return toast('没有可打印的码', 'error');
+      const type = lastCodes[0].box_code ? 'box' : 'item';
+      const codes = lastCodes.map(c => c.box_code || c.item_code).join(',');
+      const boxSel = document.getElementById('boxProduct');
+      const itemSel = document.getElementById('itemProduct');
+      const product = (boxSel && boxSel.selectedOptions[0] ? boxSel.selectedOptions[0].text : '') ||
+                      (itemSel && itemSel.selectedOptions[0] ? itemSel.selectedOptions[0].text : '');
+      window.open(`/print?codes=${codes}&type=${type}&product=${encodeURIComponent(product)}`, '_blank');
+    }
+
+    // 下载全部二维码：按生成结果的 id 打包（PNG+标签SVG+清单CSV zip）
+    function downloadAll() {
+      if (!lastCodes.length) return toast('没有可下载的码', 'error');
+      const type = lastCodes[0].box_code ? 'box' : 'item';
+      const ids = lastCodes.map(c => c.id).filter(id => id).join(',');
+      if (!ids) return toast('当前结果无法下载（缺少码 ID）', 'error');
+      const url = `/api/codes/package?type=${type}&ids=${ids}`;
+      window.location.href = url;
+    }
+
+    document.getElementById('addProductBtn').addEventListener('click', openProductModal);
+    // 选工厂时联动品牌：工厂有品牌则自动选中，无品牌则清空并提示
+    (function () {
+      const facSel = document.getElementById('pFactory');
+      const brdSel = document.getElementById('pBrand');
+      if (facSel && brdSel) {
+        facSel.addEventListener('change', function () {
+          const opt = facSel.options[facSel.selectedIndex];
+          const bid = opt ? opt.getAttribute('data-brand-id') : '';
+          if (bid) {
+            brdSel.value = bid;
+          } else if (facSel.value) {
+            brdSel.value = '';
+            toast('该工厂未归属品牌，请手动选择「归属品牌」', 'error');
+          }
+        });
+      }
+    })();
+    if (typeof previewMedia.addEventListener === 'function') previewMedia.addEventListener('change', placeProductPreview);
+    else if (typeof previewMedia.addListener === 'function') previewMedia.addListener(placeProductPreview);
+    // 溯源项图片上传：按钮触发隐藏的 file input
+    document.querySelectorAll('.trace-img-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const stage = btn.getAttribute('data-stage');
+        const input = document.querySelector(`.trace-img-input[data-stage="${stage}"]`);
+        if (input) input.click();
+      });
+    });
+    document.querySelectorAll('.trace-img-input').forEach(input => {
+      input.addEventListener('change', () => {
+        const stage = input.getAttribute('data-stage');
+        if (input.files && input.files[0]) {
+          traceStageMedia[stage] = { file: input.files[0], url: '' };
+          renderTraceImagePreview(stage);
+          productFormDirty = true;
+        }
+      });
+    });
+    document.querySelectorAll('.trace-content').forEach(ta => {
+      ta.addEventListener('input', () => { productFormDirty = true; });
+    });
+    document.getElementById('closeProductModalBtn').addEventListener('click', () => closeProductModal(false));
+    document.getElementById('previousProductStepBtn').addEventListener('click', () => setProductStep(productSteps[productStepIndex - 1]));
+    document.getElementById('nextProductStepBtn').addEventListener('click', () => setProductStep(productSteps[productStepIndex + 1]));
+    document.querySelectorAll('.product-step').forEach(button => button.addEventListener('click', () => setProductStep(button.dataset.step)));
+    productForm.addEventListener('submit', addProduct);
+    productForm.addEventListener('input', () => { productFormDirty = true; updateProductPreview(); });
+    productForm.addEventListener('change', () => { productFormDirty = true; updateProductPreview(); });
+    document.getElementById('pImages').addEventListener('change', event => {
+      addProductImages([...event.target.files]);
+      event.target.value = '';
+    });
+    document.getElementById('campaignImage').addEventListener('change', event => {
+      const file = event.target.files[0] || null;
+      if (file && (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024)) {
+        event.target.value = '';
+        campaignImageFile = null;
+        return toast('活动图片格式不支持或超过 5 MB', 'error');
+      }
+      campaignImageFile = file;
+      productFormDirty = true;
+    });
+    document.getElementById('productImageList').addEventListener('click', event => {
+      const coverButton = event.target.closest('.product-image-cover');
+      if (coverButton) {
+        const index = Number(coverButton.dataset.imageIndex);
+        const selected = productImages.splice(index, 1)[0];
+        if (selected) productImages.unshift(selected);
+        productFormDirty = true;
+        return renderProductImages();
+      }
+      const button = event.target.closest('.product-image-remove');
+      if (!button) return;
+      const index = Number(button.dataset.imageIndex);
+      const removed = productImages.splice(index, 1)[0];
+      if (removed) URL.revokeObjectURL(removed.url);
+      productFormDirty = true;
+      renderProductImages();
+    });
+    const uploadZone = document.querySelector('.product-upload-zone');
+    uploadZone.addEventListener('dragover', event => { event.preventDefault(); uploadZone.classList.add('is-dragging'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('is-dragging'));
+    uploadZone.addEventListener('drop', event => {
+      event.preventDefault();
+      uploadZone.classList.remove('is-dragging');
+      addProductImages([...event.dataTransfer.files]);
+    });
+    productModal.addEventListener('mousedown', event => { if (event.target === productModal) closeProductModal(false); });
+    document.addEventListener('keydown', event => {
+      if (!productModal.classList.contains('is-open')) return;
+      if (event.key === 'Escape') return closeProductModal(false);
+      if (event.key !== 'Tab') return;
+      const focusable = [...productModal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')].filter(element => !element.closest('[hidden]'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
+    document.getElementById('genBoxesBtn').addEventListener('click', genBoxes);
+    document.getElementById('genItemsBtn').addEventListener('click', genItems);
+    document.getElementById('printLabelsBtn').addEventListener('click', printLabels);
+    document.getElementById('printPageBtn').addEventListener('click', () => window.print());
+    document.getElementById('downloadAllBtn').addEventListener('click', downloadAll);
+    // ---- 检测报告管理 ----
+    let reportProductId = null;
+    const reportModal = document.getElementById('reportModal');
+    const reportList = document.getElementById('reportList');
+    let reportFiles = [];
+
+    async function openReportModal(productId, productName) {
+      reportProductId = productId;
+      reportFiles = [];
+      document.getElementById('reportModalTitle').textContent = '检测报告 · ' + (productName || '');
+      document.getElementById('reportBatch').value = '';
+      document.getElementById('reportFile').value = '';
+      reportModal.classList.add('is-open');
+      reportModal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('modal-open');
+      await loadReports();
+    }
+
+    async function loadReports() {
+      reportList.innerHTML = '<div class="loading">加载中...</div>';
+      try {
+        const res = await fetch(`/api/products/${reportProductId}/reports`);
+        const data = await res.json();
+        if (!data.success) { reportList.innerHTML = '<div class="loading">加载失败</div>'; return; }
+        renderReports(data.reports || []);
+      } catch (_e) { reportList.innerHTML = '<div class="loading">加载失败</div>'; }
+    }
+
+    function renderReports(reports) {
+      if (!reports.length) { reportList.innerHTML = '<p class="form-help">暂无检测报告，上传后消费者扫码即可查看。</p>'; return; }
+      reportList.innerHTML = reports.map(r => `
+        <div class="report-item" data-report-id="${r.id}">
+          <img src="${escapeHtml(r.url)}" alt="检测报告" loading="lazy">
+          <div class="report-item-meta">
+            <span class="report-batch">${escapeHtml(r.batch_no || '未填批次')}</span>
+            <button type="button" class="btn btn-outline btn-sm report-del-btn" data-report-id="${r.id}">删除</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function closeReportModal() {
+      reportModal.classList.remove('is-open');
+      reportModal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('modal-open');
+      reportProductId = null;
+    }
+
+    document.getElementById('closeReportModalBtn').addEventListener('click', closeReportModal);
+
+    document.getElementById('reportFile').addEventListener('change', async (event) => {
+      const files = [...event.target.files];
+      event.target.value = '';
+      if (!files.length) return;
+      if (!reportProductId) return;
+      const batch = document.getElementById('reportBatch').value.trim();
+      const body = new FormData();
+      files.forEach(f => body.append('files', f));
+      const status = document.createElement('span');
+      reportList.insertAdjacentHTML('afterbegin', '<div class="loading">正在上传...</div>');
+      try {
+        const res = await fetch(`/api/products/${reportProductId}/reports?batch_no=${encodeURIComponent(batch)}`, { method: 'POST', body });
+        const data = await res.json();
+        if (!res.ok || !data.success) { await loadReports(); return toast(data.msg || '上传失败', 'error'); }
+        await loadReports();
+        toast('检测报告上传成功');
+      } catch (_e) { await loadReports(); toast('上传失败', 'error'); }
+    });
+
+    // 用 batch_no 放在 body 更稳妥，故上面 query 也可；这里以显式 header 方式再兜底 —— 实际后端已从 body 读取 batch_no
+    // （上面 query 传参不影响后端，后端以 body.batch_no 为准；保持简单，上传走 body）
+
+    reportList.addEventListener('click', async (event) => {
+      const btn = event.target.closest('.report-del-btn');
+      if (!btn) return;
+      const id = btn.dataset.reportId;
+      if (!confirm('确定删除这张检测报告吗？')) return;
+      const res = await fetch(`/api/reports/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || !data.success) return toast(data.msg || '删除失败', 'error');
+      await loadReports();
+      toast('已删除');
+    });
+
+    document.querySelectorAll('.report-product-btn').forEach(button => {
+      button.addEventListener('click', () => openReportModal(button.dataset.productId, button.dataset.productName));
+    });
+
+    document.querySelectorAll('.delete-product-btn').forEach(button => {
+      button.addEventListener('click', () => deleteProduct(button.dataset.productId, button.dataset.productName));
+    });
+    document.querySelectorAll('.edit-product-btn').forEach(button => {
+      button.addEventListener('click', () => editProduct(button.dataset.productId));
+    });
+    document.querySelectorAll('.marketing-review-btn').forEach(button => {
+      button.addEventListener('click', () => reviewMarketing(button.dataset.reviewStatus));
+    });
+  </script>
+</body>
+</html>

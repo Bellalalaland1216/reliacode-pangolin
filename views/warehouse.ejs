@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 品牌方发货 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260912a">
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260903a">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'warehouse' }) %>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-title">扫码发货</div>
+      <p class="section-help warehouse-help">
+        连续扫描<b>箱码</b>（整箱）或<b>子码</b>（散件），累积到下方列表，选好代理商后一次性批量发货。
+      </p>
+      <div class="scan-box">
+        <div class="scan-hero-icon"><%- icon('box', 'ui-icon-lg') %></div>
+        <div class="scan-input-row">
+          <input type="text" id="boxCode" class="form-control scan-box-input scan-flex-input"
+            placeholder="扫描 / 输入箱码或子码" autofocus>
+          <button type="button" class="btn btn-outline no-wrap" id="openScannerBtn"><%- icon('camera') %> 手机扫码</button>
+        </div>
+      </div>
+
+      <!-- 取消发货入口 -->
+      <div class="form-group">
+        <button type="button" class="btn btn-outline btn-sm" id="cancelShipBtn"><%- icon('refresh') %> 取消发货</button>
+        <span class="muted-supporting-text" id="cancelShipHint">发错代理/扫错码？点「取消发货」后扫码累积待取消清单，再点「确认取消发货」二次确认</span>
+      </div>
+      <!-- 待取消发货清单 + 确认按钮（取消发货模式下显示） -->
+      <div class="form-group is-hidden" id="cancelShipPanel">
+        <div class="split-title">
+          <label>待取消发货清单（<span id="cancelShipCount">0</span> 项）</label>
+          <button type="button" class="btn btn-outline btn-sm" id="clearCancelShipBtn">清空</button>
+        </div>
+        <div id="cancelShipList" class="pending-ship-list">
+          <p class="empty-list-state">扫码后自动累积到清单（支持箱码/子码混扫）</p>
+        </div>
+        <button type="button" class="btn btn-primary btn-sm mt-12" id="confirmCancelShipBtn"><%- icon('check') %> 确认取消发货</button>
+      </div>
+      <!-- 待发货列表（累积扫码） -->
+      <div class="form-group">
+        <div class="split-title">
+          <label>待发货清单（<span id="pendingCount">0</span> 项）</label>
+          <button type="button" class="btn btn-outline btn-sm" id="clearPendingBtn">清空</button>
+        </div>
+        <div id="pendingList" class="pending-ship-list">
+          <p class="empty-list-state">扫码后自动添加到清单（支持箱码/子码混扫）</p>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>选择代理商 <span class="required-mark">*</span></label>
+        <select id="distSelect" class="form-control">
+          <option value="">请选择代理商</option>
+          <% distributors.forEach(d => { %>
+            <option value="<%= d.id %>"><%= d.name %>（<%= d.region || '未设置区域' %>）</option>
+          <% }); %>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>订单编号 <span class="required-mark">*</span></label>
+        <input type="text" id="orderNoInput" class="form-control" placeholder="必填，如 GD20260901-A">
+      </div>
+      <div class="form-group">
+        <label>备注（选填）</label>
+        <input type="text" id="remarkInput" class="form-control" placeholder="备注信息，如发往 XX 仓、紧急发货运单号等">
+      </div>
+      <div class="form-group">
+        <label>操作人（自动记录登录账号）</label>
+        <input type="text" class="form-control" value="<%= user ? user.display_name : '' %>" disabled>
+      </div>
+      <button class="btn btn-success full-width" id="shipBoxBtn">确认发货</button>
+    </div>
+
+    <!-- 发货记录 -->
+    <div class="card">
+      <div class="card-title split-title">
+        <span>近期发货明细</span>
+        <button class="btn btn-outline btn-sm" type="button" id="exportShipBtn"><%- icon('download') %> 导出Excel</button>
+      </div>
+      <div class="form-group">
+        <label>按发货日期查询</label>
+        <input type="date" id="shipDateInput" class="form-control">
+      </div>
+      <div class="form-group">
+        <input type="text" id="orderSearchInput" class="form-control" placeholder="🔍 按订单编号或备注查找">
+      </div>
+      <table class="table" id="shipTable">
+        <thead>
+          <tr>
+            <th>产品名称</th><th>产品件数</th><th>箱数</th>
+            <th>订单编号</th><th>代理商</th><th>区域</th><th>操作人</th><th>发货时间</th><th>备注</th><th>码值明细</th>
+          </tr>
+        </thead>
+        <tbody id="shipBody">
+          <tr><td colspan="10" class="empty-cell">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="/js/html5-qrcode.min.js"></script>
+  <script src="/js/scanner.js?v=20260910a"></script>
+  <script nonce="<%= cspNonce %>">
+    const escapeHtml = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    // 差异化提示音（箱码/子码/重复扫描不同音）
+    let _audioCtx = null;
+    function vibrate(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+    function playBeep(type) {
+      let freqA = 880, freqB = 0, total = 0.2, vib = 20;
+      if (type === 'box') { freqA = 660; total = 0.16; }
+      else if (type === 'item') { freqA = 880; freqB = 1174.66; total = 0.22; }
+      else if (type === 'dup') { freqA = 196; freqB = 156.82; total = 0.4; vib = [80,60,80]; }
+      else { freqA = 220; total = 0.32; vib = [80,60,80]; }
+      vibrate(vib);
+      try {
+        if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const ctx = _audioCtx;
+        if (ctx.state === 'suspended') ctx.resume();
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freqA, now);
+        if (freqB) osc.frequency.setValueAtTime(freqB, now + 0.08);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + total);
+        osc.start(now); osc.stop(now + total + 0.05);
+      } catch (e) {}
+    }
+
+    // 待发货清单（累积扫码）
+    let pendingCodes = [];
+
+    // 前置条件：必须先选好代理商 + 填写订单编号，才能启用扫码发货
+    function shipReady() {
+      const did = document.getElementById('distSelect').value;
+      const oid = (document.getElementById('orderNoInput').value || '').trim();
+      return !!(did && oid);
+    }
+    function updateShipReadyState() {
+      const ready = shipReady();
+      const input = document.getElementById('boxCode');
+      const cam = document.getElementById('openScannerBtn');
+      const shipBtn = document.getElementById('shipBoxBtn');
+      if (ready) {
+        input.removeAttribute('disabled');
+        cam.removeAttribute('disabled');
+        shipBtn.removeAttribute('disabled');
+        input.placeholder = '扫描 / 输入箱码或子码';
+      } else {
+        input.setAttribute('disabled', 'disabled');
+        cam.setAttribute('disabled', 'disabled');
+        shipBtn.setAttribute('disabled', 'disabled');
+        input.placeholder = '请先选择代理商并填写订单编号';
+      }
+      return ready;
+    }
+
+    function renderPending() {
+      const list = document.getElementById('pendingList');
+      document.getElementById('pendingCount').textContent = pendingCodes.length;
+      if (pendingCodes.length === 0) {
+        list.innerHTML = '<p class="empty-list-state">扫码后自动添加到清单（支持箱码/子码混扫）</p>';
+      } else {
+        list.innerHTML = pendingCodes.map((c, i) => `
+          <div class="pending-ship-row">
+            <span class="code-cell">${escapeHtml(c)}</span>
+            <button type="button" class="btn btn-outline btn-sm remove-pending-btn" data-index="${i}">移除</button>
+          </div>
+        `).join('');
+      }
+    }
+
+    function addPending(rawCode) {
+      if (!shipReady()) return toast('请先选择代理商并填写订单编号，再扫码发货', 'error');
+      const code = extractCode(rawCode);
+      if (!code) return;
+      // 去重
+      if (pendingCodes.includes(code)) {
+        playBeep('dup');
+        toast('该码已在清单中', 'error');
+        return;
+      }
+      pendingCodes.push(code);
+      renderPending();
+      // 箱码/子码不同提示音
+      playBeep(/^B/i.test(code) ? 'box' : 'item');
+      toast('已添加：' + code, 'success');
+    }
+
+    // 回车：普通模式累积到清单，取消发货模式则执行取消
+    document.getElementById('boxCode').addEventListener('keypress', e => {
+      if (e.key === 'Enter') {
+        const v = document.getElementById('boxCode').value;
+        if (!v) return;
+        document.getElementById('boxCode').value = '';
+        if (cancelShipMode) cancelShip(v);
+        else addPending(v);
+      }
+    });
+    document.getElementById('openScannerBtn').addEventListener('click', () => openScanner({ title: '连续扫描箱码或子码', continuous: true, onScanned: scanBoxCode }));
+    document.getElementById('shipBoxBtn').addEventListener('click', batchShip);
+    // 前置条件：代理商 / 订单编号变化时刷新扫码按钮可用状态
+    document.getElementById('distSelect').addEventListener('change', updateShipReadyState);
+    document.getElementById('orderNoInput').addEventListener('input', updateShipReadyState);
+
+    // 手机扫码回调：连续扫码，扫到直接进清单（取消模式下则退货）
+    function scanBoxCode(code) {
+      if (cancelShipMode) cancelShip(code);
+      else addPending(code);
+    }
+
+    // 移除/清空
+    document.getElementById('pendingList').addEventListener('click', e => {
+      const btn = e.target.closest('.remove-pending-btn');
+      if (!btn) return;
+      const idx = parseInt(btn.dataset.index);
+      pendingCodes.splice(idx, 1);
+      renderPending();
+    });
+    document.getElementById('clearPendingBtn').addEventListener('click', () => {
+      pendingCodes = [];
+      renderPending();
+    });
+
+    // 批量发货
+    async function batchShip() {
+      const distributor_id = document.getElementById('distSelect').value;
+      const order_no = document.getElementById('orderNoInput').value;
+      const remark = document.getElementById('remarkInput').value;
+      if (!pendingCodes.length) return toast('请先扫码添加要发货的码', 'error');
+      if (!distributor_id) return toast('请选择代理商', 'error');
+
+      const res = await fetch('/api/shipments/batch-ship', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({codes: pendingCodes, distributor_id, order_no, remark})
+      });
+      const data = await res.json();
+      if (!data.success) return toast(data.msg || '发货失败', 'error');
+
+      if (data.failed && data.failed.length) {
+        toast(`成功 ${data.shipped.length} 个，失败 ${data.failed.length} 个（见弹窗）`, 'error');
+        alert(`发货结果：
+
+成功 ${data.shipped.length} 个，失败 ${data.failed.length} 个
+
+${data.failed.map(f => f.code + '：' + f.msg).join('\n')}`);
+      } else {
+        toast(data.msg, 'success');
+      }
+
+      // 清空清单并刷新记录
+      pendingCodes = [];
+      renderPending();
+      document.getElementById('boxCode').value = '';
+      loadShipments();
+    }
+
+    // ---- 取消发货（发错代理/扫错码时退回在库） ----
+    let cancelShipMode = false;
+    let cancelShipCodes = [];   // 待取消发货的码清单（支持箱码/子码混扫）
+    function renderCancelShip() {
+      const list = document.getElementById('cancelShipList');
+      document.getElementById('cancelShipCount').textContent = cancelShipCodes.length;
+      if (cancelShipCodes.length === 0) {
+        list.innerHTML = '<p class="empty-list-state">扫码后自动累积到清单（支持箱码/子码混扫）</p>';
+      } else {
+        list.innerHTML = cancelShipCodes.map((c, i) => `
+          <div class="pending-ship-row">
+            <span class="code-cell">${escapeHtml(c)}</span>
+            <button type="button" class="btn btn-outline btn-sm remove-cancel-ship-btn" data-index="${i}">移除</button>
+          </div>
+        `).join('');
+      }
+    }
+    // 取消发货模式下扫码：累积到待取消清单（不立即执行）
+    function cancelShip(code) {
+      if (cancelShipCodes.includes(code)) {
+        playBeep('dup');
+        toast('该码已在待取消清单中', 'error');
+        return;
+      }
+      cancelShipCodes.push(code);
+      renderCancelShip();
+      playBeep(/^B/i.test(code) ? 'box' : 'item');
+      toast('已添加待取消：' + code, 'success');
+    }
+    // 单个码真正执行取消发货
+    async function doCancelShipOne(code) {
+      const res = await fetch('/api/shipments/cancel', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      return { code, success: data.success, msg: data.msg };
+    }
+    // 二次确认后批量取消发货
+    async function confirmCancelShip() {
+      if (!cancelShipCodes.length) return toast('请先扫码添加要取消发货的码', 'error');
+      showCancelConfirm(
+        '确认取消发货',
+        `即将取消发货 <b>${cancelShipCodes.length}</b> 个码（已发货码退回在库）：`,
+        cancelShipCodes.slice(),
+        async () => {
+          const codes = cancelShipCodes.slice();
+          const results = [];
+          for (const code of codes) {
+            results.push(await doCancelShipOne(code));
+          }
+          const ok = results.filter(r => r.success).length;
+          const fail = results.filter(r => !r.success).length;
+          if (fail) {
+            playBeep('err');
+            toast(`取消完成：成功 ${ok} 个，失败 ${fail} 个：${results.filter(r=>!r.success).map(r=>r.code+'：'+r.msg).join('；')}`, 'error');
+          } else {
+            playBeep('dup');
+            toast(`已取消发货 ${ok} 个`, 'success');
+          }
+          cancelShipCodes = [];
+          renderCancelShip();
+          loadShipments();
+        }
+      );
+    }
+    document.getElementById('cancelShipBtn').addEventListener('click', () => {
+      cancelShipMode = !cancelShipMode;
+      const btn = document.getElementById('cancelShipBtn');
+      const hint = document.getElementById('cancelShipHint');
+      const input = document.getElementById('boxCode');
+      const panel = document.getElementById('cancelShipPanel');
+      if (cancelShipMode) {
+        btn.textContent = '退出取消发货';
+        panel.classList.remove('is-hidden');
+        input.placeholder = '扫箱码/子码 加入取消清单…';
+        hint.textContent = '已开启取消发货：扫码把码加入待取消清单，扫完点「确认取消发货」二次确认后执行';
+        toast('已开启取消发货模式，扫码累积清单', 'success');
+      } else {
+        btn.textContent = '取消发货';
+        panel.classList.add('is-hidden');
+        input.placeholder = '扫描 / 输入箱码或子码';
+        hint.textContent = '发错代理/扫错码？点「取消发货」后扫码累积待取消清单，再点「确认取消发货」二次确认';
+      }
+      input.focus();
+    });
+    document.getElementById('confirmCancelShipBtn').addEventListener('click', confirmCancelShip);
+    document.getElementById('clearCancelShipBtn').addEventListener('click', () => { cancelShipCodes = []; renderCancelShip(); });
+    document.getElementById('cancelShipList').addEventListener('click', e => {
+      const b = e.target.closest('.remove-cancel-ship-btn');
+      if (!b) return;
+      cancelShipCodes.splice(parseInt(b.dataset.index), 1);
+      renderCancelShip();
+    });
+
+    // 缓存的发货记录 + 订单号搜索
+    let allShipments = [];
+
+    // 逐级追溯树：订单/产品 → 箱（→箱内子码）+ 散件
+    function renderCodeTree(g) {
+      const boxes = g.boxes || [];
+      const loose = g.loose_items || [];
+      // 旧数据兼容：若后端没返回 boxes/loose_items，则回退用 codes 扁平展示
+      const hasTree = boxes.length || loose.length;
+      if (!hasTree) {
+        if (g.codes && g.codes.length) {
+          return g.codes.map(c => `<span class="tag ${c.type === 'box' ? 'tag-green' : 'tag-yellow'}">${c.type === 'box' ? '箱' : '散'}</span> <span class="code-cell">${escapeHtml(c.code)}</span>`).join('<br>');
+        }
+        return '<span class="muted-text">无码值</span>';
+      }
+      const parts = [];
+      // 整箱明细：每箱可展开子码
+      if (boxes.length) {
+        parts.push('<div class="ship-tree-section"><div class="ship-tree-section-title">📦 整箱（' + boxes.length + ' 箱）</div>');
+        const boxRows = boxes.map((b, bi) => {
+          const codes = (b.item_codes || []).map(escapeHtml);
+          const codesHtml = codes.length
+            ? codes.map(c => `<span class="code-chip">${c}</span>`).join('')
+            : '<span class="muted-text">（无子码）</span>';
+          return `<div class="ship-box-row">
+            <div class="ship-box-head" data-box="${bi}">
+              <span class="chevron">▸</span>
+              <span class="code-cell bold-text">${escapeHtml(b.box_code)}</span>
+              <span class="small-text muted-text">${Number(b.item_count) || 0} 个子码</span>
+            </div>
+            <div class="ship-box-body is-hidden" id="shipBoxBody_${bi}"><div class="ship-box-codes">${codesHtml}</div></div>
+          </div>`;
+        }).join('');
+        parts.push(boxRows);
+        parts.push('</div>');
+      }
+      // 散件明细
+      if (loose.length) {
+        parts.push('<div class="ship-tree-section"><div class="ship-tree-section-title">📎 散件（' + loose.length + ' 件）</div>');
+        parts.push(loose.map(l => `<span class="tag tag-yellow">散</span> <span class="code-cell">${escapeHtml(l.item_code)}</span>`).join('<br>'));
+        parts.push('</div>');
+      }
+      return parts.join('');
+    }
+
+    function renderShipments(list) {
+      const body = document.getElementById('shipBody');
+      if (!list || list.length === 0) {
+        body.innerHTML = '<tr><td colspan="10" class="empty-cell">暂无发货记录</td></tr>';
+        return;
+      }
+      body.innerHTML = list.map((s, idx) => `
+        <tr class="ship-group-row" data-group="${idx}">
+          <td><b>${escapeHtml(s.product_name || '-')}${s.product_spec ? '<span class="small-text muted-text">（' + escapeHtml(s.product_spec) + '）</span>' : ''}</b></td>
+          <td>${s.product_qty ? s.product_qty + ' 件' : '-'}</td>
+          <td>${s.box_qty ? s.box_qty + ' 箱' : '-'}</td>
+          <td class="code-cell">${escapeHtml(s.order_no || '-')}</td>
+          <td>${escapeHtml(s.distributor_name || '-')}</td>
+          <td>${escapeHtml(s.distributor_region || '-')}</td>
+          <td>${escapeHtml(s.operator || '-')}</td>
+          <td class="meta-cell">${escapeHtml(s.shipped_at || '-')}</td>
+          <td>${escapeHtml(s.remark || '-')}</td>
+          <td>
+            <button type="button" class="btn btn-outline btn-sm toggle-codes-btn" data-group="${idx}">查看码值（${s.codes ? s.codes.length : 0}）</button>
+          </td>
+        </tr>
+        <tr class="ship-codes-row is-hidden" id="shipCodes_${idx}">
+          <td colspan="10" class="ship-codes-cell"></td>
+        </tr>
+      `).join('');
+
+      // 绑定码值展开/收起
+      body.querySelectorAll('.toggle-codes-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const idx = btn.dataset.group;
+          const row = document.getElementById('shipCodes_' + idx);
+          const g = list[idx];
+          if (!row || !g) return;
+          if (row.classList.contains('is-hidden')) {
+            row.classList.remove('is-hidden');
+            const cell = row.querySelector('.ship-codes-cell');
+            cell.innerHTML = renderCodeTree(g);
+            // 箱头点击展开/收起箱内子码（三层下钻）
+            cell.querySelectorAll('.ship-box-head').forEach(head => {
+              head.addEventListener('click', () => {
+                const bi = head.getAttribute('data-box');
+                const body = cell.querySelector('#shipBoxBody_' + bi);
+                const chev = head.querySelector('.chevron');
+                if (!body) return;
+                const open = body.classList.toggle('is-hidden') === false;
+                if (chev) chev.textContent = open ? '▾' : '▸';
+              });
+            });
+            btn.textContent = '收起码值';
+          } else {
+            row.classList.add('is-hidden');
+            btn.textContent = '查看码值（' + (g.codes ? g.codes.length : 0) + '）';
+          }
+        });
+      });
+    }
+
+    async function loadShipments(date) {
+      let url = '/api/shipments';
+      if (date) url += '?date=' + encodeURIComponent(date);
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!data.success) {
+        renderShipments([]);
+        return;
+      }
+      // 以「产品名称」为主要登记依据的聚合明细（groups），未返回时回退用原始明细聚合
+      allShipments = data.groups || data.shipments || [];
+      applyOrderFilter();
+    }
+
+    // 日期筛选：选择日期后按当天查询
+    document.getElementById('shipDateInput').addEventListener('change', e => {
+      loadShipments(e.target.value || '');
+    });
+
+    function applyOrderFilter() {
+      const q = (document.getElementById('orderSearchInput').value || '').trim().toLowerCase();
+      if (!q) return renderShipments(allShipments);
+      const filtered = allShipments.filter(s =>
+        (s.product_name || '').toLowerCase().includes(q) ||
+        (s.order_no || '').toLowerCase().includes(q) ||
+        (s.distributor_name || '').toLowerCase().includes(q) ||
+        (s.remark || '').toLowerCase().includes(q)
+      );
+      renderShipments(filtered);
+    }
+
+    document.getElementById('orderSearchInput').addEventListener('input', applyOrderFilter);
+
+    // 导出 Excel：与当前列表筛选（日期 + 搜索词）同范围、同口径，实时取最新发货明细
+    document.getElementById('exportShipBtn').addEventListener('click', () => {
+      const btn = document.getElementById('exportShipBtn');
+      if (btn.disabled) return;
+      const date = (document.getElementById('shipDateInput').value || '').trim();
+      const q = (document.getElementById('orderSearchInput').value || '').trim();
+      const params = new URLSearchParams();
+      if (date) params.set('date', date);
+      if (q) params.set('q', q);
+      const qs = params.toString();
+      // 导出加载中：禁用按钮防重复点击，完成/出错后恢复
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '⏳ 生成中…';
+      const restore = () => { btn.disabled = false; btn.innerHTML = originalHtml; };
+      const url = '/api/export/shipments' + (qs ? '?' + qs : '');
+      // 用 fetch 流式下载，可监听完成事件；失败时回退为直接跳转
+      fetch(url, { credentials: 'same-origin' })
+        .then(resp => {
+          if (!resp.ok) { throw new Error('HTTP ' + resp.status); }
+          return resp.blob();
+        })
+        .then(blob => {
+          if (blob.type && blob.type.includes('spreadsheet')) {
+            const a = document.createElement('a');
+            const objUrl = URL.createObjectURL(blob);
+            a.href = objUrl;
+            a.download = '发货记录.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(objUrl);
+            toast('导出成功', 'success');
+          } else {
+            // 服务端可能返回错误 JSON 而非文件，回退直接跳转
+            window.location.href = url;
+          }
+          restore();
+        })
+        .catch(() => {
+          // 网络/流式失败：回退为直接导航下载，确保能导出
+          restore();
+          window.location.href = url;
+        });
+    });
+
+    loadShipments();
+    // 前置条件：初始即禁用扫码，待选好代理商+订单编号后启用
+    updateShipReadyState();
+  </script>
+</body>
+</html>

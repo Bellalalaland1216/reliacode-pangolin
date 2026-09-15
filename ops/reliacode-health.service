@@ -1,0 +1,14 @@
+[Unit]
+Description=ReliaCode production-pilot health checks
+After=network-online.target nginx.service pm2-root.service
+
+[Service]
+Type=oneshot
+ExecStart=/root/traceability-system/ops/pilot-health.sh
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadOnlyPaths=/root/traceability-system /var/backups/reliacode-sqlite
+ReadWritePaths=/var/lib/reliacode-ops

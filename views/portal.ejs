@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 代理商工作台 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260903a">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'portal' }) %>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-title"><%- icon('handshake') %> <%= distributor.name %><% if (!isSelf) { %> <span class="tag tag-blue admin-view-tag"><%= user && user.role === 'AUDIT_VIEWER' ? '只读查看' : '管理员视角' %></span><% } %></div>
+      <div class="supporting-text">
+        负责区域：<b><%= distributor.region || '未设置' %></b>
+        <% if (distributor.phone) { %> ｜ 联系电话：<%= distributor.phone %><% } %>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="num"><%= stats.boxes %></div>
+        <div class="label">名下箱数</div>
+      </div>
+      <div class="stat-card">
+        <div class="num"><%= stats.items %></div>
+        <div class="label">名下产品数</div>
+      </div>
+      <div class="stat-card">
+        <div class="num success"><%= stats.scanned %></div>
+        <div class="label">已被扫码验证</div>
+      </div>
+      <div class="stat-card">
+        <div class="num danger"><%= stats.diversions %></div>
+        <div class="label">串货预警</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><%- icon('box') %> 我的库存与发货</div>
+      <% if (boxes.length === 0) { %>
+        <p class="empty-state">暂无发货记录</p>
+      <% } else { %>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>箱码</th><th>产品</th><th>批次</th><th>箱内数量</th>
+            <th>已扫码</th><th>状态</th><th>发货时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% boxes.forEach(b => { %>
+          <tr>
+            <td class="code-cell"><%= b.box_code %></td>
+            <td><%= b.product_name || '-' %></td>
+            <td><%= b.batch_no || '-' %></td>
+            <td><%= b.item_count %></td>
+            <td><%= b.scanned_count %></td>
+            <td><%= b.status === 'shipped' ? '已发货' : '在库' %></td>
+            <td class="meta-cell"><%= b.shipped_at || '-' %></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <% } %>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><%- icon('location') %> 我的名下产品扫码记录（最近100条）</div>
+      <% if (scans.length === 0) { %>
+        <p class="empty-state">暂无扫码记录</p>
+      <% } else { %>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>溯源码</th><th>产品</th><th>扫码位置</th><th>状态</th><th>时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% scans.forEach(s => { %>
+          <tr>
+            <td class="code-cell"><%= s.item_code %></td>
+            <td><%= s.product_name || '-' %></td>
+            <td><%= s.scan_location || '-' %></td>
+            <td>
+              <% if (s.is_diversion >= 2) { %><span class="tag tag-red">重度串货</span>
+              <% } else if (s.is_diversion === 1) { %><span class="tag tag-yellow">轻度串货</span>
+              <% } else { %><span class="tag tag-green">正常</span><% } %>
+            </td>
+            <td class="meta-cell"><%= s.scanned_at %></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <% } %>
+    </div>
+  </div>
+</body>
+</html>

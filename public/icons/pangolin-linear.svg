@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="title" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+  <title id="title">穿山甲</title>
+  <path d="M8 29c1-10 8-17 18-17 7 0 13 5 13 12 0 8-6 14-14 14H14l-6 4 2-7h-2v-6Z"/>
+  <path d="M18 16l3 4m2-6 3 5m3-3 2 5m3-1 1 5M16 23l4 3m3-3 4 3m3-2 3 3M16 30l4 3m3-3 4 3"/>
+  <path d="M12 28h5l-3 3M14 38l-1 5m9-5v5m9-6 2 4"/>
+  <circle cx="34" cy="22" r="1" fill="currentColor" stroke="none"/>
+</svg>

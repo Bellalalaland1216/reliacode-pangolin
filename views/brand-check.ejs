@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 扫码查串货 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <style nonce="<%= cspNonce %>">
+    .check-hero { padding: 8px 0 4px; }
+    .check-result-card { margin-top: 16px; }
+    .div-alert { padding: 12px 14px; border-radius: 12px; font-size: 14px; display: flex; gap: 8px; align-items: flex-start; }
+    .div-alert.danger { background: #fff5f3; color: #d93025; border: 1px solid #f5c6c2; }
+    .div-alert.safe { background: #f0faf4; color: #188038; border: 1px solid #c6edd4; }
+    .log-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .log-table th, .log-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #eee; }
+    .log-table th { color: #6e6e73; font-weight: 600; }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 12px; }
+    .tag-red { background: #fde7e9; color: #d93025; }
+    .tag-yellow { background: #fff4e5; color: #b45309; }
+    .tag-green { background: #e6f4ea; color: #188038; }
+    .info-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    .info-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed #eee; }
+    .info-item .lbl { color: #6e6e73; }
+    .info-item .val { font-weight: 500; text-align: right; }
+  </style>
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260907a">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'brand-check' }) %>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>扫码查串货</h1>
+      <p>扫一下市场上的溯源码，核对指定销售区域，识别该商品是否串货</p>
+    </div>
+
+    <section class="card">
+      <div class="card-title"><%- icon('search') %> 查询溯源码</div>
+      <div class="form-group">
+        <div class="verify-input-row" style="display:flex;gap:8px;">
+          <label for="codeInput" class="sr-only">输入或扫描箱码或子码</label>
+          <input type="text" id="codeInput" class="form-control" placeholder="输入或扫描箱码(B)/子码(S)" autocomplete="off" style="flex:1;">
+          <button id="scanBtn" type="button" class="btn btn-outline no-wrap" title="摄像头扫码"><%- icon('camera') %> 扫码</button>
+        </div>
+      </div>
+      <button id="checkBtn" class="btn btn-primary" type="button">立即查询</button>
+      <div id="checkStatus" class="form-hint" role="status" aria-live="polite"></div>
+    </section>
+
+    <div id="resultArea"></div>
+  </div>
+
+  <script src="/js/html5-qrcode.min.js"></script>
+  <script src="/js/scanner.js?v=20260831i"></script>
+  <script nonce="<%= cspNonce %>">
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch]);
+    }
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    const diversionTag = (lv) => lv >= 2 ? '<span class="tag tag-red">重度串货(跨省)</span>' : (lv === 1 ? '<span class="tag tag-yellow">轻度串货</span>' : '<span class="tag tag-green">正常</span>');
+
+    function renderResult(data) {
+      const area = document.getElementById('resultArea');
+      const dLevel = data.diversion_level || 0;
+      const alertHtml = dLevel > 0
+        ? `<div class="div-alert danger"><span>⚠</span><div><strong>该码存在串货记录</strong>（${dLevel >= 2 ? '重度·跨省' : '轻度·同省跨市'}）。指定区域「${escapeHtml(data.assigned_region || '未知')}」，请结合下方历史扫码记录核实流通渠道。</div></div>`
+        : `<div class="div-alert safe"><span>✓</span><div><strong>暂未发现串货记录</strong>。指定区域「${escapeHtml(data.assigned_region || '未知')}」，历史扫码未见异常流通。</div></div>`;
+
+      const logs = Array.isArray(data.scan_logs) ? data.scan_logs : [];
+      const logRows = logs.length
+        ? logs.map(l => `<tr><td>${escapeHtml(l.scanned_at || '')}</td><td>${escapeHtml(l.location || '未知')}</td><td>${diversionTag(l.is_diversion)}</td></tr>`).join('')
+        : '<tr><td colspan="3" style="text-align:center;color:#999;">暂无扫码记录</td></tr>';
+
+      area.innerHTML = `
+        <section class="card check-result-card">
+          <div class="card-title"><%- icon('box') %> 码信息</div>
+          <div class="info-grid">
+            <div class="info-item"><span class="lbl">码值</span><span class="val mono-text">${escapeHtml(data.code)}</span></div>
+            <div class="info-item"><span class="lbl">类型</span><span class="val">${data.code_type === 'box' ? '箱码' : '子码'}</span></div>
+            <div class="info-item"><span class="lbl">产品</span><span class="val">${escapeHtml(data.product_name || '-')}</span></div>
+            ${data.product_spec ? `<div class="info-item"><span class="lbl">规格</span><span class="val">${escapeHtml(data.product_spec)}</span></div>` : ''}
+            <div class="info-item"><span class="lbl">批次号</span><span class="val">${escapeHtml(data.batch_no || '-')}</span></div>
+            <div class="info-item"><span class="lbl">代理商</span><span class="val">${escapeHtml(data.distributor_name || '-')}</span></div>
+            <div class="info-item"><span class="lbl">指定销售区域</span><span class="val">${escapeHtml(data.assigned_region || '未指定')}</span></div>
+          </div>
+        </section>
+
+        <section class="card check-result-card">
+          <div class="card-title"><%- icon('alert') %> 串货结论</div>
+          ${alertHtml}
+        </section>
+
+        <section class="card check-result-card">
+          <div class="card-title"><%- icon('location') %> 历史扫码记录（${logs.length} 次）</div>
+          <table class="log-table">
+            <thead><tr><th>扫码时间</th><th>扫码位置</th><th>串货</th></tr></thead>
+            <tbody>${logRows}</tbody>
+          </table>
+        </section>
+      `;
+    }
+
+    async function checkCode() {
+      const code = document.getElementById('codeInput').value.trim();
+      if (!code) { toast('请输入或扫描溯源码', 'error'); return; }
+      const status = document.getElementById('checkStatus');
+      const area = document.getElementById('resultArea');
+      status.textContent = '正在查询…';
+      area.innerHTML = '';
+      try {
+        const res = await fetch('/api/brand/check-code/' + encodeURIComponent(code));
+        const data = await res.json();
+        if (data.success) {
+          status.textContent = '';
+          renderResult(data);
+        } else {
+          status.textContent = data.msg || '查询失败';
+          if (data.code === 'NOT_YOUR_BRAND') toast('该溯源码不属于你的品牌，无权查询', 'error');
+          else toast(data.msg || '查询失败', 'error');
+        }
+      } catch (e) {
+        status.textContent = '查询出错';
+        toast('查询出错，请重试', 'error');
+      }
+    }
+
+    function scanCode() {
+      if (window.openScanner) {
+        openScanner({
+          title: '扫描溯源码',
+          onScanned: (code) => {
+            document.getElementById('codeInput').value = code;
+            checkCode();
+          }
+        });
+      } else {
+        toast('扫码组件未加载', 'error');
+      }
+    }
+
+    document.getElementById('checkBtn').addEventListener('click', checkCode);
+    document.getElementById('scanBtn').addEventListener('click', scanCode);
+    document.getElementById('codeInput').addEventListener('keydown', e => { if (e.key === 'Enter') checkCode(); });
+  </script>
+</body>
+</html>
