@@ -30,7 +30,10 @@ test('login page never persists a password in browser storage', () => {
   assert.doesNotMatch(source, /localStorage|trace_saved_login|saved\.p|btoa\(/);
   assert.match(source, /autocomplete="current-password"/);
   assert.match(source, /name="remember" value="1"/);
-  assert.match(source, /记住登录状态（30 天）/);
+  assert.match(source, /在此设备保持登录/);
+  assert.match(source, /选择后保持 30 天；未选择时最长 12 小时/);
+  assert.doesNotMatch(source, /id="rememberLogin"[^>]*checked/);
+  assert.match(source, /id="passwordToggle"/);
 });
 
 test('production sessions persist in SQLite instead of process memory', () => {

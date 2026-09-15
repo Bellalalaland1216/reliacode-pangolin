@@ -46,6 +46,8 @@ test('any visitor can create a role-locked member account and use the member wor
   delete require.cache[databasePath];
   const { db, initDatabase } = require('../database.js');
   initDatabase();
+  db.prepare("INSERT INTO settings (key,value) VALUES ('contact_phone',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+    .run('010-12345678');
   const defaultBrand = db.prepare('SELECT id FROM brands ORDER BY id LIMIT 1').get();
   db.prepare('INSERT INTO invitations (code,role,note,brand_id) VALUES (?,?,?,?)')
     .run('OPENPARTNERQA', 'distributor', '开放注册回归测试', defaultBrand.id);
@@ -60,6 +62,15 @@ test('any visitor can create a role-locked member account and use the member wor
   try {
     await waitForServer(child);
     const baseUrl = `http://127.0.0.1:${port}`;
+    const loginPage = await fetch(`${baseUrl}/login`);
+    assert.equal(loginPage.status, 200);
+    const loginHtml = await loginPage.text();
+    assert.match(loginHtml, /登录企业工作台/);
+    assert.match(loginHtml, /商品溯源查询 · 无需登录/);
+    assert.match(loginHtml, /收到合作邀请？使用邀请码注册/);
+    assert.match(loginHtml, /href="tel:01012345678"/);
+    assert.doesNotMatch(loginHtml, /id="rememberLogin"[^>]*checked/);
+
     const registrationPage = await fetch(`${baseUrl}/register`);
     assert.equal(registrationPage.status, 200);
     assert.match(await registrationPage.text(), /普通用户注册/);
@@ -102,12 +113,19 @@ test('any visitor can create a role-locked member account and use the member wor
     assert.equal((await partnerRegistration.json()).success, true);
     assert.equal(db.prepare('SELECT role FROM users WHERE username=?').get('partner_member').role, 'distributor');
 
+    const invalidLogin = await fetch(`${baseUrl}/login`, {
+      method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username: 'open_member', password: 'WrongPassword12!' })
+    });
+    assert.equal(invalidLogin.status, 401);
+    assert.deepEqual(await invalidLogin.json(), { success: false, code: 'INVALID_CREDENTIALS', msg: '账号或密码有误' });
+
     const login = await fetch(`${baseUrl}/login`, {
-      method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ username: 'open_member', password })
     });
-    assert.equal(login.status, 302);
-    assert.equal(login.headers.get('location'), '/member');
+    assert.equal(login.status, 200);
+    assert.deepEqual(await login.json(), { success: true, redirect: '/member' });
     const cookie = login.headers.get('set-cookie').split(';', 1)[0];
 
     const memberPage = await fetch(`${baseUrl}/member`, { headers: { Cookie: cookie } });

@@ -4,168 +4,403 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#0b6e4f">
-  <title>ClawMaster / 穿山甲溯源大师 · 登录</title>
+  <meta name="theme-color" content="#f3f5f1">
+  <title>穿山甲溯源大师 · 企业登录</title>
   <link rel="icon" href="/icons/pangolin-photo.png?v=20260905">
   <style nonce="<%= cspNonce %>">
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    :root {
-      --brand: #0b6e4f;
-      --brand-2: #1d9e6f;
-      --ink: #1f2d27;
-      --muted: #6b7a72;
-      --line: #e3e8e4;
-      --bg: #f6f8f6;
-    }
+    * { box-sizing: border-box; }
+    html { background: #f3f5f1; }
     body {
-      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      background: var(--bg); color: var(--ink); padding: 0;
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      background: #f3f5f1;
+      color: #17251c;
+      font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
     }
-    .shell {
-      width: 100%; max-width: 1000px; min-height: 600px;
-      display: grid; grid-template-columns: 1.1fr 1fr;
-      background: #fff; border-radius: 20px; overflow: hidden;
-      box-shadow: 0 24px 60px rgba(11, 46, 33, .14);
-      margin: 24px;
+    button, input { font: inherit; }
+    button, a, input, label { -webkit-tap-highlight-color: transparent; }
+    a { color: inherit; }
+    .login-page {
+      display: flex;
+      min-height: 100vh;
+      align-items: center;
+      justify-content: center;
+      padding: 32px 20px;
     }
-    /* 左侧品牌区 */
-    .brand-panel {
-      background: linear-gradient(150deg, #063a2a 0%, #0b6e4f 55%, #12876a 100%);
-      color: #fff; padding: 56px 48px; position: relative; overflow: hidden;
-      display: flex; flex-direction: column; justify-content: space-between;
+    .page-frame { display: flex; width: min(100%, 1120px); flex-direction: column; }
+    .consumer-entry {
+      align-self: flex-end;
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      gap: 8px;
+      margin: 0 4px 12px;
+      color: #205b42;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      text-underline-offset: 4px;
     }
-    .brand-panel::before {
-      content: ""; position: absolute; inset: 0;
-      background:
-        radial-gradient(600px 300px at 110% -10%, rgba(255,255,255,.14), transparent 60%),
-        radial-gradient(500px 300px at -20% 110%, rgba(29,158,111,.5), transparent 60%);
-      pointer-events: none;
-    }
-    .brand-logo { position: relative; display: flex; align-items: center; gap: 12px; }
-    .brand-logo .mark {
-      width: 46px; height: 46px; border-radius: 12px; background: #fff;
-      display: flex; align-items: center; justify-content: center;
+    .consumer-entry:hover { text-decoration: underline; }
+    .consumer-entry .ui-icon { width: 18px; height: 18px; }
+    .login-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
       overflow: hidden;
-      box-shadow: 0 4px 12px rgba(0,0,0,.18);
+      border: 1px solid #d6ded7;
+      border-radius: 20px;
+      background: #fff;
+      box-shadow: 0 18px 48px rgba(23, 37, 28, .08);
     }
-    .brand-logo .mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .brand-logo .name { font-size: 21px; font-weight: 600; letter-spacing: .5px; }
-    .brand-logo .sub { font-size: 12px; opacity: .7; letter-spacing: 2px; }
-    .brand-mid { position: relative; margin: 32px 0; }
-    .brand-mid .slogan { font-size: 15px; opacity: .85; margin-bottom: 22px; letter-spacing: .3px; }
-    .brand-mid h2 { font-size: 34px; line-height: 1.45; font-weight: 700; letter-spacing: .5px; }
-    .brand-foot { position: relative; font-size: 13px; opacity: .78; line-height: 1.9; }
-    .brand-foot .dots { display: flex; gap: 18px; margin-top: 6px; }
-    .brand-foot .dots span { display: inline-flex; align-items: center; gap: 6px; }
-    .brand-foot .dots i {
-      width: 6px; height: 6px; border-radius: 50%; background: #7be0b6; display: inline-block;
+    .brand-panel {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 48px;
+      padding: 48px;
+      background: #e9f0e9;
     }
-    /* 右侧登录区 */
-    .form-panel { padding: 56px 52px; display: flex; flex-direction: column; justify-content: center; }
-    .form-panel h1 { font-size: 27px; font-weight: 700; margin-bottom: 6px; }
-    .form-panel .hint { font-size: 13px; color: var(--muted); margin-bottom: 30px; line-height: 1.6; }
-    .form-group { margin-bottom: 18px; }
-    .form-group label { display: block; font-size: 13px; font-weight: 600; color: #33423a; margin-bottom: 8px; }
+    .brand-lockup { display: flex; align-items: center; gap: 14px; }
+    .brand-mark {
+      display: grid;
+      width: 48px;
+      height: 48px;
+      flex: 0 0 48px;
+      place-items: center;
+      border: 1px solid #c8d5ca;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .58);
+    }
+    .brand-mark img { display: block; width: 36px; height: 36px; }
+    .brand-copy { display: grid; gap: 1px; }
+    .brand-name { font-size: 20px; font-weight: 600; line-height: 28px; }
+    .brand-english { color: #33483b; font-size: 14px; font-weight: 500; line-height: 20px; }
+    .brand-type { color: #53645a; font-size: 13px; line-height: 20px; }
+    .brand-message h1 {
+      margin: 0;
+      font-size: 36px;
+      font-weight: 600;
+      letter-spacing: -.02em;
+      line-height: 44px;
+    }
+    .brand-message h1 em { color: #205b42; font-style: normal; }
+    .brand-message p {
+      max-width: 360px;
+      margin: 16px 0 0;
+      color: #53645a;
+      font-size: 16px;
+      line-height: 26px;
+    }
+    .trace-flow { margin: 0; }
+    .trace-flow-track {
+      display: grid;
+      grid-template-columns: 1fr 38px 1fr 38px 1fr;
+      align-items: center;
+    }
+    .trace-stage { display: grid; justify-items: center; gap: 8px; color: #2a4434; }
+    .trace-stage-icon {
+      display: grid;
+      width: 48px;
+      height: 48px;
+      place-items: center;
+      border: 1px solid #c7d5c9;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .64);
+    }
+    .trace-stage-icon .ui-icon { width: 22px; height: 22px; }
+    .trace-stage span:last-child { font-size: 14px; font-weight: 600; }
+    .trace-line { height: 1px; background: #8eaa97; }
+    .trace-flow figcaption { margin-top: 12px; color: #53645a; font-size: 12px; text-align: center; }
+    .form-panel {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 48px 56px;
+      background: #fff;
+    }
+    .form-content { width: min(100%, 400px); }
+    .form-content h2 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.015em; line-height: 38px; }
+    .form-intro { margin: 8px 0 0; color: #53645a; font-size: 15px; line-height: 24px; }
+    .login-status { min-height: 22px; margin: 12px 0 4px; color: #a52a20; font-size: 14px; font-weight: 500; line-height: 22px; }
+    .login-status:empty::before { content: "\00a0"; }
+    .field-group { margin-top: 16px; }
+    .field-label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; line-height: 22px; }
     .input-wrap { position: relative; }
-    .form-group input {
-      width: 100%; padding: 13px 14px; border: 1.5px solid var(--line); border-radius: 12px;
-      font-size: 15px; outline: none; transition: border .2s, box-shadow .2s; background: #fbfcfb; color: var(--ink);
+    .text-input {
+      display: block;
+      width: 100%;
+      height: 48px;
+      padding: 10px 14px;
+      border: 1px solid #7f8f84;
+      border-radius: 10px;
+      outline: none;
+      background: #fff;
+      color: #17251c;
+      font-size: 16px;
+      line-height: 24px;
+      transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
     }
-    .form-group input:focus { border-color: var(--brand-2); background: #fff;
-      box-shadow: 0 0 0 4px rgba(18, 135, 106, .10); }
-    .form-group input::placeholder { color: #b6c0ba; }
-    .remember-row { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 22px; font-size: 13px; color: var(--muted); }
-    .remember-row label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--muted); }
-    .remember-row input { width: 17px; height: 17px; accent-color: var(--brand); }
-    .btn-login {
-      width: 100%; padding: 14px; background: linear-gradient(135deg, #0b6e4f, #12876a);
-      color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 700;
-      cursor: pointer; letter-spacing: 1px; transition: opacity .2s, transform .1s; box-shadow: 0 10px 24px rgba(11,110,79,.28);
+    .text-input::placeholder { color: #637469; opacity: 1; }
+    .text-input:hover { border-color: #53645a; }
+    .text-input:focus { border-color: #205b42; box-shadow: 0 0 0 3px rgba(32, 91, 66, .18); }
+    .text-input[aria-invalid="true"] { border-color: #a52a20; }
+    .text-input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgba(165, 42, 32, .16); }
+    .password-input { padding-right: 84px; }
+    .password-toggle {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      display: inline-flex;
+      min-width: 72px;
+      height: 44px;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: #205b42;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
     }
-    .btn-login:hover { opacity: .93; }
-    .btn-login:active { transform: translateY(1px); }
-    .error {
-      background: #fff4f3; color: #b42318; border: 1px solid #ffd0cc; border-radius: 10px;
-      padding: 11px 14px; font-size: 13px; margin-bottom: 18px; line-height: 1.5;
+    .password-toggle:hover { background: #edf3ee; }
+    .password-toggle svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+    .field-note { min-height: 22px; margin: 4px 0 0; color: #53645a; font-size: 13px; line-height: 22px; }
+    .field-note.is-error { color: #a52a20; font-weight: 500; }
+    .remember-block { margin: 14px 0 20px; }
+    .remember-label { display: inline-flex; min-height: 44px; align-items: center; gap: 10px; color: #33483b; cursor: pointer; font-size: 14px; }
+    .remember-label input { width: 20px; height: 20px; margin: 0; accent-color: #205b42; }
+    .session-note { margin: -4px 0 0 30px; color: #53645a; font-size: 12px; line-height: 20px; }
+    .login-button {
+      display: inline-flex;
+      width: 100%;
+      height: 48px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 18px;
+      border: 1px solid #205b42;
+      border-radius: 10px;
+      background: #205b42;
+      color: #fff;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 24px;
+      transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease;
     }
-    .links { margin-top: 24px; display: flex; flex-direction: column; gap: 10px; }
-    .links a { color: var(--brand); text-decoration: none; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
-    .links a:hover { text-decoration: underline; }
-    .links .consumer-entry { color: var(--muted); }
-    .tip { margin-top: 20px; font-size: 12px; color: #9aa79f; line-height: 1.7; }
-    .is-hidden { display: none !important; }
-    .ui-icon { width: 1.1em; height: 1.1em; display: inline-block; flex: 0 0 auto; vertical-align: -0.16em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-    .ui-icon-lg { width: 2.25rem; height: 2.25rem; }
-    svg:not(.qr-code):not(.label-qr) { fill: none; stroke: currentColor; }
-    /* 移动端：上下布局 */
-    @media (max-width: 760px) {
-      .shell { grid-template-columns: 1fr; min-height: auto; margin: 12px; }
-      .brand-panel { padding: 40px 28px; }
-      .brand-mid h2 { font-size: 26px; }
-      .brand-mid { margin: 24px 0; }
-      .form-panel { padding: 36px 28px; }
+    .login-button:hover { border-color: #174832; background: #174832; }
+    .login-button:active { background: #123a29; }
+    .login-button:disabled { border-color: #6d8b79; background: #6d8b79; cursor: wait; }
+    .button-spinner { display: none; width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, .48); border-top-color: #fff; border-radius: 50%; animation: spin .75s linear infinite; }
+    .login-button.is-loading .button-spinner { display: inline-block; }
+    .form-actions { display: grid; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #d6ded7; }
+    .secondary-link { display: inline-flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; color: #205b42; font-size: 14px; font-weight: 600; text-decoration: none; text-underline-offset: 4px; }
+    .secondary-link:hover { text-decoration: underline; }
+    .secondary-link .ui-icon { width: 17px; height: 17px; }
+    .help-copy { margin: 0; color: #53645a; font-size: 13px; line-height: 22px; }
+    .help-copy a { color: #205b42; font-weight: 600; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    .ui-icon { display: inline-block; width: 1.1em; height: 1.1em; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+    :focus-visible { outline: 3px solid rgba(32, 91, 66, .42); outline-offset: 3px; }
+    .text-input:focus-visible { outline: 0; }
+    input:-webkit-autofill,
+    input:-webkit-autofill:hover,
+    input:-webkit-autofill:focus { -webkit-text-fill-color: #17251c; box-shadow: 0 0 0 1000px #fff inset; caret-color: #17251c; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (max-width: 1024px) {
+      .login-page { align-items: flex-start; }
+      .page-frame { width: min(100%, 720px); }
+      .login-shell { order: 1; grid-template-columns: 1fr; }
+      .consumer-entry { order: 2; width: 100%; justify-content: space-between; margin: 12px 0 0; padding: 0 18px; border: 1px solid #d6ded7; border-radius: 12px; background: #fff; }
+      .brand-panel { gap: 32px; padding: 36px 40px; }
+      .brand-message h1 { font-size: 34px; line-height: 42px; }
+      .form-panel { padding: 40px; }
+    }
+    @media (max-width: 600px) {
+      .login-page { padding: 20px; }
+      .login-shell { border-radius: 16px; box-shadow: 0 12px 32px rgba(23, 37, 28, .06); }
+      .brand-panel { gap: 28px; padding: 28px 24px; }
+      .brand-mark { width: 44px; height: 44px; flex-basis: 44px; border-radius: 11px; }
+      .brand-mark img { width: 32px; height: 32px; }
+      .brand-name { font-size: 18px; line-height: 26px; }
+      .brand-message h1 { font-size: 30px; line-height: 38px; }
+      .brand-message p { margin-top: 12px; font-size: 14px; line-height: 24px; }
+      .trace-flow-track { grid-template-columns: 1fr 24px 1fr 24px 1fr; }
+      .trace-stage-icon { width: 42px; height: 42px; }
+      .trace-stage-icon .ui-icon { width: 20px; height: 20px; }
+      .form-panel { padding: 32px 24px; }
+      .form-content h2 { font-size: 26px; line-height: 36px; }
+      .field-group { margin-top: 14px; }
+    }
+    @media (max-width: 360px) {
+      .login-page { padding: 16px; }
+      .brand-panel, .form-panel { padding-right: 20px; padding-left: 20px; }
+      .brand-lockup { gap: 10px; }
+      .brand-name { font-size: 17px; }
+      .brand-message h1 { font-size: 28px; line-height: 36px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
     }
   </style>
-  <link rel="stylesheet" href="/css/clawmaster.css?v=20260903a">
 </head>
 <body>
-  <div class="shell">
-    <!-- 左侧品牌宣传区 -->
-    <div class="brand-panel">
-      <div class="brand-logo">
-        <div class="mark"><img src="/icons/pangolin-photo.png?v=20260905" alt="穿山甲真实动物图标" width="46" height="46"></div>
-        <div>
-          <div class="name">ClawMaster / 穿山甲溯源大师</div>
-          <div class="sub">TRACEABILITY OPERATIONS</div>
-        </div>
-      </div>
-      <div class="brand-mid">
-        <div class="slogan">让每一次扫码，都成为可验证的信任。</div>
-        <h2>一物一码<br>从生产到消费者<br>全程可追溯。</h2>
-      </div>
-      <div class="brand-foot">
-        <div class="dots">
-          <span><i></i>过程可溯源</span>
-          <span><i></i>数据自动化</span>
-          <span><i></i>管理远程化</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 右侧登录区 -->
-    <div class="form-panel">
-      <h1>欢迎回来</h1>
-      <div class="hint">已有账号请直接登录，新用户可免费创建普通用户账号。</div>
-      <% if (error) { %><div class="error"><%= error %></div><% } %>
-      <form method="POST" action="/login">
-        <div class="form-group">
-          <label for="loginUsername">账号</label>
-          <div class="input-wrap">
-            <input id="loginUsername" type="text" name="username" autofocus autocomplete="username" placeholder="请输入账号">
+  <main class="login-page">
+    <div class="page-frame">
+      <a class="consumer-entry" href="/v"><span>商品溯源查询 · 无需登录</span><%- icon('arrow-right') %></a>
+      <section class="login-shell" aria-labelledby="loginTitle">
+        <aside class="brand-panel" aria-label="穿山甲溯源大师品牌介绍">
+          <div class="brand-lockup">
+            <span class="brand-mark"><img src="/icons/pangolin-mark.svg?v=20260915" alt="" width="36" height="36"></span>
+            <span class="brand-copy">
+              <strong class="brand-name">穿山甲溯源大师</strong>
+              <span class="brand-english">ClawMaster</span>
+              <span class="brand-type">企业溯源管理平台</span>
+            </span>
           </div>
-        </div>
-        <div class="form-group">
-          <label for="loginPassword">密码</label>
-          <div class="input-wrap">
-            <input id="loginPassword" type="password" name="password" autocomplete="current-password" placeholder="请输入密码">
+          <div class="brand-message">
+            <h1>一物一码，<br>全程<em>可追溯</em>。</h1>
+            <p>连接生产、流通与消费端的溯源记录。</p>
           </div>
-        </div>
-        <div class="remember-row">
-          <label for="rememberLogin">
-            <input id="rememberLogin" type="checkbox" name="remember" value="1" checked>
-            <span>记住登录状态（30 天）</span>
-          </label>
-        </div>
-        <button type="submit" class="btn-login">登 录</button>
-      </form>
-      <div class="links">
-        <a href="/register">新用户注册 <%- icon('arrow-right') %></a>
-        <a href="/register?mode=partner">合作方邀请码注册 <%- icon('arrow-right') %></a>
-        <a href="/v" class="consumer-entry">消费者溯源查询入口 <%- icon('arrow-right') %></a>
-      </div>
-      <div class="tip">普通用户无需邀请码即可注册<br>合作工厂 / 品牌方 / 代理商请使用总部邀请码</div>
+          <figure class="trace-flow">
+            <div class="trace-flow-track" aria-hidden="true">
+              <span class="trace-stage"><span class="trace-stage-icon"><%- icon('box') %></span><span>生产</span></span>
+              <span class="trace-line"></span>
+              <span class="trace-stage"><span class="trace-stage-icon"><%- icon('truck') %></span><span>流通</span></span>
+              <span class="trace-line"></span>
+              <span class="trace-stage"><span class="trace-stage-icon"><%- icon('user') %></span><span>消费</span></span>
+            </div>
+            <figcaption>溯源流程示意</figcaption>
+          </figure>
+        </aside>
+        <section class="form-panel">
+          <div class="form-content">
+            <h2 id="loginTitle">登录企业工作台</h2>
+            <p class="form-intro">使用企业账号登录，管理产品溯源信息。</p>
+            <div id="loginStatus" class="login-status" role="alert" aria-live="assertive"><%= error || '' %></div>
+            <form id="loginForm" method="POST" action="/login" autocomplete="on" novalidate>
+              <div class="field-group">
+                <label class="field-label" for="loginUsername">账号</label>
+                <div class="input-wrap"><input class="text-input" id="loginUsername" type="text" name="username" value="<%= username || '' %>" autocomplete="username" autocapitalize="none" spellcheck="false" aria-describedby="usernameNote" required></div>
+                <p class="field-note" id="usernameNote">仅支持系统分配的用户名</p>
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="loginPassword">密码</label>
+                <div class="input-wrap">
+                  <input class="text-input password-input" id="loginPassword" type="password" name="password" autocomplete="current-password" aria-describedby="passwordNote" required>
+                  <button class="password-toggle" id="passwordToggle" type="button" aria-controls="loginPassword" aria-pressed="false" aria-label="显示密码">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.7"></circle></svg><span>显示</span>
+                  </button>
+                </div>
+                <p class="field-note" id="passwordNote"></p>
+              </div>
+              <div class="remember-block">
+                <label class="remember-label" for="rememberLogin"><input id="rememberLogin" type="checkbox" name="remember" value="1" autocomplete="on"><span>在此设备保持登录</span></label>
+                <p class="session-note">选择后保持 30 天；未选择时最长 12 小时</p>
+              </div>
+              <button class="login-button" id="loginButton" type="submit"><span class="button-spinner" aria-hidden="true"></span><span id="loginButtonText">登录</span></button>
+            </form>
+            <div class="form-actions">
+              <a class="secondary-link" href="/register?mode=partner"><span>收到合作邀请？使用邀请码注册</span><%- icon('arrow-right') %></a>
+              <% if (supportPhone && supportPhoneHref) { %>
+                <p class="help-copy">登录遇到问题？请联系平台管理员：<a href="tel:<%= supportPhoneHref %>"><%= supportPhone %></a></p>
+              <% } else { %>
+                <p class="help-copy">登录遇到问题？请联系为你分配账号的平台管理员重置密码。</p>
+              <% } %>
+            </div>
+          </div>
+        </section>
+      </section>
     </div>
-  </div>
+  </main>
+  <script nonce="<%= cspNonce %>">
+    (() => {
+      const form = document.getElementById('loginForm');
+      const username = document.getElementById('loginUsername');
+      const password = document.getElementById('loginPassword');
+      const usernameNote = document.getElementById('usernameNote');
+      const passwordNote = document.getElementById('passwordNote');
+      const status = document.getElementById('loginStatus');
+      const submitButton = document.getElementById('loginButton');
+      const submitText = document.getElementById('loginButtonText');
+      const passwordToggle = document.getElementById('passwordToggle');
+      const passwordToggleText = passwordToggle.querySelector('span');
+      let navigating = false;
+      function setFieldError(input, note, message, defaultMessage) {
+        const hasError = Boolean(message);
+        input.setAttribute('aria-invalid', String(hasError));
+        note.textContent = message || defaultMessage || '';
+        note.classList.toggle('is-error', hasError);
+      }
+      function setLoading(loading) {
+        submitButton.disabled = loading;
+        submitButton.classList.toggle('is-loading', loading);
+        submitButton.setAttribute('aria-busy', String(loading));
+        submitText.textContent = loading ? '正在登录…' : '登录';
+      }
+      function clearStatus() {
+        status.textContent = '';
+        setFieldError(username, usernameNote, '', '仅支持系统分配的用户名');
+        setFieldError(password, passwordNote, '', '');
+      }
+      passwordToggle.addEventListener('pointerdown', event => {
+        if (document.activeElement === password) event.preventDefault();
+      });
+      passwordToggle.addEventListener('click', () => {
+        const wasFocused = document.activeElement === password;
+        const start = password.selectionStart;
+        const end = password.selectionEnd;
+        const showing = password.type === 'text';
+        password.type = showing ? 'password' : 'text';
+        passwordToggle.setAttribute('aria-pressed', String(!showing));
+        passwordToggle.setAttribute('aria-label', showing ? '显示密码' : '隐藏密码');
+        passwordToggleText.textContent = showing ? '显示' : '隐藏';
+        if (wasFocused) {
+          password.focus({ preventScroll: true });
+          if (start !== null && end !== null) password.setSelectionRange(start, end);
+        }
+      });
+      username.addEventListener('input', () => setFieldError(username, usernameNote, '', '仅支持系统分配的用户名'));
+      password.addEventListener('input', () => setFieldError(password, passwordNote, '', ''));
+      form.addEventListener('submit', async event => {
+        if (!window.fetch) return;
+        event.preventDefault();
+        if (submitButton.disabled) return;
+        clearStatus();
+        const trimmedUsername = username.value.trim();
+        let firstInvalid = null;
+        if (!trimmedUsername) { setFieldError(username, usernameNote, '请输入账号', ''); firstInvalid = username; }
+        if (!password.value) { setFieldError(password, passwordNote, '请输入密码', ''); firstInvalid = firstInvalid || password; }
+        if (firstInvalid) { firstInvalid.focus(); return; }
+        username.value = trimmedUsername;
+        setLoading(true);
+        try {
+          const response = await fetch('/login', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+            credentials: 'same-origin',
+            body: new URLSearchParams(new FormData(form))
+          });
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            status.textContent = data.msg || '登录失败，请重试';
+            if (data.code === 'INVALID_CREDENTIALS') { password.value = ''; password.focus(); }
+            return;
+          }
+          navigating = true;
+          window.location.assign(data.redirect || '/');
+        } catch (error) {
+          status.textContent = '网络连接失败，请检查网络后重试。';
+        } finally {
+          if (!navigating) setLoading(false);
+        }
+      });
+    })();
+  </script>
 </body>
 </html>

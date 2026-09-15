@@ -165,13 +165,29 @@ const recordLoginAttempt = db.transaction((sourceHash, now) => {
   writeLoginLimit.run(sourceHash, attemptCount, resetAt, now);
   return { attemptCount, resetAt };
 });
+const loginWantsJson = req => String(req.get('accept') || '').includes('application/json');
+function loginPageData(error = '', username = '') {
+  const setting = key => db.prepare('SELECT value FROM settings WHERE key=?').get(key)?.value || '';
+  const supportPhone = String(setting('contact_phone')).trim();
+  return {
+    brand: setting('brand_name') || '穿山甲溯源大师',
+    error,
+    username,
+    supportPhone,
+    supportPhoneHref: supportPhone.replace(/[^\d+]/g, '')
+  };
+}
+function sendLoginFailure(req, res, status, code, message) {
+  if (loginWantsJson(req)) return res.status(status).json({ success: false, code, msg: message });
+  return res.status(status).render('login', loginPageData(message, String(req.body?.username || '').trim()));
+}
 function loginRateLimit(req, res, next) {
   const now = Date.now();
   const entries = [loginSourceHash(req), loginAccountHash(req)].map(key => recordLoginAttempt(key, now));
   const limited = entries.find(entry => entry.attemptCount > LOGIN_MAX_ATTEMPTS);
   if (limited) {
     res.setHeader('Retry-After', String(Math.max(1, Math.ceil((limited.resetAt - now) / 1000))));
-    return res.status(429).render('login', { brand: '穿山甲溯源大师', error: '登录尝试过多，请稍后再试' });
+    return sendLoginFailure(req, res, 429, 'LOGIN_RATE_LIMITED', '登录尝试过多，请稍后再试');
   }
   next();
 }
@@ -567,8 +583,7 @@ app.post('/api/agent/logout', requireAgentToken, (req, res) => {
 
 app.get('/login', (req, res) => {
   if (req.session.user) return res.redirect('/');
-  const brand = db.prepare("SELECT value FROM settings WHERE key='brand_name'").get()?.value || '穿山甲溯源大师';
-  res.render('login', { brand, error: '' });
+  res.render('login', loginPageData());
 });
 
 app.post('/login', loginRateLimit, (req, res, next) => {
@@ -576,34 +591,34 @@ app.post('/login', loginRateLimit, (req, res, next) => {
   const password = String(req.body.password || '');
   const rememberLogin = req.body.remember === '1';
   if (!username || !password) {
-    return res.status(401).render('login', { brand: '穿山甲溯源大师', error: '请输入账号和密码' });
+    return sendLoginFailure(req, res, 400, 'MISSING_CREDENTIALS', '请输入账号和密码');
   }
   const user = db.prepare('SELECT * FROM users WHERE username=?').get(username);
   if (!user || !user.enabled || !verifyPassword(password, user.password_hash)) {
-    return res.status(401).render('login', { brand: '穿山甲溯源大师', error: '账号或密码错误' });
+    return sendLoginFailure(req, res, 401, 'INVALID_CREDENTIALS', '账号或密码有误');
   }
   // 代理商账号：绑定代理商信息快照
   let distributor = null;
   if (user.role === 'distributor') {
     distributor = db.prepare('SELECT * FROM distributors WHERE id=?').get(user.distributor_id);
-    if (!distributor) return res.status(403).render('login', { brand: '穿山甲溯源大师', error: '该账号未绑定代理商，请联系管理员' });
+    if (!distributor) return sendLoginFailure(req, res, 403, 'ACCOUNT_CONFIGURATION_ERROR', '该账号未绑定代理商，请联系管理员');
   }
   // 工厂账号：绑定工厂信息快照
   let factory = null;
   if (user.role === 'factory') {
     factory = db.prepare('SELECT * FROM factories WHERE id=?').get(user.factory_id);
-    if (!factory) return res.status(403).render('login', { brand: '穿山甲溯源大师', error: '该账号未绑定工厂，请联系管理员' });
+    if (!factory) return sendLoginFailure(req, res, 403, 'ACCOUNT_CONFIGURATION_ERROR', '该账号未绑定工厂，请联系管理员');
   }
   // 品牌信息快照（brand/warehouse/factory/distributor 均按品牌隔离）
   let brandInfo = null;
   if (user.brand_id) {
     brandInfo = db.prepare('SELECT * FROM brands WHERE id=?').get(user.brand_id);
     if (brandInfo && !brandInfo.enabled) {
-      return res.status(403).render('login', { brand: '穿山甲溯源大师', error: '该品牌已被停用，请联系平台管理员' });
+      return sendLoginFailure(req, res, 403, 'ACCOUNT_CONFIGURATION_ERROR', '该品牌已被停用，请联系平台管理员');
     }
   }
   if (['brand', 'brand_staff'].includes(user.role) && !brandInfo) {
-    return res.status(403).render('login', { brand: '穿山甲溯源大师', error: '该账号未绑定品牌，请联系平台管理员' });
+    return sendLoginFailure(req, res, 403, 'ACCOUNT_CONFIGURATION_ERROR', '该账号未绑定品牌，请联系平台管理员');
   }
   db.prepare(`UPDATE users SET last_login_at=datetime('now','localtime') WHERE id=?`).run(user.id);
   const sessionUser = {
@@ -625,6 +640,7 @@ app.post('/login', loginRateLimit, (req, res, next) => {
     deleteLoginLimit.run(loginSourceHash(req));
     deleteLoginLimit.run(loginAccountHash(req));
     const home = user.role === 'member' ? '/member' : (user.role === 'distributor' ? '/portal' : '/');
+    if (loginWantsJson(req)) return res.json({ success: true, redirect: home });
     res.redirect(home);
   });
 });
