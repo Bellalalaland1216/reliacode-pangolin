@@ -143,7 +143,7 @@
       filter: blur(5px);
       pointer-events: none;
     }
-    .brand-mark img { position: relative; z-index: 1; display: block; width: 48px; height: 48px; }
+    .brand-mark img { position: relative; z-index: 1; display: block; width: 54px; height: 54px; border-radius: 16px; object-fit: cover; box-shadow: 0 2px 8px rgba(23, 37, 28, .12); }
     .form-panel {
       position: relative;
       z-index: 1;
@@ -248,7 +248,7 @@
       .login-shell { border-radius: 24px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 20px 48px rgba(23, 37, 28, .09); }
       .form-panel { padding: 32px 24px 28px; }
       .brand-mark { width: 70px; height: 70px; margin-bottom: 16px; border-radius: 22px; }
-      .brand-mark img { width: 44px; height: 44px; }
+      .brand-mark img { width: 50px; height: 50px; border-radius: 15px; }
       .form-content h1 { font-size: 26px; line-height: 36px; }
       .field-group { margin-top: 14px; }
       .form-actions { align-items: flex-start; flex-direction: column; gap: 0; }
@@ -268,7 +268,7 @@
       <section class="login-shell" aria-labelledby="loginTitle">
         <section class="form-panel">
           <div class="form-content">
-            <div class="brand-mark"><img src="/icons/pangolin-mark.svg?v=20260915" alt="穿山甲溯源大师" width="48" height="48"></div>
+            <div class="brand-mark"><img src="/icons/pangolin-photo.png?v=20260915" alt="穿山甲溯源大师" width="48" height="48"></div>
             <h1 id="loginTitle">登录企业工作台</h1>
             <div id="loginStatus" class="login-status" role="alert" aria-live="assertive"><%= error || '' %></div>
             <form id="loginForm" method="POST" action="/login" autocomplete="on" novalidate>
