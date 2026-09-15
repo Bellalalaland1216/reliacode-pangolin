@@ -67,7 +67,9 @@ test('any visitor can create a role-locked member account and use the member wor
     const loginHtml = await loginPage.text();
     assert.match(loginHtml, /登录企业工作台/);
     assert.match(loginHtml, /商品溯源查询 · 无需登录/);
-    assert.match(loginHtml, /收到合作邀请？使用邀请码注册/);
+    assert.match(loginHtml, /邀请码注册/);
+    assert.doesNotMatch(loginHtml, /使用企业账号登录，管理产品溯源信息。/);
+    assert.doesNotMatch(loginHtml, /一物一码|溯源流程示意|class="brand-panel"/);
     assert.match(loginHtml, /href="tel:01012345678"/);
     assert.doesNotMatch(loginHtml, /id="rememberLogin"[^>]*checked/);
 

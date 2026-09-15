@@ -8,14 +8,24 @@
   <title>穿山甲溯源大师 · 企业登录</title>
   <link rel="icon" href="/icons/pangolin-photo.png?v=20260905">
   <style nonce="<%= cspNonce %>">
+    :root {
+      --page: #f3f5f1;
+      --sage: #e9f0e9;
+      --ink: #17251c;
+      --muted: #53645a;
+      --brand: #205b42;
+      --brand-strong: #174832;
+      --line: #7f8f84;
+      --danger: #a52a20;
+    }
     * { box-sizing: border-box; }
-    html { background: #f3f5f1; }
+    html { background: var(--page); }
     body {
       margin: 0;
       min-width: 320px;
       min-height: 100vh;
-      background: #f3f5f1;
-      color: #17251c;
+      background: var(--page);
+      color: var(--ink);
       font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 16px;
       line-height: 1.5;
@@ -24,109 +34,126 @@
     button, a, input, label { -webkit-tap-highlight-color: transparent; }
     a { color: inherit; }
     .login-page {
+      position: relative;
+      isolation: isolate;
       display: flex;
       min-height: 100vh;
       align-items: center;
       justify-content: center;
-      padding: 32px 20px;
+      overflow: hidden;
+      padding: 48px 20px;
     }
-    .page-frame { display: flex; width: min(100%, 1120px); flex-direction: column; }
+    .login-page::before,
+    .login-page::after {
+      position: fixed;
+      z-index: -1;
+      border-radius: 50%;
+      content: "";
+      filter: blur(2px);
+      pointer-events: none;
+    }
+    .login-page::before {
+      top: -18vw;
+      left: -10vw;
+      width: min(48vw, 680px);
+      aspect-ratio: 1;
+      background: rgba(213, 226, 215, .74);
+      box-shadow: 22vw 16vw 0 rgba(233, 240, 233, .72);
+    }
+    .login-page::after {
+      right: -13vw;
+      bottom: -24vw;
+      width: min(52vw, 760px);
+      aspect-ratio: 1;
+      background: rgba(225, 235, 226, .84);
+      box-shadow: -24vw -7vw 0 rgba(245, 248, 244, .9);
+    }
+    .page-frame {
+      display: grid;
+      width: min(100%, 480px);
+      gap: 14px;
+    }
     .consumer-entry {
-      align-self: flex-end;
+      position: relative;
       display: inline-flex;
+      width: 100%;
       min-height: 44px;
       align-items: center;
+      justify-content: center;
       gap: 8px;
-      margin: 0 4px 12px;
-      color: #205b42;
+      padding: 10px 16px;
+      border: 1px solid rgba(255, 255, 255, .78);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .48);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 8px 24px rgba(23, 37, 28, .04);
+      color: var(--brand);
       font-size: 14px;
       font-weight: 600;
       text-decoration: none;
       text-underline-offset: 4px;
+      backdrop-filter: blur(18px) saturate(132%);
+      -webkit-backdrop-filter: blur(18px) saturate(132%);
+      transition: background-color .16s ease, border-color .16s ease, transform .16s ease;
     }
-    .consumer-entry:hover { text-decoration: underline; }
+    .consumer-entry:hover { border-color: rgba(255, 255, 255, .96); background: rgba(255, 255, 255, .7); }
+    .consumer-entry:active { transform: translateY(1px); }
     .consumer-entry .ui-icon { width: 18px; height: 18px; }
     .login-shell {
-      display: grid;
-      grid-template-columns: minmax(0, 46fr) minmax(0, 54fr);
+      position: relative;
       overflow: hidden;
-      border: 1px solid #d6ded7;
-      border-radius: 20px;
-      background: #fff;
-      box-shadow: 0 18px 48px rgba(23, 37, 28, .08);
-    }
-    .brand-panel {
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 48px;
-      padding: 48px;
-      background: #e9f0e9;
-    }
-    .brand-lockup { display: flex; align-items: center; gap: 14px; }
-    .brand-mark {
-      display: grid;
-      width: 48px;
-      height: 48px;
-      flex: 0 0 48px;
-      place-items: center;
-      border: 1px solid #c8d5ca;
-      border-radius: 12px;
-      background: rgba(255, 255, 255, .58);
-    }
-    .brand-mark img { display: block; width: 36px; height: 36px; }
-    .brand-copy { display: grid; gap: 1px; }
-    .brand-name { font-size: 20px; font-weight: 600; line-height: 28px; }
-    .brand-english { color: #33483b; font-size: 14px; font-weight: 500; line-height: 20px; }
-    .brand-type { color: #53645a; font-size: 13px; line-height: 20px; }
-    .brand-message h1 {
-      margin: 0;
-      font-size: 36px;
-      font-weight: 600;
-      letter-spacing: -.02em;
-      line-height: 44px;
-    }
-    .brand-message h1 em { color: #205b42; font-style: normal; }
-    .brand-message p {
-      max-width: 360px;
-      margin: 16px 0 0;
-      color: #53645a;
-      font-size: 16px;
-      line-height: 26px;
-    }
-    .trace-flow { margin: 0; }
-    .trace-flow-track {
-      display: grid;
-      grid-template-columns: 1fr 38px 1fr 38px 1fr;
-      align-items: center;
-    }
-    .trace-stage { display: grid; justify-items: center; gap: 8px; color: #2a4434; }
-    .trace-stage-icon {
-      display: grid;
-      width: 48px;
-      height: 48px;
-      place-items: center;
-      border: 1px solid #c7d5c9;
-      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, .82);
+      border-radius: 28px;
       background: rgba(255, 255, 255, .64);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .92), inset 0 -1px 0 rgba(127, 143, 132, .08), 0 30px 72px rgba(23, 37, 28, .11);
+      backdrop-filter: blur(30px) saturate(138%);
+      -webkit-backdrop-filter: blur(30px) saturate(138%);
     }
-    .trace-stage-icon .ui-icon { width: 22px; height: 22px; }
-    .trace-stage span:last-child { font-size: 14px; font-weight: 600; }
-    .trace-line { height: 1px; background: #8eaa97; }
-    .trace-flow figcaption { margin-top: 12px; color: #53645a; font-size: 12px; text-align: center; }
+    .login-shell::before {
+      position: absolute;
+      top: -120px;
+      left: 50%;
+      width: 360px;
+      height: 200px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .58);
+      content: "";
+      filter: blur(34px);
+      pointer-events: none;
+      transform: translateX(-50%);
+    }
+    .brand-mark {
+      position: relative;
+      display: grid;
+      width: 78px;
+      height: 78px;
+      place-items: center;
+      margin: 0 auto 20px;
+      border: 1px solid rgba(255, 255, 255, .9);
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgba(255, 255, 255, .82), rgba(233, 240, 233, .56));
+      box-shadow: inset 2px 2px 2px rgba(255, 255, 255, .9), inset -2px -3px 8px rgba(32, 91, 66, .08), 0 14px 30px rgba(32, 91, 66, .12);
+    }
+    .brand-mark::after {
+      position: absolute;
+      inset: 6px 10px auto;
+      height: 16px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, .62);
+      content: "";
+      filter: blur(5px);
+      pointer-events: none;
+    }
+    .brand-mark img { position: relative; z-index: 1; display: block; width: 48px; height: 48px; }
     .form-panel {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 48px 56px;
-      background: #fff;
+      position: relative;
+      z-index: 1;
+      padding: 42px 40px 40px;
     }
-    .form-content { width: min(100%, 400px); }
-    .form-content h2 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.015em; line-height: 38px; }
-    .form-intro { margin: 8px 0 0; color: #53645a; font-size: 15px; line-height: 24px; }
-    .login-status { min-height: 22px; margin: 12px 0 4px; color: #a52a20; font-size: 14px; font-weight: 500; line-height: 22px; }
+    .form-content { width: 100%; }
+    .form-content h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.015em; line-height: 38px; text-align: center; }
+    .login-status { min-height: 22px; margin: 16px 0 0; color: var(--danger); font-size: 14px; font-weight: 500; line-height: 22px; text-align: center; }
     .login-status:empty::before { content: "\00a0"; }
-    .field-group { margin-top: 16px; }
+    .field-group { margin-top: 14px; }
     .field-label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; line-height: 22px; }
     .input-wrap { position: relative; }
     .text-input {
@@ -134,19 +161,19 @@
       width: 100%;
       height: 48px;
       padding: 10px 14px;
-      border: 1px solid #7f8f84;
-      border-radius: 10px;
+      border: 1px solid rgba(127, 143, 132, .88);
+      border-radius: 12px;
       outline: none;
-      background: #fff;
-      color: #17251c;
+      background: rgba(255, 255, 255, .74);
+      color: var(--ink);
       font-size: 16px;
       line-height: 24px;
       transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
     }
     .text-input::placeholder { color: #637469; opacity: 1; }
-    .text-input:hover { border-color: #53645a; }
-    .text-input:focus { border-color: #205b42; box-shadow: 0 0 0 3px rgba(32, 91, 66, .18); }
-    .text-input[aria-invalid="true"] { border-color: #a52a20; }
+    .text-input:hover { border-color: var(--muted); background: rgba(255, 255, 255, .88); }
+    .text-input:focus { border-color: var(--brand); background: rgba(255, 255, 255, .94); box-shadow: 0 0 0 3px rgba(32, 91, 66, .18); }
+    .text-input[aria-invalid="true"] { border-color: var(--danger); }
     .text-input[aria-invalid="true"]:focus { box-shadow: 0 0 0 3px rgba(165, 42, 32, .16); }
     .password-input { padding-right: 84px; }
     .password-toggle {
@@ -161,21 +188,22 @@
       gap: 6px;
       padding: 0 10px;
       border: 0;
-      border-radius: 8px;
+      border-radius: 10px;
       background: transparent;
-      color: #205b42;
+      color: var(--brand);
       cursor: pointer;
       font-size: 13px;
       font-weight: 600;
     }
-    .password-toggle:hover { background: #edf3ee; }
+    .password-toggle:hover { background: rgba(233, 240, 233, .82); }
     .password-toggle svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
-    .field-note { min-height: 22px; margin: 4px 0 0; color: #53645a; font-size: 13px; line-height: 22px; }
-    .field-note.is-error { color: #a52a20; font-weight: 500; }
-    .remember-block { margin: 14px 0 20px; }
+    .field-note { min-height: 0; margin: 0; color: var(--muted); font-size: 13px; line-height: 22px; }
+    .field-note:empty { display: none; }
+    .field-note.is-error { display: block; margin-top: 4px; color: var(--danger); font-weight: 500; }
+    .remember-block { margin: 14px 0 18px; }
     .remember-label { display: inline-flex; min-height: 44px; align-items: center; gap: 10px; color: #33483b; cursor: pointer; font-size: 14px; }
-    .remember-label input { width: 20px; height: 20px; margin: 0; accent-color: #205b42; }
-    .session-note { margin: -4px 0 0 30px; color: #53645a; font-size: 12px; line-height: 20px; }
+    .remember-label input { width: 20px; height: 20px; margin: 0; accent-color: var(--brand); }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     .login-button {
       display: inline-flex;
       width: 100%;
@@ -184,65 +212,50 @@
       justify-content: center;
       gap: 8px;
       padding: 0 18px;
-      border: 1px solid #205b42;
-      border-radius: 10px;
-      background: #205b42;
+      border: 1px solid var(--brand);
+      border-radius: 12px;
+      background: var(--brand);
       color: #fff;
       cursor: pointer;
       font-size: 16px;
       font-weight: 600;
       line-height: 24px;
-      transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease;
+      box-shadow: 0 10px 22px rgba(32, 91, 66, .18);
+      transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .16s ease;
     }
-    .login-button:hover { border-color: #174832; background: #174832; }
-    .login-button:active { background: #123a29; }
+    .login-button:hover { border-color: var(--brand-strong); background: var(--brand-strong); box-shadow: 0 12px 26px rgba(32, 91, 66, .24); }
+    .login-button:active { background: #123a29; transform: translateY(1px); }
     .login-button:disabled { border-color: #6d8b79; background: #6d8b79; cursor: wait; }
     .button-spinner { display: none; width: 16px; height: 16px; border: 2px solid rgba(255, 255, 255, .48); border-top-color: #fff; border-radius: 50%; animation: spin .75s linear infinite; }
     .login-button.is-loading .button-spinner { display: inline-block; }
-    .form-actions { display: grid; gap: 12px; margin-top: 24px; padding-top: 20px; border-top: 1px solid #d6ded7; }
-    .secondary-link { display: inline-flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 12px; color: #205b42; font-size: 14px; font-weight: 600; text-decoration: none; text-underline-offset: 4px; }
+    .form-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
+    .secondary-link,
+    .help-link { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; color: var(--brand); font-size: 14px; font-weight: 600; text-decoration: none; text-underline-offset: 4px; }
     .secondary-link:hover { text-decoration: underline; }
     .secondary-link .ui-icon { width: 17px; height: 17px; }
-    .help-copy { margin: 0; color: #53645a; font-size: 13px; line-height: 22px; }
-    .help-copy a { color: #205b42; font-weight: 600; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    .help-link:hover { text-decoration: underline; }
+    .help-link.is-static { color: var(--muted); cursor: default; }
+    .help-link.is-static:hover { text-decoration: none; }
     .ui-icon { display: inline-block; width: 1.1em; height: 1.1em; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
     :focus-visible { outline: 3px solid rgba(32, 91, 66, .42); outline-offset: 3px; }
     .text-input:focus-visible { outline: 0; }
     input:-webkit-autofill,
     input:-webkit-autofill:hover,
-    input:-webkit-autofill:focus { -webkit-text-fill-color: #17251c; box-shadow: 0 0 0 1000px #fff inset; caret-color: #17251c; }
+    input:-webkit-autofill:focus { -webkit-text-fill-color: var(--ink); box-shadow: 0 0 0 1000px #fff inset; caret-color: var(--ink); }
     @keyframes spin { to { transform: rotate(360deg); } }
-    @media (max-width: 1024px) {
-      .login-page { align-items: flex-start; }
-      .page-frame { width: min(100%, 720px); }
-      .login-shell { order: 1; grid-template-columns: 1fr; }
-      .consumer-entry { order: 2; width: 100%; justify-content: space-between; margin: 12px 0 0; padding: 0 18px; border: 1px solid #d6ded7; border-radius: 12px; background: #fff; }
-      .brand-panel { gap: 32px; padding: 36px 40px; }
-      .brand-message h1 { font-size: 34px; line-height: 42px; }
-      .form-panel { padding: 40px; }
-    }
     @media (max-width: 600px) {
-      .login-page { padding: 20px; }
-      .login-shell { border-radius: 16px; box-shadow: 0 12px 32px rgba(23, 37, 28, .06); }
-      .brand-panel { gap: 28px; padding: 28px 24px; }
-      .brand-mark { width: 44px; height: 44px; flex-basis: 44px; border-radius: 11px; }
-      .brand-mark img { width: 32px; height: 32px; }
-      .brand-name { font-size: 18px; line-height: 26px; }
-      .brand-message h1 { font-size: 30px; line-height: 38px; }
-      .brand-message p { margin-top: 12px; font-size: 14px; line-height: 24px; }
-      .trace-flow-track { grid-template-columns: 1fr 24px 1fr 24px 1fr; }
-      .trace-stage-icon { width: 42px; height: 42px; }
-      .trace-stage-icon .ui-icon { width: 20px; height: 20px; }
-      .form-panel { padding: 32px 24px; }
-      .form-content h2 { font-size: 26px; line-height: 36px; }
+      .login-page { align-items: flex-start; overflow: visible; padding: 28px 20px; }
+      .login-shell { border-radius: 24px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 20px 48px rgba(23, 37, 28, .09); }
+      .form-panel { padding: 32px 24px 28px; }
+      .brand-mark { width: 70px; height: 70px; margin-bottom: 16px; border-radius: 22px; }
+      .brand-mark img { width: 44px; height: 44px; }
+      .form-content h1 { font-size: 26px; line-height: 36px; }
       .field-group { margin-top: 14px; }
+      .form-actions { align-items: flex-start; flex-direction: column; gap: 0; }
     }
     @media (max-width: 360px) {
       .login-page { padding: 16px; }
-      .brand-panel, .form-panel { padding-right: 20px; padding-left: 20px; }
-      .brand-lockup { gap: 10px; }
-      .brand-name { font-size: 17px; }
-      .brand-message h1 { font-size: 28px; line-height: 36px; }
+      .form-panel { padding-right: 20px; padding-left: 20px; }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
@@ -252,42 +265,17 @@
 <body>
   <main class="login-page">
     <div class="page-frame">
-      <a class="consumer-entry" href="/v"><span>商品溯源查询 · 无需登录</span><%- icon('arrow-right') %></a>
       <section class="login-shell" aria-labelledby="loginTitle">
-        <aside class="brand-panel" aria-label="穿山甲溯源大师品牌介绍">
-          <div class="brand-lockup">
-            <span class="brand-mark"><img src="/icons/pangolin-mark.svg?v=20260915" alt="" width="36" height="36"></span>
-            <span class="brand-copy">
-              <strong class="brand-name">穿山甲溯源大师</strong>
-              <span class="brand-english">ClawMaster</span>
-              <span class="brand-type">企业溯源管理平台</span>
-            </span>
-          </div>
-          <div class="brand-message">
-            <h1>一物一码，<br>全程<em>可追溯</em>。</h1>
-            <p>连接生产、流通与消费端的溯源记录。</p>
-          </div>
-          <figure class="trace-flow">
-            <div class="trace-flow-track" aria-hidden="true">
-              <span class="trace-stage"><span class="trace-stage-icon"><%- icon('box') %></span><span>生产</span></span>
-              <span class="trace-line"></span>
-              <span class="trace-stage"><span class="trace-stage-icon"><%- icon('truck') %></span><span>流通</span></span>
-              <span class="trace-line"></span>
-              <span class="trace-stage"><span class="trace-stage-icon"><%- icon('user') %></span><span>消费</span></span>
-            </div>
-            <figcaption>溯源流程示意</figcaption>
-          </figure>
-        </aside>
         <section class="form-panel">
           <div class="form-content">
-            <h2 id="loginTitle">登录企业工作台</h2>
-            <p class="form-intro">使用企业账号登录，管理产品溯源信息。</p>
+            <div class="brand-mark"><img src="/icons/pangolin-mark.svg?v=20260915" alt="穿山甲溯源大师" width="48" height="48"></div>
+            <h1 id="loginTitle">登录企业工作台</h1>
             <div id="loginStatus" class="login-status" role="alert" aria-live="assertive"><%= error || '' %></div>
             <form id="loginForm" method="POST" action="/login" autocomplete="on" novalidate>
               <div class="field-group">
                 <label class="field-label" for="loginUsername">账号</label>
                 <div class="input-wrap"><input class="text-input" id="loginUsername" type="text" name="username" value="<%= username || '' %>" autocomplete="username" autocapitalize="none" spellcheck="false" aria-describedby="usernameNote" required></div>
-                <p class="field-note" id="usernameNote">仅支持系统分配的用户名</p>
+                <p class="field-note" id="usernameNote"></p>
               </div>
               <div class="field-group">
                 <label class="field-label" for="loginPassword">密码</label>
@@ -300,22 +288,23 @@
                 <p class="field-note" id="passwordNote"></p>
               </div>
               <div class="remember-block">
-                <label class="remember-label" for="rememberLogin"><input id="rememberLogin" type="checkbox" name="remember" value="1" autocomplete="on"><span>在此设备保持登录</span></label>
-                <p class="session-note">选择后保持 30 天；未选择时最长 12 小时</p>
+                <label class="remember-label" for="rememberLogin"><input id="rememberLogin" type="checkbox" name="remember" value="1" autocomplete="on" aria-describedby="sessionNote"><span>在此设备保持登录</span></label>
+                <span class="sr-only" id="sessionNote">选择后保持 30 天；未选择时最长 12 小时</span>
               </div>
               <button class="login-button" id="loginButton" type="submit"><span class="button-spinner" aria-hidden="true"></span><span id="loginButtonText">登录</span></button>
             </form>
             <div class="form-actions">
-              <a class="secondary-link" href="/register?mode=partner"><span>收到合作邀请？使用邀请码注册</span><%- icon('arrow-right') %></a>
+              <a class="secondary-link" href="/register?mode=partner"><span>邀请码注册</span><%- icon('arrow-right') %></a>
               <% if (supportPhone && supportPhoneHref) { %>
-                <p class="help-copy">登录遇到问题？请联系平台管理员：<a href="tel:<%= supportPhoneHref %>"><%= supportPhone %></a></p>
+                <a class="help-link" href="tel:<%= supportPhoneHref %>" aria-label="登录帮助，联系平台管理员 <%= supportPhone %>">登录帮助</a>
               <% } else { %>
-                <p class="help-copy">登录遇到问题？请联系为你分配账号的平台管理员重置密码。</p>
+                <span class="help-link is-static" title="请联系为你分配账号的平台管理员重置密码">登录帮助：联系管理员</span>
               <% } %>
             </div>
           </div>
         </section>
       </section>
+      <a class="consumer-entry" href="/v"><span>商品溯源查询 · 无需登录</span><%- icon('arrow-right') %></a>
     </div>
   </main>
   <script nonce="<%= cspNonce %>">
@@ -345,7 +334,7 @@
       }
       function clearStatus() {
         status.textContent = '';
-        setFieldError(username, usernameNote, '', '仅支持系统分配的用户名');
+        setFieldError(username, usernameNote, '', '');
         setFieldError(password, passwordNote, '', '');
       }
       passwordToggle.addEventListener('pointerdown', event => {
@@ -365,7 +354,7 @@
           if (start !== null && end !== null) password.setSelectionRange(start, end);
         }
       });
-      username.addEventListener('input', () => setFieldError(username, usernameNote, '', '仅支持系统分配的用户名'));
+      username.addEventListener('input', () => setFieldError(username, usernameNote, '', ''));
       password.addEventListener('input', () => setFieldError(password, passwordNote, '', ''));
       form.addEventListener('submit', async event => {
         if (!window.fetch) return;
