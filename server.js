@@ -117,7 +117,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const CSRF_EXEMPT_PATHS = new Set(['/login', '/api/register/check-code', '/api/register', '/api/agent/login']);
+const CSRF_EXEMPT_PATHS = new Set(['/login', '/api/register/public', '/api/register/check-code', '/api/register', '/api/agent/login']);
 app.use((req, res, next) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method) || CSRF_EXEMPT_PATHS.has(req.path)) return next();
   // Bearer credentials are attached explicitly by an Agent and are not sent
@@ -387,7 +387,7 @@ function requireRole(...roles) {
   };
 }
 // 401 时前端跳登录页（供 fetch 全局处理）
-const ROLE_NAMES = { AUDIT_VIEWER: '只读体验账号', admin: '平台管理员', brand: '品牌管理员', brand_staff: '品牌方工作账号', factory: '工厂装箱', warehouse: '品牌方', distributor: '代理商' };
+const ROLE_NAMES = { AUDIT_VIEWER: '只读体验账号', member: '普通用户', admin: '平台管理员', brand: '品牌管理员', brand_staff: '品牌方工作账号', factory: '工厂装箱', warehouse: '品牌方', distributor: '代理商' };
 const PASSWORD_POLICY_MESSAGE = '密码至少12位，包含大小写字母、数字和符号';
 function passwordMeetsPolicy(value) {
   const password = String(value || '');
@@ -624,7 +624,7 @@ app.post('/login', loginRateLimit, (req, res, next) => {
     req.session.cookie.maxAge = rememberLogin ? 30 * 24 * 60 * 60 * 1000 : 12 * 60 * 60 * 1000;
     deleteLoginLimit.run(loginSourceHash(req));
     deleteLoginLimit.run(loginAccountHash(req));
-    const home = user.role === 'distributor' ? '/portal' : '/';
+    const home = user.role === 'member' ? '/member' : (user.role === 'distributor' ? '/portal' : '/');
     res.redirect(home);
   });
 });
@@ -646,7 +646,45 @@ app.get('/logout', (req, res) => {
 app.get('/register', (req, res) => {
   if (req.session.user) return res.redirect('/');
   const brand = db.prepare("SELECT value FROM settings WHERE key='brand_name'").get()?.value || '穿山甲溯源大师';
-  res.render('register', { brand, code: String(req.query.code || ''), error: '' });
+  const code = String(req.query.code || '');
+  const mode = code || req.query.mode === 'partner' ? 'partner' : 'public';
+  res.render('register', { brand, code, mode, error: '' });
+});
+
+// 普通用户开放注册：角色由服务端固定为 member，不接受客户端传入角色或租户归属。
+app.post('/api/register/public', registrationRateLimit, (req, res) => {
+  const username = String(req.body.username || '').trim();
+  const displayName = String(req.body.display_name || '').trim();
+  const password = String(req.body.password || '');
+  const phone = String(req.body.phone || '').trim();
+
+  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+    return res.status(400).json({ success: false, code: 'INVALID_USERNAME', msg: '账号需为3-20位字母、数字或下划线' });
+  }
+  if (!displayName || displayName.length > 40) {
+    return res.status(400).json({ success: false, code: 'INVALID_DISPLAY_NAME', msg: '请填写1-40个字符的姓名或昵称' });
+  }
+  if (!passwordMeetsPolicy(password)) {
+    return res.status(400).json({ success: false, code: 'WEAK_PASSWORD', msg: PASSWORD_POLICY_MESSAGE });
+  }
+  if (phone && !/^1\d{10}$/.test(phone)) {
+    return res.status(400).json({ success: false, code: 'INVALID_PHONE', msg: '请填写正确的11位手机号，或留空' });
+  }
+  if (db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) {
+    return res.status(409).json({ success: false, code: 'USERNAME_TAKEN', msg: '该账号已被使用，请更换一个' });
+  }
+
+  try {
+    db.prepare('INSERT INTO users (username, password_hash, display_name, phone, role, distributor_id, factory_id, brand_id) VALUES (?,?,?,?,?,?,?,?)')
+      .run(username, hashPassword(password), displayName, phone, 'member', null, null, null);
+    return res.status(201).json({ success: true, msg: '注册成功，请使用新账号登录', username });
+  } catch (error) {
+    if (String(error.code || '').startsWith('SQLITE_CONSTRAINT')) {
+      return res.status(409).json({ success: false, code: 'USERNAME_TAKEN', msg: '该账号已被使用，请更换一个' });
+    }
+    console.error(JSON.stringify({ level: 'error', event: 'public_registration_failed', requestId: req.requestId, message: error.message }));
+    return res.status(500).json({ success: false, code: 'REGISTRATION_FAILED', msg: '注册失败，请稍后重试', requestId: req.requestId });
+  }
 });
 
 // 邀请码校验（注册页输入邀请码后回显角色）
@@ -856,6 +894,7 @@ app.delete('/api/brands/:id', requireRole('admin'), (req, res) => {
 // 管理后台首页（按角色分流：工厂→装箱页，仓库→发货页，代理商→自助端；品牌管理员→品牌版首页）
 app.get('/', requireLogin, (req, res) => {
   const role = req.session.user.role;
+  if (role === 'member') return res.redirect('/member');
   if (role === 'factory') return res.redirect('/factory');
   if (role === 'warehouse') return res.redirect('/warehouse');
   if (role === 'distributor') return res.redirect('/portal');
@@ -892,6 +931,11 @@ app.get('/', requireLogin, (req, res) => {
   const entryUrl = `${baseUrl}/warehouse`;
   const factoryUrl = `${baseUrl}/factory`;
   res.render('admin', { stats, recentScans, scanRegions, totalScans, entryUrl, factoryUrl });
+});
+
+// 普通用户工作台：只提供消费者溯源查询与个人账号入口。
+app.get('/member', requireRole('member'), (req, res) => {
+  res.render('member');
 });
 
 // 业务导航页（admin/brand 专用 - 移动端底部「业务」Tab 入口）
@@ -1097,7 +1141,7 @@ app.get(['/v', '/v/:code'], (req, res) => {
 
 // API 全局登录守卫：除消费者验证、动态二维码外，所有 /api 接口均需登录
 app.use('/api', (req, res, next) => {
-  const open = req.path === '/qr' || req.path.startsWith('/verify/') || req.path === '/login' || req.path === '/logout';
+  const open = req.path === '/qr' || req.path === '/regions' || req.path.startsWith('/verify/') || req.path === '/login' || req.path === '/logout';
   const agentApi = req.path.startsWith('/agent/');
   if (open || agentApi || currentUser(req)) return next();
   return res.status(401).json({ success: false, msg: '登录已过期，请重新登录', needLogin: true });

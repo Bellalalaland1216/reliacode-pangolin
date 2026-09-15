@@ -149,7 +149,7 @@ function initDatabase() {
   `);
 
   // 系统用户表（登录认证 + 角色权限）
-  // role: admin(平台管理员) / brand(品牌管理员) / brand_staff(品牌方工作账号) / factory(工厂装箱) / warehouse(品牌方) / distributor(代理商自助)
+  // role: member(普通用户) / admin(平台管理员) / brand(品牌管理员) / brand_staff(品牌方工作账号) / factory(工厂装箱) / warehouse(品牌方) / distributor(代理商自助)
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

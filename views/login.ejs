@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#0b6e4f">
   <title>ClawMaster / 穿山甲溯源大师 · 登录</title>
+  <link rel="icon" href="/icons/pangolin-photo.png?v=20260905">
   <style nonce="<%= cspNonce %>">
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
@@ -135,7 +136,7 @@
     <!-- 右侧登录区 -->
     <div class="form-panel">
       <h1>欢迎回来</h1>
-      <div class="hint">同一企业账号体系，请使用总部分配的账号登录。</div>
+      <div class="hint">已有账号请直接登录，新用户可免费创建普通用户账号。</div>
       <% if (error) { %><div class="error"><%= error %></div><% } %>
       <form method="POST" action="/login">
         <div class="form-group">
@@ -159,10 +160,11 @@
         <button type="submit" class="btn-login">登 录</button>
       </form>
       <div class="links">
-        <a href="/register">有邀请码？注册账号 <%- icon('arrow-right') %></a>
+        <a href="/register">新用户注册 <%- icon('arrow-right') %></a>
+        <a href="/register?mode=partner">合作方邀请码注册 <%- icon('arrow-right') %></a>
         <a href="/v" class="consumer-entry">消费者溯源查询入口 <%- icon('arrow-right') %></a>
       </div>
-      <div class="tip">消费者扫码验证无需登录<br>合作工厂 / 代理商凭总部邀请码注册</div>
+      <div class="tip">普通用户无需邀请码即可注册<br>合作工厂 / 品牌方 / 代理商请使用总部邀请码</div>
     </div>
   </div>
 </body>

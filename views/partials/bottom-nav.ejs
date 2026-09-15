@@ -3,6 +3,10 @@
   const u = user || null;
   const r = u ? (u.role === 'AUDIT_VIEWER' ? 'admin' : u.role) : '';
   function buildTabs(role) {
+    if (role === 'member') return [
+      { href: '/member',   icon: 'search', label: '溯源', key: 'member' },
+      { href: '/profile',  icon: 'user', label: '我的', key: 'profile' }
+    ];
     if (role === 'admin' || role === 'brand' || role === 'brand_staff') return [
       { href: '/',              icon: 'home', label: '首页', key: 'home' },
       { href: '/admin/business',icon: 'grid', label: '业务', key: 'business' },
