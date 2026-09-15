@@ -1,5 +1,7 @@
 # ReliaCode
 
+穿山甲溯源大师，作为部分门店（宠物行业）在溯源码过程中的 AI 化提升方案。
+
 ReliaCode (可靠码) is an operator-managed traceability application for serialized pet-food packs.
 It records the lifecycle from individual bag to carton, distributor, and retail store.
 
