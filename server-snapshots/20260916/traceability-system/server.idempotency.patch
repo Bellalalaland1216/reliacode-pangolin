@@ -1,0 +1,83 @@
+--- a/server.js
++++ b/server.js
+@@ -1509,7 +1509,26 @@
+ 
+ // 生产码包：一次生成 1～50,000 个码并绑定到唯一任务，供工厂精确导出 TXT。
+ // 与页面即时生码不同，此流程不预生成数万张 PNG，避免阻塞服务和占满磁盘。
++// 网页生码的请求标识永久保留；即使连接中断或服务重启，重试也只能指向原任务。
++db.exec(`
++  CREATE TABLE IF NOT EXISTS code_package_idempotency (
++    user_id INTEGER NOT NULL,
++    idempotency_key TEXT NOT NULL,
++    request_hash TEXT NOT NULL,
++    package_id INTEGER NOT NULL,
++    created_at INTEGER NOT NULL,
++    PRIMARY KEY (user_id, idempotency_key)
++  );
++`);
++const readCodePackageRequest = db.prepare(`
++  SELECT request_hash, package_id FROM code_package_idempotency
++  WHERE user_id=? AND idempotency_key=?
++`);
+ app.post('/api/code-packages', requireRole('admin', 'brand_staff'), wrap(async (req, res) => {
++  const idempotencyKey = String(req.get('idempotency-key') || '').trim();
++  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
++    return res.status(400).json({ success: false, code: 'IDEMPOTENCY_KEY_REQUIRED', msg: '生成码包需要 8～128 位请求标识，请刷新页面后重试' });
++  }
+   const codeType = req.body.code_type === 'box' ? 'box' : req.body.code_type === 'item' ? 'item' : '';
+   const quantity = Number(req.body.quantity);
+   const productId = Number(req.body.product_id);
+@@ -1571,11 +1590,48 @@
+     }
+   }
+ 
+-  const packageResult = db.prepare(`INSERT INTO code_packages
+-    (package_no,code_type,brand_id,product_id,batch_no,quantity,base_url,status,created_by,created_by_name)
+-    VALUES (?,?,?,?,?,?,?,'generating',?,?)`)
+-    .run(packageNo, codeType, brandId, effectiveProductId, effectiveBatchNo, quantity, getBaseUrl(req), user.id || null, user.username || '');
+-  const packageId = Number(packageResult.lastInsertRowid);
++  const requestHash = crypto.createHash('sha256').update(JSON.stringify({
++    brandId, productId: effectiveProductId, batchNo: effectiveBatchNo,
++    quantity, codeType, originTitle, originLocation, occurredAtInput
++  })).digest('hex');
++  const reserveCodePackage = db.transaction(() => {
++    const existing = readCodePackageRequest.get(user.id, idempotencyKey);
++    if (existing) return { existing };
++    const packageResult = db.prepare(`INSERT INTO code_packages
++      (package_no,code_type,brand_id,product_id,batch_no,quantity,base_url,status,created_by,created_by_name)
++      VALUES (?,?,?,?,?,?,?,'generating',?,?)`)
++      .run(packageNo, codeType, brandId, effectiveProductId, effectiveBatchNo, quantity, getBaseUrl(req), user.id, user.username || '');
++    const id = Number(packageResult.lastInsertRowid);
++    db.prepare(`INSERT INTO code_package_idempotency
++      (user_id,idempotency_key,request_hash,package_id,created_at) VALUES (?,?,?,?,?)`)
++      .run(user.id, idempotencyKey, requestHash, id, Date.now());
++    return { packageId: id };
++  });
++  const reservation = reserveCodePackage();
++  if (reservation.existing) {
++    if (reservation.existing.request_hash !== requestHash) {
++      return res.status(409).json({ success: false, code: 'IDEMPOTENCY_CONFLICT', msg: '同一请求标识不能用于不同码包参数' });
++    }
++    const previous = db.prepare('SELECT * FROM code_packages WHERE id=? AND created_by=?').get(reservation.existing.package_id, user.id);
++    if (!previous || previous.brand_id !== brandId) {
++      return res.status(409).json({ success: false, code: 'PACKAGE_REQUEST_UNAVAILABLE', msg: '原码包记录不可用，请联系平台管理员' });
++    }
++    if (previous.status === 'generating') {
++      res.setHeader('Retry-After', '2');
++      return res.status(409).json({ success: false, code: 'IDEMPOTENCY_IN_PROGRESS', msg: '原码包仍在生成或等待核查，请稍后用同一请求标识重试，不要开启新任务' });
++    }
++    if (previous.status !== 'ready') {
++      return res.status(500).json({ success: false, code: 'PACKAGE_GENERATION_FAILED', msg: '原码包生成失败，未产生完整码数据；请核查记录后开始新任务' });
++    }
++    res.setHeader('Idempotency-Replayed', 'true');
++    return res.status(201).json({
++      success: true,
++      package: { id: previous.id, package_no: previous.package_no, code_type: previous.code_type,
++        quantity: previous.quantity, generic: !previous.product_id, status: 'ready' },
++      download_url: `/api/code-packages/${previous.id}/download?mode=url`
++    });
++  }
++  const packageId = reservation.packageId;
+ 
+   let firstCode = '';
+   let lastCode = '';

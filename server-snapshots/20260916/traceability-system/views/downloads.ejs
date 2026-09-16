@@ -185,6 +185,23 @@
     const quantityInput = document.getElementById('packageQuantity');
     const createButton = document.getElementById('createPackageBtn');
     const createStatus = document.getElementById('createPackageStatus');
+    const pendingPackageKey = 'clawmaster-production-package-pending-v1';
+    function readPendingPackage() {
+      try {
+        const value = JSON.parse(sessionStorage.getItem(pendingPackageKey) || 'null');
+        return value && /^[A-Za-z0-9._:-]{8,128}$/.test(value.key) && typeof value.body === 'string' ? value : null;
+      } catch (_) { return null; }
+    }
+    function newPackageRequestKey() {
+      if (!window.crypto || !window.crypto.getRandomValues) throw new Error('当前浏览器无法生成防重复请求标识。');
+      if (window.crypto.randomUUID) return window.crypto.randomUUID();
+      const bytes = new Uint8Array(16);
+      window.crypto.getRandomValues(bytes);
+      return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+    }
+    function clearPendingPackage() {
+      try { sessionStorage.removeItem(pendingPackageKey); } catch (_) {}
+    }
     function normalizedQuantity() {
       return Math.max(1, Math.min(50000, Number(quantityInput && quantityInput.value) || 0));
     }
@@ -194,6 +211,29 @@
     }
     if (quantityInput) quantityInput.addEventListener('input', updateCreateButton);
     updateCreateButton();
+    const pendingOnLoad = readPendingPackage();
+    if (pendingOnLoad && createButton) {
+      try {
+        const previous = JSON.parse(pendingOnLoad.body);
+        const values = {
+          packageBrand: previous.brand_id,
+          packageProduct: previous.product_id,
+          packageBatch: previous.batch_no,
+          packageQuantity: previous.quantity,
+          packageOriginTitle: previous.origin_title,
+          packageOriginLocation: previous.origin_location,
+          packageOccurredAt: previous.occurred_at
+        };
+        Object.entries(values).forEach(([id, value]) => {
+          const field = document.getElementById(id);
+          if (field) field.value = value == null ? '' : String(value);
+        });
+        const type = document.querySelector(`input[name="productionCodeType"][value="${previous.code_type === 'box' ? 'box' : 'item'}"]`);
+        if (type) type.checked = true;
+        updateCreateButton();
+        createStatus.textContent = '上次码包提交结果未确认，已恢复原参数。重新提交会沿用同一请求标识并查询原任务。';
+      } catch (_) { createStatus.textContent = '上次提交结果未确认，请先核查码包记录。'; }
+    }
 
     async function createProductionPackage() {
       const brandEl = document.getElementById('packageBrand');
@@ -219,26 +259,37 @@
       createButton.disabled = true;
       createStatus.textContent = `正在生成 ${quantity.toLocaleString('zh-CN')} 个码，请勿重复提交…`;
       try {
+        const body = JSON.stringify({
+          brand_id: brandId || null,
+          product_id: productId || null,
+          batch_no: batchNo,
+          quantity,
+          code_type: codeType,
+          origin_title: originTitle,
+          origin_location: originLocation,
+          occurred_at: occurredAt
+        });
+        let pending = readPendingPackage();
+        if (pending && pending.body !== body) {
+          throw new Error('上次码包提交结果还未确认。请恢复原参数并用同一请求重试，或先核查码包记录。');
+        }
+        if (!pending) {
+          pending = { key: newPackageRequestKey(), body };
+          sessionStorage.setItem(pendingPackageKey, JSON.stringify(pending));
+        }
         const response = await fetch('/api/code-packages', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            brand_id: brandId || null,
-            product_id: productId || null,
-            batch_no: batchNo,
-            quantity,
-            code_type: codeType,
-            origin_title: originTitle,
-            origin_location: originLocation,
-            occurred_at: occurredAt
-          })
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': pending.key },
+          body
         });
         const data = await response.json();
         if (!response.ok || !data.success) {
           const requestError = new Error(data.msg || '码包生成失败');
           requestError.code = data.code || '';
+          requestError.status = response.status;
           throw requestError;
         }
+        clearPendingPackage();
         const packageId = Number(data.package && data.package.id);
         if (!Number.isInteger(packageId) || packageId < 1) {
           createStatus.textContent = '码包已生成，但返回的下载编号无效。请刷新码包记录后下载，不要再次生码。';
@@ -273,7 +324,11 @@
           statusText.textContent = `码包 ${data.package.package_no} 已生成，但自动下载失败（${downloadError.message || '网络错误'}）。请点击“重新下载链接 TXT”，不要再次生码。`;
         }
       } catch (error) {
-        createStatus.textContent = error.message || '码包生成失败，请稍后重试。';
+        if ([400, 401, 403, 404].includes(error.status) || error.code === 'PACKAGE_GENERATION_FAILED') clearPendingPackage();
+        const uncertain = readPendingPackage() && (!error.status || error.status >= 500 || error.code === 'IDEMPOTENCY_IN_PROGRESS');
+        createStatus.textContent = uncertain
+          ? `${error.message || '网络超时，结果未确认'}。防重复请求标识已保留；再次提交会查询同一任务，不会重新生码。`
+          : (error.message || '码包生成失败，请稍后重试。');
         if (error.code === 'BATCH_ORIGIN_REQUIRED') {
           const originPanel = document.querySelector('.package-batch-origin');
           if (originPanel) originPanel.open = true;
