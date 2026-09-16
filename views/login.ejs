@@ -7,18 +7,19 @@
   <meta name="theme-color" content="#f1faf6">
   <title>穿山甲溯源大师 · 企业登录</title>
   <link rel="icon" href="/icons/pangolin-photo.png?v=20260905">
-  <link rel="stylesheet" href="/css/login-woodland.css?v=20260916">
-  <link rel="preload" href="/images/login-woodland/scene.webp" as="image">
-  <script src="/js/login-woodland.js?v=20260916" defer></script>
+  <link rel="stylesheet" href="/css/login-woodland.css?v=20260916r2">
+  <link rel="preload" href="/images/login-woodland/reference.webp" as="image">
+  <script src="/js/login-woodland.js?v=20260916r2" defer></script>
 </head>
 <body>
   <main class="login-page">
+    <div class="reference-stage">
     <%- include('partials/login-background') %>
     <section class="login-shell" aria-labelledby="loginTitle">
       <div class="art-panel"><%- include('partials/login-scene') %></div>
       <section class="form-panel">
         <div class="form-content">
-          <h1 id="loginTitle"><a class="brand-title" href="#loginUsername">穿山甲·溯源大师</a></h1>
+          <h1 id="loginTitle"><a class="brand-title" href="#loginUsername"><span class="sr-only">穿山甲·溯源大师</span><svg viewBox="876 201 475 95" aria-hidden="true" focusable="false"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></svg></a></h1>
           <div class="login-status" role="alert" aria-live="assertive"><button id="loginStatus" class="status-message" type="button"><%= error || '' %></button></div>
           <form id="loginForm" method="POST" action="/login" autocomplete="on" novalidate>
             <div class="field-group">
@@ -54,6 +55,7 @@
         </div>
       </section>
     </section>
+    </div>
   </main>
   <dialog class="help-dialog" id="helpDialog" aria-labelledby="helpTitle">
     <div class="dialog-header"><h2 id="helpTitle">登录帮助</h2><button class="dialog-close" id="closeHelp" type="button" aria-label="关闭登录帮助"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>

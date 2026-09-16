@@ -1,43 +1,45 @@
-<button class="scene-control" type="button" id="sceneControl" aria-label="暂停运输与自然动画" aria-pressed="false">
-  <svg class="woodland-scene" viewBox="0 0 640 780" aria-hidden="true" focusable="false">
+<div class="scene-art" aria-hidden="true">
+  <svg class="woodland-scene" viewBox="185 79 650 806" focusable="false">
     <defs>
-      <clipPath id="sceneWindow"><path d="M0 164C0 58 61 0 151 0C253 0 273 46 301 111C327 174 402 173 453 225C503 276 490 292 536 319C595 354 640 384 640 471C640 566 608 573 546 612C500 641 510 674 535 718C563 774 507 786 432 775C365 763 351 751 281 756C159 764 61 750 22 675C-10 614 0 540 0 455Z"/></clipPath>
-      <clipPath id="truckWindow"><rect x="307" y="400" width="340" height="186"/></clipPath>
-      <clipPath id="meadowWindow"><rect x="0" y="594" width="640" height="190"/></clipPath>
-      <linearGradient id="leafFill" x1="0" y1="1" x2="1" y2="0"><stop stop-color="#5b9372"/><stop offset=".6" stop-color="#a2c483"/><stop offset="1" stop-color="#d6df97"/></linearGradient>
-      <linearGradient id="pinFill" x2=".8" y2="1"><stop stop-color="#93c5b4"/><stop offset="1" stop-color="#539981"/></linearGradient>
-      <g id="sceneLeaf"><path d="M0 42C4 14 26 7 57 0C55 29 32 42 0 42Z" fill="url(#leafFill)"/><path d="M-3 47L45 10M15 30L15 15M27 20L40 21" fill="none" stroke="#71996b" stroke-width="1.3" opacity=".65"/></g>
-      <g id="scenePaw" fill="currentColor"><ellipse cx="-13" cy="-9" rx="5.8" ry="8" transform="rotate(-25 -13 -9)"/><ellipse cx="-3" cy="-18" rx="5.3" ry="7.5"/><ellipse cx="9" cy="-16" rx="5.3" ry="7.5" transform="rotate(15 9 -16)"/><ellipse cx="18" cy="-5" rx="5" ry="7" transform="rotate(28 18 -5)"/><path d="M-13 8C-13 1-7-2-4-7C-1-12 6-9 8-4C10 1 16 4 14 11C12 18 5 12 0 13C-7 16-14 15-13 8Z"/></g>
+      <clipPath id="sceneWindow"><path d="M209 267C209 166 249 105 343 105C426 105 475 135 497 189C526 252 543 261 589 282C634 302 646 331 682 361C722 394 772 405 799 443C828 482 836 527 825 580C817 639 795 657 751 683C707 707 704 733 720 767C738 798 755 825 730 847C707 878 644 868 599 856C557 844 537 837 482 838C363 841 273 839 234 775C208 736 209 696 209 635Z"/></clipPath>
+      <clipPath id="dogSilhouette"><path d="M209 544C236 506 264 469 291 438C326 403 352 389 369 358L384 334L413 315C404 282 399 237 408 225C429 201 449 268 461 309L477 305C485 281 498 252 508 256C520 265 515 297 518 315L546 329C558 337 550 349 551 363C554 383 574 391 581 408L594 422Q601 433 577 442C559 448 543 432 534 417Q523 408 523 420C525 435 540 447 552 453Q532 469 513 448C499 449 504 466 496 484C492 503 490 524 495 540C505 568 518 599 533 645L209 645Z"/></clipPath>
+      <clipPath id="originalTruck"><path d="M583 598L587 538Q588 524 599 521L733 507Q758 501 781 508C799 513 813 532 828 551L830 601L816 625L794 633Q789 648 775 648Q759 647 755 632L638 623Q632 635 620 635Q606 633 607 621L584 617Z"/></clipPath>
+      <clipPath id="originalTruckBoundary"><path d="M575 495H824C833 543 829 583 817 606C807 635 795 650 778 666H575Z"/></clipPath>
+      <filter id="truckJoinFeather"><feGaussianBlur stdDeviation="1.6"/></filter>
+      <mask id="originalTruckBlend"><path d="M573 494H820C829 544 825 582 813 605C803 634 791 650 774 666H573Z" fill="white" filter="url(#truckJoinFeather)"/></mask>
+      <clipPath id="originalParcel"><path d="M512 664L550 656L596 660L622 654L674 661L708 669L708 768L692 780L646 784L621 792L511 765Z"/></clipPath>
+      <clipPath id="originalPin"><path d="M741 351C733 339 710 314 710 296C709 278 724 263 741 263C761 263 775 278 774 297C773 315 750 340 741 351Z"/></clipPath>
+      <filter id="scenePatchFeather"><feGaussianBlur stdDeviation="1.7"/></filter>
+      <mask id="movingObjectHoles"><g filter="url(#scenePatchFeather)"><path d="M583 598L587 538Q588 524 599 521L733 507Q758 501 781 508C799 513 813 532 828 551L830 601L816 625L794 633Q789 648 775 648Q759 647 755 632L638 623Q632 635 620 635Q606 633 607 621L584 617Z" fill="white" stroke="white" stroke-width="14"/><path d="M512 664L550 656L596 660L622 654L674 661L708 669L708 768L692 780L646 784L621 792L511 765Z" fill="white" stroke="white" stroke-width="14"/><path d="M741 351C733 339 710 314 710 296C709 278 724 263 741 263C761 263 775 278 774 297C773 315 750 340 741 351Z" fill="white" stroke="white" stroke-width="14"/><path d="M603 339C609 314 623 311 649 298C645 322 626 332 607 335Z" fill="white" stroke="white" stroke-width="14"/><path d="M643 419C672 422 682 430 689 453C664 449 653 443 643 419Z" fill="white" stroke="white" stroke-width="14"/><path d="M741 731C746 704 760 699 783 689C778 716 765 723 745 728Z" fill="white" stroke="white" stroke-width="14"/></g></mask>
+      <!-- Restore the unseen nose beneath the reference sprite; feather only their join. -->
+      <clipPath id="vanCompletionOutline"><path d="M71 618L77 425L117 260Q126 229 170 225L752 177L975 177Q1070 183 1134 218L1244 338L1323 453Q1357 471 1375 509L1416 550L1464 658L1474 753L1441 798L1102 798Q1083 875 1004 872Q927 870 899 783L336 742Q323 808 260 811Q195 806 190 738L86 719Q65 701 71 618Z"/></clipPath>
+      <clipPath id="grassLeft"><path d="M209 497L242 492L251 548L285 572L296 525L324 517L355 570L391 554L439 563L415 606L485 615L504 661L487 708L510 745L497 791L545 837L463 841L299 820L209 744Z"/></clipPath>
+      <clipPath id="grassBack"><path d="M416 595L447 603L453 580L480 609L492 593L510 613L522 602L535 586L550 615L571 629L591 646L623 647L659 647L682 651L707 648L747 641L781 646L742 681L712 694L711 670L673 661L622 654L591 660L550 656L512 665L492 692L423 655Z"/></clipPath>
+      <clipPath id="grassRight"><path d="M710 690L732 690L714 729L719 756L743 799L734 824L714 802L691 789L709 767Z"/></clipPath>
+      <clipPath id="canopy"><path d="M209 105H449L450 190L427 174L419 149L407 181L396 167L381 176L379 151L353 166L353 199L334 196L335 223L312 219L334 246L302 271L284 251L279 277L257 273L276 302L259 320L229 302L231 342L209 352Z"/></clipPath>
+      <clipPath id="leaf-three"><path d="M603 339C609 314 623 311 649 298C645 322 626 332 607 335Z"/></clipPath>
+<clipPath id="leaf-four"><path d="M643 419C672 422 682 430 689 453C664 449 653 443 643 419Z"/></clipPath>
+<clipPath id="leaf-five"><path d="M741 731C746 704 760 699 783 689C778 716 765 723 745 728Z"/></clipPath>
     </defs>
+    <image href="/images/login-woodland/reference.webp" width="1586" height="992"/>
+    <g mask="url(#movingObjectHoles)"><image href="/images/login-woodland/clean-plate.webp" width="1586" height="992" preserveAspectRatio="none"/></g>
     <g clip-path="url(#sceneWindow)">
-      <image href="/images/login-woodland/scene.webp" width="640" height="780" preserveAspectRatio="none"/>
-      <g clip-path="url(#meadowWindow)"><image class="meadow-wind" href="/images/login-woodland/scene.webp" width="640" height="780" preserveAspectRatio="none"/></g>
-      <image class="canopy canopy-one" href="/images/login-woodland/branch.webp" x="-18" y="-27" width="306" height="242" preserveAspectRatio="xMinYMin meet"/>
-      <image class="canopy canopy-two" href="/images/login-woodland/branch.webp" x="-85" y="105" width="246" height="196" preserveAspectRatio="xMinYMin meet"/>
-      <g clip-path="url(#truckWindow)">
-        <g id="deliveryTruck" transform="translate(378 0)">
-          <image href="/images/login-woodland/truck.webp" x="-70" y="410" width="410" height="160" preserveAspectRatio="xMidYMax meet"/>
-        </g>
+      <g id="deliveryTruck">
+        <g><g transform="translate(571 471) scale(.201 .2)"><g clip-path="url(#vanCompletionOutline)"><image href="/images/login-woodland/van-front-completion.webp" width="1536" height="1024"/></g></g></g>
+        <g clip-path="url(#originalTruckBoundary)"><g mask="url(#originalTruckBlend)"><g clip-path="url(#originalTruck)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g></g>
       </g>
-      <image class="wind-plant plant-back" href="/images/login-woodland/grass.webp" x="158" y="522" width="230" height="185"/>
-      <g id="deliveryParcel"><image href="/images/login-woodland/parcel.webp" x="301" y="548" width="228" height="192" preserveAspectRatio="none"/></g>
-      <image class="wind-plant plant-left" href="/images/login-woodland/grass.webp" x="-47" y="481" width="300" height="270"/>
-      <image class="wind-plant plant-front" href="/images/login-woodland/grass.webp" x="23" y="623" width="301" height="227"/>
-      <image class="wind-plant plant-right" href="/images/login-woodland/grass.webp" x="472" y="645" width="150" height="131"/>
+      <!-- The actual curved dog silhouette is a foreground occluder, never a rectangular truck viewport. -->
+      <g clip-path="url(#dogSilhouette)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g>
+      <g class="wind-plant plant-back"><g clip-path="url(#grassBack)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
+      <g id="deliveryParcel"><g clip-path="url(#originalParcel)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
+      <g class="wind-plant plant-left"><g clip-path="url(#grassLeft)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
+      <g class="wind-plant plant-right"><g clip-path="url(#grassRight)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
+      <g class="canopy"><g clip-path="url(#canopy)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
     </g>
-    <path class="transport-route" id="transportRoute" d="M301 400C399 375 402 335 450 302C479 282 513 279 548 256"/>
-    <path class="transport-route" d="M548 256Q574 264 591 284"/>
-    <circle class="route-dot" cx="451" cy="302" r="4.5"/><circle class="route-dot" cx="591" cy="284" r="8"/>
-    <g id="transportPin" transform="translate(548 256)">
-      <path d="M0 0C-8-13-32-36-32-58A32 32 0 0 1 32-58C32-36 8-13 0 0Z" fill="url(#pinFill)"/>
-      <circle cy="-58" r="21" fill="#fcfffc"/>
-      <g transform="translate(-1 -55) scale(.67)" color="#70aa91"><use href="#scenePaw"/></g>
-    </g>
-    <circle cx="334" cy="101" r="17" fill="#a4cec4" opacity=".9"/>
-    <circle cx="564" cy="692" r="12" fill="#bbd299" opacity=".9"/>
-    <g class="falling-leaf scene-leaf-one"><use href="#sceneLeaf"/></g>
-    <g class="falling-leaf scene-leaf-two"><use href="#sceneLeaf"/></g>
-    <g class="falling-leaf scene-leaf-three"><use href="#sceneLeaf"/></g>
-    <g class="falling-leaf scene-leaf-four"><use href="#sceneLeaf"/></g>
+    <path id="transportRoute" d="M501 497C582 475 605 434 650 394C677 380 710 367 741 354" fill="none" stroke="none"/>
+    <g id="transportPin"><g clip-path="url(#originalPin)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
+    <g class="reference-leaf leaf-three" data-leaf-x="626" data-leaf-y="319"><g clip-path="url(#leaf-three)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
+<g class="reference-leaf leaf-four" data-leaf-x="666" data-leaf-y="438"><g clip-path="url(#leaf-four)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
+<g class="reference-leaf leaf-five" data-leaf-x="762" data-leaf-y="711"><g clip-path="url(#leaf-five)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
   </svg>
-</button>
+</div>

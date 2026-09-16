@@ -1,0 +1,32 @@
+# Login reference artwork
+
+This page uses the user-approved **ChatGPT Image 2026年9月16日 11_52_08.png** (1586 × 992), rather than a newly generated interpretation of its grass, parcel or surroundings.
+
+- `reference.webp`: lossless original. SVG view boxes expose only artwork and the original brand wordmark; form controls are real HTML, with accessible labels. The parcel label is part of the supplied illustration, not an application-generated traceability code.
+- `clean-plate.webp`: hidden background repairs where the original moving objects were. Only feathered masks around those original objects reveal this asset. Everything else retains original reference pixels.
+- `van-front-completion.webp`: completes the small front section cut off by the original illustration boundary. It sits underneath the reference van sprite; only the previously occluded nose and feathered join need reconstruction. It is not a pixel-identical original in those previously invisible areas.
+- Earlier generated assets are retained but no longer used by the login view.
+
+The original image stays intact in the user's UI设计样图 folder. No screenshot form is used as an interactive surface.
+
+## Geometry and motion
+
+All SVG coordinates refer to the original 1586 × 992 canvas. At that viewport the white card is (185, 79), 1216 × 806; account/password inputs start at x = 894 and are 450 pixels wide. Desktop scales the complete composition uniformly to the window width. Short windows scroll naturally. Mobile uses the same artwork above the existing working form.
+
+The van is behind the real curved dog silhouette and original foreground grass. It exits through the original organic illustration boundary. There is no rectangular entrance clipping viewport. One 14-second clock drives a 12-second traverse, the route marker and one parcel shake per pass. Maximum shake is 6 pixels sideways, 10 pixels upward and 3.6 degrees. Loose reference leaves fall on staggered 24–33.5 second loops; original botanical layers sway subtly.
+
+Artwork has no click handler and is excluded from focus and screen-reader order. Only hidden-page lifecycle and the system reduced-motion setting pause animation. Login requests, session selection, password-manager attributes, invitation registration, help and consumer query routes are unchanged.
+
+## Asset generation record
+
+Built-in image generation was used only for missing-background repairs and the occluded van front. The original reference was the edit target for both. Image processing used Sharp for lossless encoding / proportional delivery sizes. Masks and animation are native SVG / CSS / JavaScript.
+
+Clean-plate prompt: "Use case: precise-object-edit. This is a clean background plate for animation, NOT a redesign. Edit the provided image in exactly the same 1586x992 composition. Remove ONLY these movable objects: the green-white delivery van at x582..829 y506..645; cardboard parcel at x509..711 y654..795; green paw map marker at x709..774 y263..351; individual loose floating leaves at (85,40)..(167,107), (97,433)..(153,501), (603,298)..(650,339), (644,420)..(688,452), (741,689)..(783,731), (1009,919)..(1112,979). Seamlessly fill their small holes with the immediately surrounding background: soft-focus trees and narrow road behind van, existing dense broad-leaf plants and small white flowers behind parcel, pale sky/white gradient behind pin and leaves. DO NOT remove or change the large green dog silhouette, its white symbols, any foreground grasses/flowers, the lower rocks, upper left canopy, white card outline, outer green background silhouettes, dotted paths, or any right-side UI. Every other pixel must stay as close as possible. Especially keep the original dense broad leaves at base of dog silhouette and foreground exactly; no new grass style. Preserve exact canvas size, positions, colors and crop. No additional objects. This image will be used ONLY in the very small regions previously covered by the removed objects; unchanged reference pixels will be used everywhere else."
+
+Van-completion prompt: "Use case: background-extraction. Extract ONLY the exact tiny delivery van visible in this reference (x584..829,y507..646 in 1586x992 image) onto genuinely transparent RGBA background. Preserve its exact perspective, short wheelbase compact rounded white cabin pointing RIGHT and jade green cargo panel; double-line white condensed hand-painted lettering HAPPY on first line PAWS on second line near the REAR LEFT side; small cream paw just to the right of words centered on green panel. Preserve tiny grey/black wheels, beige lower body trim, green nose detail. Complete only the missing small front bumper/nose that is clipped by the reference illustration boundary at right, into a complete natural van. No other redesign. This is a cutout sprite for animation and MUST match the reference van, NOT a new longer model, NOT a photoreal large Ford transit. Same softly realistic painterly style, same sunlight, muted jade palette, same side/front camera angle. Horizontal compact vehicle, wheels visible; tightly fit entire vehicle within canvas with ~5% transparent margin; no rectangular backdrop, no floor, no trees, no other objects, no ground shadow. Output only van on transparent background."
+
+## Verification (2026-09-16)
+
+Playwright + installed Chrome (Browser plugin unavailable): native form, nine viewport/zoom-equivalent sizes, clicking every main region without stopping animation, password visibility and focus, help dialog, field errors, real credential failure, network recovery, real successful member login and duplicate-request prevention. Animation sampled through two complete cycles; system reduced motion verified. Registration integration and three existing login/password-manager checks pass. Authentication script remains byte-identical to the previous commit.
+
+Screenshots, motion recording and detailed QA output are stored outside source under `../artifacts/login-reference-fix`. This stage is a local preview and personal feature-branch source update, **not a server deployment**. The separate /v page and other workspaces are outside this UI-only change.

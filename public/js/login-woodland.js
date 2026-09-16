@@ -1,40 +1,48 @@
 (() => {
   'use strict';
   const page = document.querySelector('.login-page');
-  const scene = document.getElementById('sceneControl');
   const truck = document.getElementById('deliveryTruck');
   const pin = document.getElementById('transportPin');
   const parcel = document.getElementById('deliveryParcel');
   const route = document.getElementById('transportRoute');
+  const leaves = [...document.querySelectorAll('.reference-leaf')];
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-  const duration = 12000;
-  const drivingTime = 10000;
+  const duration = 14000;
+  const drivingTime = 12000;
   const routeLength = route.getTotalLength();
-  let elapsed = 4500;
+  let elapsed = 6600;
   let lastFrame = null;
   let frameId = null;
-  let manuallyPaused = false;
 
-  // One clock controls each vehicle, the route marker and one parcel shake per pass.
+  // A single clock keeps the vehicle, route marker and parcel in step.
+  // Artwork is decorative: clicking, typing, hovering or focusing never pauses it.
   function renderScene(time) {
     const cycle = time % duration;
     const progress = Math.min(cycle / drivingTime, 1);
     const point = route.getPointAtLength(routeLength * progress);
-    const x = 70 + 660 * progress;
-    truck.setAttribute('transform', `translate(${x.toFixed(2)} ${(Math.sin(time / 160) * .45).toFixed(2)})`);
+    const x = -410 + 760 * progress;
+    truck.setAttribute('transform', `translate(${x.toFixed(2)} ${(Math.sin(time / 190) * .25).toFixed(2)})`);
     truck.setAttribute('opacity', cycle < drivingTime ? '1' : '0');
-    pin.setAttribute('transform', `translate(${point.x.toFixed(2)} ${point.y.toFixed(2)})`);
-    pin.setAttribute('opacity', cycle > 11300 ? String((12000 - cycle) / 700) : '1');
-    const shakeTime = cycle - 5400;
-    if (shakeTime >= 0 && shakeTime < 1000) {
-      const amplitude = Math.sin(Math.PI * shakeTime / 1000);
-      const shakeX = Math.sin(shakeTime / 37) * 3.2 * amplitude;
-      const shakeY = -Math.abs(Math.sin(shakeTime / 61)) * 5.2 * amplitude;
-      const angle = Math.sin(shakeTime / 49) * 2.2 * amplitude;
-      parcel.setAttribute('transform', `translate(${shakeX.toFixed(2)} ${shakeY.toFixed(2)}) rotate(${angle.toFixed(2)} 415 731)`);
-    } else {
-      parcel.removeAttribute('transform');
-    }
+    pin.setAttribute('transform', `translate(${(point.x - 741).toFixed(2)} ${(point.y - 354).toFixed(2)})`);
+    pin.setAttribute('opacity', cycle > 13300 ? String((14000 - cycle) / 700) : '1');
+    const shakeTime = cycle - 6900;
+    if (shakeTime >= 0 && shakeTime < 1250) {
+      const amplitude = Math.sin(Math.PI * shakeTime / 1250);
+      const shakeX = Math.sin(shakeTime / 49) * 6 * amplitude;
+      const shakeY = -Math.abs(Math.sin(shakeTime / 73)) * 10 * amplitude;
+      const angle = Math.sin(shakeTime / 59) * 3.6 * amplitude;
+      parcel.setAttribute('transform', `translate(${shakeX.toFixed(2)} ${shakeY.toFixed(2)}) rotate(${angle.toFixed(2)} 610 787)`);
+    } else parcel.removeAttribute('transform');
+    leaves.forEach((leaf, index) => {
+      const period = 24000 + index * 1900;
+      const initialPhase = 1800 / period;
+      const phase = ((time - 6600 + 1800) % period + period) % period / period;
+      const dx = (Math.sin(phase * Math.PI * 3) - Math.sin(initialPhase * Math.PI * 3)) * 20;
+      const dy = (phase - initialPhase) * 160;
+      const angle = (Math.sin(phase * Math.PI * 2) - Math.sin(initialPhase * Math.PI * 2)) * 15;
+      leaf.setAttribute('transform', `translate(${dx.toFixed(2)} ${dy.toFixed(2)}) rotate(${angle.toFixed(2)} ${leaf.dataset.leafX} ${leaf.dataset.leafY})`);
+      leaf.setAttribute('opacity', String(Math.min(1, phase / .05, (1 - phase) / .2)));
+    });
   }
   function animate(now) {
     if (lastFrame !== null) elapsed += Math.min(now - lastFrame, 80);
@@ -46,23 +54,11 @@
     if (frameId !== null) cancelAnimationFrame(frameId);
     frameId = null;
     lastFrame = null;
-    const paused = manuallyPaused || reducedMotion.matches || document.hidden;
+    const paused = reducedMotion.matches || document.hidden;
     page.classList.toggle('motion-paused', paused);
-    scene.setAttribute('aria-pressed', String(paused));
-    scene.setAttribute('aria-label', reducedMotion.matches ? '查看下一段运输场景，已减少动态效果' : paused ? '播放运输与自然动画' : '暂停运输与自然动画');
     if (!paused) frameId = requestAnimationFrame(animate);
   }
   renderScene(elapsed);
-  scene.addEventListener('click', () => {
-    if (reducedMotion.matches) {
-      // Keep the system's reduced-motion choice, but permit a single scene step.
-      elapsed += 2400;
-      renderScene(elapsed);
-      return;
-    }
-    manuallyPaused = !manuallyPaused;
-    syncMotion();
-  });
   document.addEventListener('visibilitychange', syncMotion);
   reducedMotion.addEventListener('change', syncMotion);
   window.addEventListener('pagehide', () => { if (frameId !== null) cancelAnimationFrame(frameId); });
