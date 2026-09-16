@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 生产码包 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260905-code-package">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'business' }) %>
+
+  <main class="container code-package-page">
+    <div class="page-header">
+      <h1>生产码包</h1>
+      <p>生成一组与产品、批次精确绑定的溯源码，导出 TXT 后交给工厂印刷系统。</p>
+    </div>
+
+    <section class="card package-primary" aria-labelledby="createPackageTitle">
+      <div class="card-title" id="createPackageTitle"><%- icon('plus') %> 新建生产码包</div>
+      <% if (user && user.role === 'brand') { %>
+        <div class="package-policy" role="status">
+          <strong>品牌管理员不具备生码权限</strong>
+          <span>请由平台管理员或已授权的品牌工作账号创建码包；你仍可下载本品牌已完成的码包。</span>
+        </div>
+      <% } else { %>
+        <p class="section-help">以<strong>品牌方为主体</strong>生成专属通用码包：默认可生成<strong>品牌通用码包</strong>（不绑定具体产品），归属同一品牌的全部产品均可使用；也可选某个产品定向生成。单个任务 1～50,000 个码，生成后不可撤销。</p>
+        <div class="package-form-grid">
+          <% if (brands && brands.length) { %>
+          <div class="form-group">
+            <label for="packageBrand">归属品牌</label>
+            <select id="packageBrand" class="form-control">
+              <option value="">请选择归属品牌</option>
+              <% brands.forEach(b => { %>
+                <option value="<%= b.id %>"><%= b.name %></option>
+              <% }); %>
+            </select>
+          </div>
+          <% } %>
+          <div class="form-group package-product-field">
+            <label for="packageProduct">产品（可选）</label>
+            <select id="packageProduct" class="form-control">
+              <option value="">品牌通用码包（不绑定具体产品）</option>
+              <% products.forEach(product => { %>
+                <option value="<%= product.id %>"><%= product.brand_name ? product.brand_name + ' / ' : '' %><%= product.name %><%= product.spec ? '（' + product.spec + '）' : '' %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="packageBatch">批次号（品牌通用码包可留空）</label>
+            <input id="packageBatch" class="form-control" type="text" maxlength="80" placeholder="例如：20260905">
+          </div>
+          <div class="form-group">
+            <label for="packageQuantity">码数量</label>
+            <input id="packageQuantity" class="form-control" type="number" min="1" max="50000" step="1" value="50000" inputmode="numeric" required>
+          </div>
+          <fieldset class="form-group package-type-field">
+            <legend>码类型</legend>
+            <div class="codes-type-label" role="radiogroup" aria-label="生产码类型">
+              <label><input type="radio" name="productionCodeType" value="item" checked> 子码（单品）</label>
+              <label><input type="radio" name="productionCodeType" value="box"> 箱码</label>
+            </div>
+          </fieldset>
+        </div>
+        <details class="package-batch-origin">
+          <summary>新批次溯源起点 <small>仅当选择了具体产品时需填写</small></summary>
+          <div class="package-origin-grid">
+            <div class="form-group">
+              <label for="packageOriginTitle">原料来源标题</label>
+              <input id="packageOriginTitle" class="form-control" type="text" maxlength="100" placeholder="例如：原料入厂">
+            </div>
+            <div class="form-group">
+              <label for="packageOriginLocation">公开地区</label>
+              <input id="packageOriginLocation" class="form-control" type="text" maxlength="120" placeholder="例如：山东省临沂市">
+            </div>
+            <div class="form-group">
+              <label for="packageOccurredAt">发生时间</label>
+              <input id="packageOccurredAt" class="form-control" type="datetime-local">
+            </div>
+          </div>
+        </details>
+        <div class="package-delivery-spec" aria-label="TXT 交付规范">
+          <span><strong>TXT</strong> UTF-8</span>
+          <span><strong>换行</strong> Windows CRLF</span>
+          <span><strong>内容</strong> 一行一个扫码链接</span>
+          <span><strong>追溯</strong> 永久绑定本任务</span>
+        </div>
+        <div class="form-actions">
+          <button id="createPackageBtn" class="btn btn-primary" type="button"><%- icon('download') %> 生成并下载 50,000 个码（链接 TXT）</button>
+          <a href="/generate" class="btn btn-outline">管理产品与批次</a>
+        </div>
+        <div id="createPackageStatus" class="form-hint package-live-status" role="status" aria-live="polite"></div>
+      <% } %>
+    </section>
+
+    <section class="card" aria-labelledby="packageHistoryTitle">
+      <div class="card-title package-section-heading" id="packageHistoryTitle">
+        <span><%- icon('clipboard') %> 码包记录</span>
+        <small>最近 100 个任务</small>
+      </div>
+      <div class="table-wrap">
+        <table class="table package-table">
+          <thead>
+            <tr>
+              <th>码包编号</th>
+              <th>产品 / 批次</th>
+              <th>类型</th>
+              <th>数量</th>
+              <th>状态</th>
+              <th>创建信息</th>
+              <th>下载</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (!packages.length) { %>
+              <tr><td colspan="7" class="empty-cell">还没有生产码包。创建后会在这里形成可追溯的交付记录。</td></tr>
+            <% } %>
+            <% packages.forEach(pkg => { %>
+              <tr>
+                <td><strong class="package-no"><%= pkg.package_no %></strong><small><%= pkg.brand_name || '' %></small></td>
+                <td><strong><%= pkg.product_name || '品牌通用码包' %></strong><small><%= pkg.product_id ? ('批次 ' + (pkg.batch_no || '-')) : '通用空白码 · 装箱/发货时再绑定' %></small></td>
+                <td><%= pkg.code_type === 'box' ? '箱码' : '子码' %></td>
+                <td class="numeric"><%= Number(pkg.quantity).toLocaleString('zh-CN') %></td>
+                <td>
+                  <span class="package-status <%= pkg.status %>"><%= pkg.status === 'ready' ? '可下载' : pkg.status === 'generating' ? '生成中' : '失败' %></span>
+                  <% if (pkg.status === 'failed' && pkg.error_message) { %><small><%= pkg.error_message %></small><% } %>
+                </td>
+                <td><span><%= pkg.created_by_name || '-' %></span><small><%= pkg.created_at %></small></td>
+                <td>
+                  <% if (pkg.status === 'ready') { %>
+                    <div class="package-download-actions">
+                      <a class="btn btn-primary btn-sm" href="/api/code-packages/<%= pkg.id %>/download?mode=url"><%- icon('download') %> 链接 TXT</a>
+                      <a class="btn btn-outline btn-sm" href="/api/code-packages/<%= pkg.id %>/download?mode=code">纯码 TXT</a>
+                      <a class="btn btn-outline btn-sm" href="/api/code-packages/<%= pkg.id %>/download?mode=zip"><%- icon('box') %> 图片包 ZIP</a>
+                    </div>
+                    <small><%= pkg.download_count ? '已下载 ' + pkg.download_count + ' 次' : '尚未下载' %></small>
+                  <% } else { %>
+                    <span class="text-muted">不可下载</span>
+                  <% } %>
+                </td>
+              </tr>
+            <% }); %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <details class="card package-legacy">
+      <summary>已有码的图片归档包</summary>
+      <p class="form-hint">适合少量补印：最多 5,000 个已有码，内含二维码 PNG、矢量 SVG、链接 TXT、清单 CSV 和说明。大批量生产请使用上方生产码包。</p>
+      <div class="package-legacy-grid">
+        <div class="form-group">
+          <label>码类型</label>
+          <div class="codes-type-label" role="radiogroup" aria-label="归档码类型">
+            <label><input type="radio" name="codeType" value="box" checked> 箱码</label>
+            <label><input type="radio" name="codeType" value="item"> 子码</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="packageKeyword">关键词（可选）</label>
+          <input id="packageKeyword" class="form-control" type="search" placeholder="输入码值或产品名称">
+        </div>
+        <div class="form-group">
+          <label for="packageStatus">状态（可选）</label>
+          <select id="packageStatus" class="form-control">
+            <option value="">全部状态</option>
+            <option value="in_stock">在库</option>
+            <option value="shipped">已发货</option>
+            <option value="scanned">已扫码</option>
+            <option value="invalid">已作废</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button id="downloadPackageBtn" class="btn btn-outline" type="button"><%- icon('download') %> 生成并下载 ZIP</button>
+        <a href="/codes" class="btn btn-outline">返回码查询</a>
+      </div>
+      <div id="downloadStatus" class="form-hint" role="status" aria-live="polite"></div>
+    </details>
+  </main>
+
+  <script nonce="<%= cspNonce %>">
+    const quantityInput = document.getElementById('packageQuantity');
+    const createButton = document.getElementById('createPackageBtn');
+    const createStatus = document.getElementById('createPackageStatus');
+    function normalizedQuantity() {
+      return Math.max(1, Math.min(50000, Number(quantityInput && quantityInput.value) || 0));
+    }
+    function updateCreateButton() {
+      if (!createButton || !quantityInput) return;
+      createButton.lastChild.textContent = ` 生成并下载 ${normalizedQuantity().toLocaleString('zh-CN')} 个码（链接 TXT）`;
+    }
+    if (quantityInput) quantityInput.addEventListener('input', updateCreateButton);
+    updateCreateButton();
+
+    async function createProductionPackage() {
+      const brandEl = document.getElementById('packageBrand');
+      const brandId = brandEl ? brandEl.value : '';
+      const productId = document.getElementById('packageProduct').value;
+      const batchNo = document.getElementById('packageBatch').value.trim();
+      const quantity = Number(quantityInput.value);
+      const codeType = document.querySelector('input[name="productionCodeType"]:checked').value;
+      const originTitle = (document.getElementById('packageOriginTitle') || {}).value ? document.getElementById('packageOriginTitle').value.trim() : '';
+      const originLocation = (document.getElementById('packageOriginLocation') || {}).value ? document.getElementById('packageOriginLocation').value.trim() : '';
+      const occurredAt = (document.getElementById('packageOccurredAt') || {}).value || '';
+      if (brandEl && !brandId) return createStatus.textContent = '请选择码包归属品牌。';
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50000) return createStatus.textContent = '数量必须是 1 至 50,000 的整数。';
+      // 按产品生成时才要求批次号；品牌通用码包无需批次号
+      if (productId && !batchNo) return createStatus.textContent = '选择具体产品后需填写批次号。';
+      const isGeneric = !productId;
+      const productText = isGeneric ? '品牌通用码包' : document.getElementById('packageProduct').selectedOptions[0].text;
+      const confirmMsg = isGeneric
+        ? `将为品牌方生成${quantity.toLocaleString('zh-CN')} 个${codeType === 'box' ? '箱码' : '子码'}（通用空白码，装箱/发货时再绑定产品）。生成后不可撤销，是否继续？`
+        : `将为「${productText}」批次「${batchNo}」生成 ${quantity.toLocaleString('zh-CN')} 个${codeType === 'box' ? '箱码' : '子码'}。生成后不可撤销，是否继续？`;
+      const confirmed = window.confirm(confirmMsg);
+      if (!confirmed) return;
+      createButton.disabled = true;
+      createStatus.textContent = `正在生成 ${quantity.toLocaleString('zh-CN')} 个码，请勿重复提交…`;
+      try {
+        const response = await fetch('/api/code-packages', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            brand_id: brandId || null,
+            product_id: productId || null,
+            batch_no: batchNo,
+            quantity,
+            code_type: codeType,
+            origin_title: originTitle,
+            origin_location: originLocation,
+            occurred_at: occurredAt
+          })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          const requestError = new Error(data.msg || '码包生成失败');
+          requestError.code = data.code || '';
+          throw requestError;
+        }
+        const packageId = Number(data.package && data.package.id);
+        if (!Number.isInteger(packageId) || packageId < 1) {
+          createStatus.textContent = '码包已生成，但返回的下载编号无效。请刷新码包记录后下载，不要再次生码。';
+          return;
+        }
+        const downloadUrl = `/api/code-packages/${packageId}/download?mode=url`;
+        const retryLink = document.createElement('a');
+        retryLink.href = downloadUrl;
+        retryLink.textContent = '重新下载链接 TXT';
+        retryLink.className = 'btn btn-outline btn-sm';
+        const refreshLink = document.createElement('a');
+        refreshLink.href = '/downloads';
+        refreshLink.textContent = '刷新码包记录';
+        refreshLink.className = 'btn btn-outline btn-sm';
+        const statusText = document.createTextNode(`码包 ${data.package.package_no} 已生成，共 ${data.package.quantity.toLocaleString('zh-CN')} 个码。正在下载链接 TXT。`);
+        createStatus.replaceChildren(statusText, retryLink, refreshLink);
+        try {
+          const fileResponse = await fetch(downloadUrl);
+          if (!fileResponse.ok) throw new Error(`下载接口返回 ${fileResponse.status}`);
+          const count = Number(fileResponse.headers.get('X-Code-Package-Count'));
+          if (count !== quantity) throw new Error('码包数量校验失败');
+          const blobUrl = URL.createObjectURL(await fileResponse.blob());
+          const fileLink = document.createElement('a');
+          fileLink.href = blobUrl;
+          fileLink.download = `${codeType === 'box' ? '箱码' : '子码'}码包-${data.package.package_no}-${quantity}-扫码链接.txt`;
+          document.body.appendChild(fileLink);
+          fileLink.click();
+          fileLink.remove();
+          window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+          statusText.textContent = `码包 ${data.package.package_no} 已生成并发起下载，共 ${quantity.toLocaleString('zh-CN')} 个码。若浏览器未保存文件，请点击“重新下载链接 TXT”。`;
+        } catch (downloadError) {
+          statusText.textContent = `码包 ${data.package.package_no} 已生成，但自动下载失败（${downloadError.message || '网络错误'}）。请点击“重新下载链接 TXT”，不要再次生码。`;
+        }
+      } catch (error) {
+        createStatus.textContent = error.message || '码包生成失败，请稍后重试。';
+        if (error.code === 'BATCH_ORIGIN_REQUIRED') {
+          const originPanel = document.querySelector('.package-batch-origin');
+          if (originPanel) originPanel.open = true;
+          document.getElementById('packageOriginTitle').focus();
+        }
+        createButton.disabled = false;
+      }
+    }
+    if (createButton) createButton.addEventListener('click', createProductionPackage);
+
+    function downloadPackage() {
+      const type = document.querySelector('input[name="codeType"]:checked').value;
+      const keyword = document.getElementById('packageKeyword').value.trim();
+      const status = document.getElementById('packageStatus').value;
+      const params = new URLSearchParams({ type, keyword });
+      if (status) params.set('status', status);
+      const statusText = document.getElementById('downloadStatus');
+      statusText.textContent = '正在生成图片归档包，数据量较大时请稍候。';
+      window.location.assign('/api/codes/package?' + params.toString());
+      window.setTimeout(() => { statusText.textContent = '下载请求已提交。若没有开始下载，请检查当前筛选条件。'; }, 1200);
+    }
+    document.getElementById('downloadPackageBtn').addEventListener('click', downloadPackage);
+    document.getElementById('packageKeyword').addEventListener('keydown', event => {
+      if (event.key === 'Enter') downloadPackage();
+    });
+  </script>
+</body>
+</html>
