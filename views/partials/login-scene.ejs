@@ -1,6 +1,8 @@
 <div class="scene-art" aria-hidden="true">
   <svg class="woodland-scene" viewBox="185 79 650 806" focusable="false">
     <defs>
+      <!-- Rotate in a unit circle, then restore the photographed wheel perspective. -->
+      <clipPath id="wheelFace"><circle r="1"/></clipPath>
       <clipPath id="sceneWindow"><path d="M209 267C209 166 249 105 343 105C426 105 475 135 497 189C526 252 543 261 589 282C634 302 646 331 682 361C722 394 772 405 799 443C828 482 836 527 825 580C817 639 795 657 751 683C707 707 704 733 720 767C738 798 755 825 730 847C707 878 644 868 599 856C557 844 537 837 482 838C363 841 273 839 234 775C208 736 209 696 209 635Z"/></clipPath>
       <clipPath id="dogSilhouette"><path d="M209 544C236 506 264 469 291 438C326 403 352 389 369 358L384 334L413 315C404 282 399 237 408 225C429 201 449 268 461 309L477 305C485 281 498 252 508 256C520 265 515 297 518 315L546 329C558 337 550 349 551 363C554 383 574 391 581 408L594 422Q601 433 577 442C559 448 543 432 534 417Q523 408 523 420C525 435 540 447 552 453Q532 469 513 448C499 449 504 466 496 484C492 503 490 524 495 540C505 568 518 599 533 645L209 645Z"/></clipPath>
       <clipPath id="originalTruck"><path d="M583 598L587 538Q588 524 599 521L733 507Q758 501 781 508C799 513 813 532 828 551L830 601L816 625L794 633Q789 648 775 648Q759 647 755 632L638 623Q632 635 620 635Q606 633 607 621L584 617Z"/></clipPath>
@@ -26,8 +28,13 @@
     <g mask="url(#movingObjectHoles)"><image href="/images/login-woodland/clean-plate.webp" width="1586" height="992" preserveAspectRatio="none"/></g>
     <g clip-path="url(#sceneWindow)">
       <g id="deliveryTruck">
-        <g><g transform="translate(571 471) scale(.201 .2)"><g clip-path="url(#vanCompletionOutline)"><image href="/images/login-woodland/van-front-completion.webp" width="1536" height="1024"/></g></g></g>
-        <g clip-path="url(#originalTruckBoundary)"><g mask="url(#originalTruckBlend)"><g clip-path="url(#originalTruck)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g></g>
+        <!-- Wheel faces reuse the sprite pixels; fixed tyre edges retain contact and shading. -->
+        <g><g transform="translate(571 471) scale(.201 .2)"><g clip-path="url(#vanCompletionOutline)"><image href="/images/login-woodland/van-front-completion.webp" width="1536" height="1024"/>
+          <g transform="translate(253 723) scale(47 65)"><g clip-path="url(#wheelFace)"><g class="truck-wheel" data-wheel="rear-completion" data-radius="16"><image preserveAspectRatio="none" href="/images/login-woodland/van-front-completion.webp" x="-5.382979" y="-11.123077" width="32.680851" height="15.753846"/></g></g></g>
+          <g transform="translate(987 771) scale(65 88)"><g clip-path="url(#wheelFace)"><g class="truck-wheel" data-wheel="front-completion" data-radius="20"><image preserveAspectRatio="none" href="/images/login-woodland/van-front-completion.webp" x="-15.184615" y="-8.761364" width="23.630769" height="11.636364"/></g></g></g></g></g></g>
+        <g clip-path="url(#originalTruckBoundary)"><g mask="url(#originalTruckBlend)"><g clip-path="url(#originalTruck)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/>
+          <g transform="translate(621.3 616.3) scale(9.8 14)"><g clip-path="url(#wheelFace)"><g class="truck-wheel" data-wheel="rear" data-radius="16"><image preserveAspectRatio="none" href="/images/login-woodland/reference.webp" x="-63.397959" y="-44.021429" width="161.836735" height="70.857143"/></g></g></g>
+          <g transform="translate(772.5 627.5) scale(13.5 17)"><g clip-path="url(#wheelFace)"><g class="truck-wheel" data-wheel="front" data-radius="20"><image preserveAspectRatio="none" href="/images/login-woodland/reference.webp" x="-57.222222" y="-36.911765" width="117.481481" height="58.352941"/></g></g></g></g></g></g>
       </g>
       <!-- The actual curved dog silhouette is a foreground occluder, never a rectangular truck viewport. -->
       <g clip-path="url(#dogSilhouette)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g>
