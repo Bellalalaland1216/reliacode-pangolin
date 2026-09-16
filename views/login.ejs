@@ -26,7 +26,7 @@
               <label class="field-label" for="loginUsername">账号</label>
               <div class="input-wrap">
                 <svg class="field-icon ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v2Z"/></svg>
-                <input class="text-input" id="loginUsername" type="text" name="username" value="<%= username || '' %>" autocomplete="username" autocapitalize="none" spellcheck="false" aria-describedby="usernameNote" required>
+                <input class="text-input" id="loginUsername" type="text" name="username" value="<%= typeof username === 'string' ? username : '' %>" autocomplete="username" autocapitalize="none" spellcheck="false" aria-describedby="usernameNote" required>
               </div>
               <button class="field-note" id="usernameNote" type="button"></button>
             </div>
@@ -59,7 +59,7 @@
   </main>
   <dialog class="help-dialog" id="helpDialog" aria-labelledby="helpTitle">
     <div class="dialog-header"><h2 id="helpTitle">登录帮助</h2><button class="dialog-close" id="closeHelp" type="button" aria-label="关闭登录帮助"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
-    <% if (supportPhone && supportPhoneHref) { %>
+    <% if (typeof supportPhone === 'string' && supportPhone && typeof supportPhoneHref === 'string' && supportPhoneHref) { %>
       <a class="help-option" href="tel:<%= supportPhoneHref %>">联系管理员 · <%= supportPhone %></a>
     <% } else { %>
       <details class="help-details"><summary>如何联系管理员？</summary><p>联系为你分配账号或发送邀请码的企业管理员。当前平台尚未提供公开联系电话。</p></details>
@@ -136,6 +136,22 @@
             credentials: 'same-origin',
             body: new URLSearchParams(new FormData(form))
           });
+          // Existing production releases return HTML/redirects; newer releases return JSON.
+          // Follow the server's real result without changing account or session rules.
+          if (!(response.headers.get('content-type') || '').includes('application/json')) {
+            const destination = new URL(response.url, window.location.href);
+            if (response.ok && response.redirected && destination.origin === window.location.origin && destination.pathname !== '/login') {
+              navigating = true;
+              window.location.assign(destination.href);
+              return;
+            }
+            const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+            const message = page.querySelector('#loginStatus, .error')?.textContent.trim() || '';
+            const invalidCredentials = response.status === 401 && (!message || /账号或密码(?:错误|有误)/.test(message));
+            status.textContent = invalidCredentials ? '账号或密码有误' : message || (response.status === 429 ? '登录尝试过多，请稍后再试' : '登录失败，请重试');
+            if (invalidCredentials) { password.value = ''; password.focus(); }
+            return;
+          }
           const data = await response.json();
           if (!response.ok || !data.success) {
             status.textContent = data.msg || '登录失败，请重试';
