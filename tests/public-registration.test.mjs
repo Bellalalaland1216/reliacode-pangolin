@@ -66,7 +66,7 @@ test('any visitor can create a role-locked member account and use the member wor
     assert.equal(loginPage.status, 200);
     const loginHtml = await loginPage.text();
     assert.match(loginHtml, /穿山甲溯源大师/);
-    assert.match(loginHtml, /商品溯源查询 · 无需登录/);
+    assert.match(loginHtml, /商品溯源码查询/);
     assert.match(loginHtml, /邀请码注册/);
     assert.doesNotMatch(loginHtml, /使用企业账号登录，管理产品溯源信息。/);
     assert.doesNotMatch(loginHtml, /一物一码|溯源流程示意|class="brand-panel"/);
