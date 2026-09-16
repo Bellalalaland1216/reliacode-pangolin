@@ -92,12 +92,15 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 }
 .wind-plant,.canopy,.ambient-sprig { transform-box:view-box; }
 .wind-plant { transform-origin:365px 821px; animation:grass-sway 5.8s ease-in-out infinite alternate; }
+.plant-left-detail { animation-name:foreground-grass-sway; }
 .plant-back { transform-origin:561px 664px; animation-duration:4.8s; animation-delay:-2s; }
 .plant-right { transform-origin:718px 800px; animation-duration:6.2s; animation-delay:-1.4s; }
 .canopy { transform-origin:218px 133px; animation:branch-sway 7s ease-in-out infinite alternate; }
-.ambient-sprig { transform-origin:22px 988px; animation:branch-sway 8s ease-in-out infinite alternate; }
+.ambient-sprig { transform-origin:22px 988px; animation:outer-grass-sway 8s ease-in-out infinite alternate; }
 .motion-paused .wind-plant,.motion-paused .canopy,.motion-paused .ambient-sprig { animation-play-state:paused; }
 @keyframes grass-sway { from { transform:skewX(-.3deg); } to { transform:skewX(.45deg); } }
+@keyframes foreground-grass-sway { from { transform:skewX(-.65deg); } to { transform:skewX(.85deg); } }
+@keyframes outer-grass-sway { from { transform:rotate(-.55deg); } to { transform:rotate(.65deg); } }
 @keyframes branch-sway { from { transform:rotate(-.25deg); } to { transform:rotate(.35deg); } }
 @keyframes spinner { to { transform:rotate(360deg); } }
 @media (max-width:900px) {
