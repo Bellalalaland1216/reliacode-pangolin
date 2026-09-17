@@ -404,6 +404,17 @@ function requireRole(...roles) {
 }
 // 401 时前端跳登录页（供 fetch 全局处理）
 const ROLE_NAMES = { AUDIT_VIEWER: '只读体验账号', member: '普通用户', admin: '平台管理员', brand: '品牌管理员', brand_staff: '品牌方工作账号', factory: '工厂装箱', warehouse: '品牌方', distributor: '代理商' };
+function normalizeLoginIdentifier(value) {
+  const account = String(value || '').trim();
+  return account.includes('@') ? account.toLowerCase() : account;
+}
+function isPublicLoginIdentifier(account) {
+  if (/^1\d{10}$/.test(account)) return true;
+  const localPart = account.split('@')[0];
+  return account.length <= 254 && localPart.length <= 64 && !localPart.startsWith('.') && !localPart.endsWith('.') && !localPart.includes('..') &&
+    /^[a-z0-9._%+-]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i.test(account);
+}
+
 const PASSWORD_POLICY_MESSAGE = '密码至少12位，包含大小写字母、数字和符号';
 function passwordMeetsPolicy(value) {
   const password = String(value || '');
@@ -524,7 +535,7 @@ function agentLoginRateLimit(req, res, next) {
 }
 
 app.post('/api/agent/login', agentLoginRateLimit, (req, res) => {
-  const username = String(req.body.username || '').trim();
+  const username = normalizeLoginIdentifier(req.body.username);
   const password = String(req.body.password || '');
   const clientName = String(req.body.client_name || 'agent').trim().slice(0, 80) || 'agent';
   const user = username ? db.prepare('SELECT * FROM users WHERE username=?').get(username) : null;
@@ -587,7 +598,7 @@ app.get('/login', (req, res) => {
 });
 
 app.post('/login', loginRateLimit, (req, res, next) => {
-  const username = String(req.body.username || '').trim();
+  const username = normalizeLoginIdentifier(req.body.username);
   const password = String(req.body.password || '');
   const rememberLogin = req.body.remember === '1';
   if (!username || !password) {
@@ -669,22 +680,19 @@ app.get('/register', (req, res) => {
 
 // 普通用户开放注册：角色由服务端固定为 member，不接受客户端传入角色或租户归属。
 app.post('/api/register/public', registrationRateLimit, (req, res) => {
-  const username = String(req.body.username || '').trim();
+  const username = normalizeLoginIdentifier(req.body.username);
   const displayName = String(req.body.display_name || '').trim();
   const password = String(req.body.password || '');
-  const phone = String(req.body.phone || '').trim();
+  const phone = /^1\d{10}$/.test(username) ? username : '';
 
-  if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
-    return res.status(400).json({ success: false, code: 'INVALID_USERNAME', msg: '账号需为3-20位字母、数字或下划线' });
+  if (!isPublicLoginIdentifier(username)) {
+    return res.status(400).json({ success: false, code: 'INVALID_USERNAME', msg: '请输入有效的11位手机号或邮箱地址' });
   }
   if (!displayName || displayName.length > 40) {
     return res.status(400).json({ success: false, code: 'INVALID_DISPLAY_NAME', msg: '请填写1-40个字符的姓名或昵称' });
   }
   if (!passwordMeetsPolicy(password)) {
     return res.status(400).json({ success: false, code: 'WEAK_PASSWORD', msg: PASSWORD_POLICY_MESSAGE });
-  }
-  if (phone && !/^1\d{10}$/.test(phone)) {
-    return res.status(400).json({ success: false, code: 'INVALID_PHONE', msg: '请填写正确的11位手机号，或留空' });
   }
   if (db.prepare('SELECT 1 FROM users WHERE username=?').get(username)) {
     return res.status(409).json({ success: false, code: 'USERNAME_TAKEN', msg: '该账号已被使用，请更换一个' });

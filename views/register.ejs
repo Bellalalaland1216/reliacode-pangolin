@@ -9,8 +9,8 @@
   <title>穿山甲溯源大师 · 注册</title>
   <link rel="icon" href="/icons/pangolin-photo.png?v=20260905">
   <link rel="preload" as="image" href="/images/register-woodland/background.webp?v=20260917a">
-  <link rel="stylesheet" href="/css/register-glass.css?v=20260917fit1">
-  <script src="/js/register-glass.js?v=20260917a" defer></script>
+  <link rel="stylesheet" href="/css/register-glass.css?v=20260917fit2">
+  <script src="/js/register-glass.js?v=20260917fit2" defer></script>
 </head>
 <body>
   <main class="register-page">
@@ -27,7 +27,7 @@
           <div class="form-grid">
             <div class="form-group">
               <label for="publicUsername">登录账号</label>
-              <div class="glass-field"><input type="text" id="publicUsername" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="3-20位字母、数字或下划线" required></div>
+              <div class="glass-field"><input type="text" id="publicUsername" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="请输入手机号或邮箱" required></div>
             </div>
             <div class="form-group">
               <label for="publicDisplayName">姓名或昵称</label>
@@ -40,10 +40,6 @@
             <div class="form-group">
               <label for="publicPassword2">确认密码</label>
               <div class="glass-field"><input type="password" id="publicPassword2" name="password_confirm" autocomplete="new-password" placeholder="再次输入密码" required></div>
-            </div>
-            <div class="form-group">
-              <label for="publicPhone">手机号（选填）</label>
-              <div class="glass-field"><input type="tel" id="publicPhone" name="phone" autocomplete="tel" inputmode="numeric" maxlength="11" placeholder="11位手机号"></div>
             </div>
           </div>
           <button type="submit" class="glass-button btn-register" id="publicRegisterButton">创建普通用户账号</button>

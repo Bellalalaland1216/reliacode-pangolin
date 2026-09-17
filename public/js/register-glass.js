@@ -57,20 +57,29 @@ function passwordIsValid(password) {
   return password.length >= 12 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9\s]/.test(password);
 }
 
+function normalizeLoginIdentifier(value) {
+  const account = String(value || '').trim();
+  return account.includes('@') ? account.toLowerCase() : account;
+}
+function isPublicLoginIdentifier(account) {
+  if (/^1\d{10}$/.test(account)) return true;
+  const localPart = account.split('@')[0];
+  return account.length <= 254 && localPart.length <= 64 && !localPart.startsWith('.') && !localPart.endsWith('.') && !localPart.includes('..') &&
+    /^[a-z0-9._%+-]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i.test(account);
+}
+
 async function registerPublic(event) {
   event.preventDefault();
   if (event.currentTarget.querySelector('[type="submit"]').disabled) return;
   const body = {
-    username: document.getElementById('publicUsername').value.trim(),
+    username: normalizeLoginIdentifier(document.getElementById('publicUsername').value),
     display_name: document.getElementById('publicDisplayName').value.trim(),
-    password: document.getElementById('publicPassword').value,
-    phone: document.getElementById('publicPhone').value.trim()
+    password: document.getElementById('publicPassword').value
   };
-  if (!/^[a-zA-Z0-9_]{3,20}$/.test(body.username)) return showMessage(publicMsg, '账号需为3-20位字母、数字或下划线', false);
+  if (!isPublicLoginIdentifier(body.username)) return showMessage(publicMsg, '请输入有效的11位手机号或邮箱地址', false);
   if (!body.display_name) return showMessage(publicMsg, '请填写姓名或昵称', false);
   if (!passwordIsValid(body.password)) return showMessage(publicMsg, '密码至少12位，包含大小写字母、数字和符号', false);
   if (body.password !== document.getElementById('publicPassword2').value) return showMessage(publicMsg, '两次输入的密码不一致', false);
-  if (body.phone && !/^1\d{10}$/.test(body.phone)) return showMessage(publicMsg, '请填写正确的11位手机号，或留空', false);
 
   const button = document.getElementById('publicRegisterButton');
   button.disabled = true;

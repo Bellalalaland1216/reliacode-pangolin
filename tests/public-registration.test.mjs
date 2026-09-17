@@ -44,8 +44,12 @@ test('any visitor can create a role-locked member account and use the member wor
   process.env.RELIACODE_DATA_DIR = dataDir;
   const databasePath = require.resolve('../database.js');
   delete require.cache[databasePath];
-  const { db, initDatabase } = require('../database.js');
-  initDatabase();
+  const { db, initDatabase, hashPassword } = require('../database.js');
+  const savedLog = console.log;
+  console.log = () => {};
+  try { initDatabase(); } finally { console.log = savedLog; }
+  db.prepare('INSERT INTO users (username,password_hash,display_name,role) VALUES (?,?,?,?)')
+    .run('legacy_member', hashPassword('LegacyMember12!'), '旧普通账号', 'member');
   db.prepare("INSERT INTO settings (key,value) VALUES ('contact_phone',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
     .run('010-12345678');
   const defaultBrand = db.prepare('SELECT id FROM brands ORDER BY id LIMIT 1').get();
@@ -81,28 +85,54 @@ test('any visitor can create a role-locked member account and use the member wor
     assert.equal((await publicRegions.json()).success, true);
 
     const weakPassword = await postJson(`${baseUrl}/api/register/public`, {
-      username: 'open_member', display_name: '开放用户', password: 'too-short', role: 'admin'
+      username: '13800138000', display_name: '开放用户', password: 'too-short', role: 'admin'
     });
     assert.equal(weakPassword.status, 400);
     assert.equal((await weakPassword.json()).code, 'WEAK_PASSWORD');
 
     const password = 'OpenMember12!';
     const registration = await postJson(`${baseUrl}/api/register/public`, {
-      username: 'open_member', display_name: '开放用户', phone: '13800138000', password,
+      username: '13800138000', display_name: '开放用户', phone: '13900139000', password,
       role: 'admin', brand_id: 1, factory_id: 1, distributor_id: 1
     });
     assert.equal(registration.status, 201);
     assert.equal((await registration.json()).success, true);
     assert.deepEqual(
-      { ...db.prepare('SELECT username,display_name,phone,role,brand_id,factory_id,distributor_id FROM users WHERE username=?').get('open_member') },
-      { username: 'open_member', display_name: '开放用户', phone: '13800138000', role: 'member', brand_id: null, factory_id: null, distributor_id: null }
+      { ...db.prepare('SELECT username,display_name,phone,role,brand_id,factory_id,distributor_id FROM users WHERE username=?').get('13800138000') },
+      { username: '13800138000', display_name: '开放用户', phone: '13800138000', role: 'member', brand_id: null, factory_id: null, distributor_id: null }
     );
 
     const duplicate = await postJson(`${baseUrl}/api/register/public`, {
-      username: 'open_member', display_name: '另一用户', password
+      username: '13800138000', display_name: '另一用户', password
     });
     assert.equal(duplicate.status, 409);
     assert.equal((await duplicate.json()).code, 'USERNAME_TAKEN');
+
+    // Email identifiers are canonicalized for both uniqueness and password login.
+    const email = 'Member.Check+one@Example.com';
+    const emailRegistration = await postJson(baseUrl + '/api/register/public', {
+      username: email, display_name: '邮箱用户', password
+    });
+    assert.equal(emailRegistration.status, 201);
+    assert.equal((await emailRegistration.json()).username, email.toLowerCase());
+    assert.equal(db.prepare('SELECT phone FROM users WHERE username=?').get(email.toLowerCase()).phone, '');
+    const sameEmail = await postJson(baseUrl + '/api/register/public', {
+      username: 'MEMBER.CHECK+ONE@example.COM', display_name: '重复邮箱', password
+    });
+    assert.equal(sameEmail.status, 409);
+    for (const username of ['plain_username', '12345', 'member@example', 'member@bad..com']) {
+      const invalid = await postJson(baseUrl + '/api/register/public', { username, display_name: '无效账号', password });
+      assert.equal(invalid.status, 400);
+      assert.equal((await invalid.json()).code, 'INVALID_USERNAME');
+    }
+    for (const [username, accountPassword] of [[email.toUpperCase(), password], ['legacy_member', 'LegacyMember12!']]) {
+      const response = await fetch(baseUrl + '/login', {
+        method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ username, password: accountPassword })
+      });
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).redirect, '/member');
+    }
 
     const invitationCheck = await postJson(`${baseUrl}/api/register/check-code`, { code: 'OPENPARTNERQA' });
     assert.equal(invitationCheck.status, 200);
@@ -117,14 +147,14 @@ test('any visitor can create a role-locked member account and use the member wor
 
     const invalidLogin = await fetch(`${baseUrl}/login`, {
       method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ username: 'open_member', password: 'WrongPassword12!' })
+      body: new URLSearchParams({ username: '13800138000', password: 'WrongPassword12!' })
     });
     assert.equal(invalidLogin.status, 401);
     assert.deepEqual(await invalidLogin.json(), { success: false, code: 'INVALID_CREDENTIALS', msg: '账号或密码有误' });
 
     const login = await fetch(`${baseUrl}/login`, {
       method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ username: 'open_member', password })
+      body: new URLSearchParams({ username: '13800138000', password })
     });
     assert.equal(login.status, 200);
     assert.deepEqual(await login.json(), { success: true, redirect: '/member' });
