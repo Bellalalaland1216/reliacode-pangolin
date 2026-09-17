@@ -10,7 +10,7 @@ a { color:inherit; }
 .reference-stage { position:relative; isolation:isolate; container-type:inline-size; width:100%; height:100dvh; --scene-unit:min(1vw, 1.59879032dvh); }
 .nature-background { position:absolute; inset:0; pointer-events:none; }
 .nature-background > svg { display:block; width:100%; height:100%; }
-.login-shell { position:absolute; left:11.664565%; top:7.96371%; width:76.67087%; height:81.25%; border-radius:calc(2.395965 * var(--scene-unit)); background:linear-gradient(115deg,#fff 10%,#fcfefd 100%); }
+.login-shell { position:absolute; left:11.664565%; top:7.96371%; width:76.67087%; height:81.25%; border-radius:3.125% / 4.71464%; background:linear-gradient(115deg,#fff 10%,#fcfefd 100%); }
 .art-panel { position:absolute; inset:0 auto 0 0; width:53.453947%; pointer-events:none; }
 .scene-art,.woodland-scene { display:block; width:100%; height:100%; }
 .woodland-scene { overflow:hidden; }

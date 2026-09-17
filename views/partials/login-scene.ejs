@@ -1,6 +1,9 @@
 <div class="scene-art" aria-hidden="true">
-  <svg class="woodland-scene" viewBox="185 79 650 806" focusable="false">
+  <svg class="woodland-scene" viewBox="185 79 650 806" preserveAspectRatio="none" focusable="false">
     <defs>
+      <!-- The scene and outer backdrop share reference coordinates at every desktop ratio. -->
+      <!-- A viewBox alone does not crop the full reference image when SVG fitting changes. -->
+      <clipPath id="sceneBounds"><rect x="185" y="79" width="650" height="806"/></clipPath>
       <!-- Rotate in a unit circle, then restore the photographed wheel perspective. -->
       <clipPath id="wheelFace"><circle r="1"/></clipPath>
       <clipPath id="sceneWindow"><path d="M209 267C209 166 249 105 343 105C426 105 475 135 497 189C526 252 543 261 589 282C634 302 646 331 682 361C722 394 772 405 799 443C828 482 836 527 825 580C817 639 795 657 751 683C707 707 704 733 720 767C738 798 755 825 730 847C707 878 644 868 599 856C557 844 537 837 482 838C363 841 273 839 234 775C208 736 209 696 209 635Z"/></clipPath>
@@ -24,6 +27,7 @@
 <clipPath id="leaf-four"><path d="M643 419C672 422 682 430 689 453C664 449 653 443 643 419Z"/></clipPath>
 <clipPath id="leaf-five"><path d="M741 731C746 704 760 699 783 689C778 716 765 723 745 728Z"/></clipPath>
     </defs>
+    <g clip-path="url(#sceneBounds)">
     <image href="/images/login-woodland/reference.webp" width="1586" height="992"/>
     <g mask="url(#movingObjectHoles)"><image href="/images/login-woodland/clean-plate.webp" width="1586" height="992" preserveAspectRatio="none"/></g>
     <g clip-path="url(#sceneWindow)">
@@ -50,5 +54,6 @@
     <g class="reference-leaf leaf-three" data-leaf-x="626" data-leaf-y="319"><g clip-path="url(#leaf-three)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
 <g class="reference-leaf leaf-four" data-leaf-x="666" data-leaf-y="438"><g clip-path="url(#leaf-four)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
 <g class="reference-leaf leaf-five" data-leaf-x="762" data-leaf-y="711"><g clip-path="url(#leaf-five)"><image href="/images/login-woodland/reference.webp" width="1586" height="992"/></g></g>
+    </g>
   </svg>
 </div>
