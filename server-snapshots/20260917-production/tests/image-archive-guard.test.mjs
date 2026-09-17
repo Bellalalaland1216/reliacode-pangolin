@@ -8,6 +8,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 const downloads = fs.readFileSync(path.join(root, 'views', 'downloads.ejs'), 'utf8');
 const warehouse = fs.readFileSync(path.join(root, 'views', 'warehouse.ejs'), 'utf8');
+const clawmasterCss = fs.readFileSync(path.join(root, 'public', 'css', 'clawmaster.css'), 'utf8');
+const workflowCss = fs.readFileSync(path.join(root, 'public', 'css', 'workflow-layout.css'), 'utf8');
 
 test('large image archives are rejected before QR buffers are allocated', () => {
   const guard = server.indexOf("if (mode === 'zip' && actual > IMAGE_ARCHIVE_MAX_CODES)");
@@ -31,3 +33,9 @@ test('shipment code trees do not emit duplicate global ids', () => {
   assert.match(warehouse, /head\.nextElementSibling/);
 });
 
+test('dark workflow cards and primary actions keep readable foregrounds', () => {
+  assert.match(workflowCss, /@media \(prefers-color-scheme: dark\)/);
+  assert.match(workflowCss, /\.package-mobile-card,[\s\S]*background: var\(--cm-surface, #181c19\) !important/);
+  assert.match(workflowCss, /\.package-mobile-meta span,[\s\S]*background: var\(--workflow-canvas\) !important/);
+  assert.match(clawmasterCss, /\.btn-primary,[\s\S]*color: var\(--cm-canvas\) !important/);
+});

@@ -16,7 +16,7 @@ c402fb788758a147af712ee5e988a254b8871f1a88a4b4a010c12e87ebeb89f6  ./sqlite-sessi
 0b85afd449cec8d277f5625a75a37210d26d7cd0c6b0688035fb49499f542305  ./tests/code-package-candidate-acceptance.mjs
 d4e02cedf061214cdd9a2e4b4a49d85e2fcf724a34940219a4975f78545c5181  ./tests/code-package-production.test.mjs
 ee61f91effd45e2a582b3ee4e2843d99be26942c64b16d50d4ceab95a132125c  ./tests/download-center-log-permission.test.mjs
-b33dd7ed34ee5f18dc672fdb129e049f9d88b84ca0f01d39a867cee8096751e5  ./tests/image-archive-guard.test.mjs
+2358541cf3fb0aada5a9e5b2794e68c7e633c568bec4739a7c151ae783ce0221  ./tests/image-archive-guard.test.mjs
 71a330e79ec470811c8752f9e9e2800f87eb06a62c1b6a4f3fed477abf20a63f  ./views/admin-business.ejs
 3386b03f92036d1c291ac3e9ab587f918ecbc9452baa933bc7047d0139f73d8b  ./views/admin-me.ejs
 723ba3908ace438e96b5f48df444167a07141e5d4bb3b9e39dae585e076e1bb7  ./views/admin.ejs
