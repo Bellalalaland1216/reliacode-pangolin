@@ -23,7 +23,7 @@ test('alert deletion is tenant-scoped, audited and restricted to administrators'
 });
 
 test('one-time brand administrator invitations are platform-only and brand-bound', async () => {
-  const [server, register, users] = await Promise.all([read('server.js'), read('views/register.ejs'), read('views/users.ejs')]);
+  const [server, register, users] = await Promise.all([read('server.js'), read('public/js/register-glass.js'), read('views/users.ejs')]);
   assert.match(server, /\['factory', 'distributor', 'brand'\]\.includes\(role\)/);
   assert.match(server, /role === 'brand' && scope !== null/);
   assert.match(server, /role === 'brand' && !brand_id/);
