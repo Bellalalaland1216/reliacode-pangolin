@@ -1,0 +1,5 @@
+# Reviewed false positives: deterministic idempotency-key fixtures in API tests.
+# These values authenticate nothing and cannot access any environment.
+cf15bdefab0ef6b76734e56362d8b294d93b5661:apps/scan-api/tests/saas.test.mjs:generic-api-key:51
+e9f79f1235841f526cad9a1b32f2fe83f4f1ffcb:apps/scan-api/tests/saas.test.mjs:generic-api-key:28
+e9f79f1235841f526cad9a1b32f2fe83f4f1ffcb:apps/scan-api/tests/saas.test.mjs:generic-api-key:29

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 扫码日志 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260917-hardening-v1">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'logs' }) %>
+  <% const canDeleteLogs = user && (user.role === 'admin' || user.role === 'brand'); %>
+
+  <div class="container">
+    <header class="page-heading">
+      <span class="eyebrow">审计记录</span>
+      <h1>扫码日志</h1>
+      <p>查看扫码事件、区域异常和处理结果。</p>
+    </header>
+    <div class="card">
+      <div class="card-title split-title">
+        <span>扫码日志（最近200条）</span>
+        <% if (canDeleteLogs) { %><button id="batchBtn" class="btn btn-outline btn-sm danger-action is-hidden" type="button"><%- icon('trash') %> 批量删除选中（<span id="selCount">0</span>）</button><% } %>
+      </div>
+      <div class="filter-actions">
+        <button id="filterAllBtn" class="btn btn-outline btn-sm" type="button">全部</button>
+        <button id="filterDiversionBtn" class="btn btn-outline btn-sm" type="button">仅串货</button>
+        <a class="btn btn-outline btn-sm" href="/api/export/logs"><%- icon('download') %> 导出Excel</a>
+      </div>
+      <table class="table" id="logTable">
+        <thead>
+          <tr>
+            <% if (canDeleteLogs) { %><th class="checkbox-column"><input type="checkbox" id="chkAll" aria-label="选择全部扫码记录"></th><% } %>
+            <th>扫码码</th><th>产品</th><th>代理商</th>
+            <th>指定区域</th><th>扫码区域</th><th>来源标识</th>
+            <th>状态</th><th>扫码时间</th><% if (canDeleteLogs) { %><th>操作</th><% } %>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (logs.length === 0) { %>
+          <tr><td colspan="<%= canDeleteLogs ? 10 : 8 %>" class="empty-cell">暂无扫码记录</td></tr>
+          <% } %>
+          <% logs.forEach(l => { %>
+          <tr class="log-row" id="logRow-<%= l.id %>" data-diversion="<%= l.is_diversion %>">
+            <% if (canDeleteLogs) { %><td><input type="checkbox" class="log-chk" value="<%= l.id %>" aria-label="选择日志 <%= l.id %>"></td><% } %>
+            <td class="code-cell"><%= l.item_code %></td>
+            <td><%= l.product_name || '-' %></td>
+            <td><%= l.distributor_name || '-' %></td>
+            <td><%= l.assigned_region || '-' %></td>
+            <td><%= l.scan_location || '-' %></td>
+            <td class="meta-cell"><%= l.scan_ip || '-' %></td>
+            <td>
+              <% if (l.is_diversion >= 2) { %>
+                <span class="tag tag-red">重度串货</span>
+              <% } else if (l.is_diversion === 1) { %>
+                <span class="tag tag-yellow">轻度串货</span>
+              <% } else { %>
+                <span class="tag tag-green">正常</span>
+              <% } %>
+            </td>
+            <td class="meta-cell"><%= l.scanned_at %></td>
+            <% if (canDeleteLogs) { %><td><button class="btn btn-outline btn-sm delete-log-btn danger-action compact-action" type="button" data-log-id="<%= l.id %>" data-item-code="<%= l.item_code %>">删除</button></td><% } %>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script nonce="<%= cspNonce %>">
+    function filterAll() {
+      document.querySelectorAll('.log-row').forEach(r => r.classList.remove('is-hidden'));
+    }
+    function filterDiversion() {
+      document.querySelectorAll('.log-row').forEach(r => {
+        r.classList.toggle('is-hidden', r.dataset.diversion === '0');
+      });
+    }
+
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 2500);
+    }
+
+    function selectedIds() {
+      return Array.from(document.querySelectorAll('.log-chk:checked')).map(c => parseInt(c.value));
+    }
+    function updateSelCount() {
+      const n = selectedIds().length;
+      const count = document.getElementById('selCount');
+      const batch = document.getElementById('batchBtn');
+      if (count) count.textContent = n;
+      if (batch) batch.classList.toggle('is-hidden', n === 0);
+    }
+    function toggleAll(el) {
+      document.querySelectorAll('.log-chk').forEach(c => { c.checked = el.checked; });
+      updateSelCount();
+    }
+
+    async function delLog(id, code) {
+      if (!confirm(`确定删除这条扫码记录吗？\n码值：${code}\n删除后不可恢复`)) return;
+      const res = await fetch('/api/scan-logs/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        toast(data.msg || '已删除');
+        const row = document.getElementById('logRow-' + id);
+        if (row) row.remove();
+        updateSelCount();
+      } else toast(data.msg || '删除失败', 'error');
+    }
+
+    async function batchDelete() {
+      const ids = selectedIds();
+      if (!ids.length) return toast('请先勾选要删除的记录', 'error');
+      if (!confirm(`确定删除选中的 ${ids.length} 条扫码记录吗？删除后不可恢复`)) return;
+      const res = await fetch('/api/scan-logs/batch-delete', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ ids })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast(data.msg || '删除成功');
+        setTimeout(() => location.reload(), 600);
+      } else toast(data.msg || '删除失败', 'error');
+    }
+
+    const batchBtn = document.getElementById('batchBtn');
+    if (batchBtn) batchBtn.addEventListener('click', batchDelete);
+    document.getElementById('filterAllBtn').addEventListener('click', filterAll);
+    document.getElementById('filterDiversionBtn').addEventListener('click', filterDiversion);
+    const chkAll = document.getElementById('chkAll');
+    if (chkAll) chkAll.addEventListener('change', event => toggleAll(event.currentTarget));
+    document.querySelectorAll('.log-chk').forEach(checkbox => checkbox.addEventListener('change', updateSelCount));
+    document.querySelectorAll('.delete-log-btn').forEach(button => {
+      button.addEventListener('click', () => delLog(Number(button.dataset.logId), button.dataset.itemCode));
+    });
+  </script>
+</body>
+</html>

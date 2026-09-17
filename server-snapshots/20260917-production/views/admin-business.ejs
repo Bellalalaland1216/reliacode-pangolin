@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 业务 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260917-hardening-v1">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'business' }) %>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>业务</h1>
+      <p>按现场流程进入对应工作。</p>
+    </div>
+
+    <div class="section-title">选择工作</div>
+    <div class="app-grid">
+      <a href="/factory" class="app-tile"><span class="app-icon orange"><%- icon('box') %></span><span class="app-label">工厂装箱</span><span class="app-desc">绑定箱码与子码</span></a>
+      <a href="/warehouse" class="app-tile"><span class="app-icon green"><%- icon('truck') %></span><span class="app-label">品牌发货</span><span class="app-desc">扫码发往代理商</span></a>
+      <a href="/generate#generate" class="app-tile"><span class="app-icon purple"><%- icon('plus') %></span><span class="app-label">普通生码</span><span class="app-desc">少量箱码与子码</span></a>
+      <a href="/generate#products" class="app-tile"><span class="app-icon purple"><%- icon('tag') %></span><span class="app-label">产品档案</span><span class="app-desc">产品资料与展示</span></a>
+      <a href="/codes" class="app-tile"><span class="app-icon indigo"><%- icon('search') %></span><span class="app-label">码档案</span><span class="app-desc">查询、打印与导出</span></a>
+      <a href="/downloads" class="app-tile"><span class="app-icon teal"><%- icon('download') %></span><span class="app-label">生产码包</span><span class="app-desc">生成 5 万码 TXT</span></a>
+      <a href="/distributors" class="app-tile"><span class="app-icon blue"><%- icon('handshake') %></span><span class="app-label">代理商</span><span class="app-desc">维护渠道档案</span></a>
+    </div>
+  </div>
+</body>
+</html>

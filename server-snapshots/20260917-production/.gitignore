@@ -1,0 +1,11 @@
+.env
+data/
+backups/
+node_modules/
+public/qr/
+public/uploads/
+public/product-media/
+*.db
+*.db-*
+*.log
+

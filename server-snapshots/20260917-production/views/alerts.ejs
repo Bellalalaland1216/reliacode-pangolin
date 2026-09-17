@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 串货预警中心 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <script src="/js/echarts.min.js?v=1"></script>
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260917-hardening-v1">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'alerts' }) %>
+
+  <div class="container">
+    <header class="page-heading">
+      <span class="eyebrow">风险治理</span>
+      <h1>串货预警中心</h1>
+      <p>统一处理区域异常、取证和后续复核。</p>
+    </header>
+    <div class="card">
+      <div class="card-title">
+        <span><%- icon('location') %> 全国扫码分布</span>
+      </div>
+      <p class="supporting-text">消费者扫码地域分布总览，红色为串货预警、蓝色为正常扫码。</p>
+      <div id="geoMap" class="geo-map"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title split-title">
+        <span><%- icon('alert') %> 串货预警中心<% if (alerts.filter(a => !a.handled).length > 0) { %><span class="tag tag-red alert-count">未处理 <%= alerts.filter(a => !a.handled).length %></span><% } %></span>
+        <button class="btn btn-success btn-sm" id="handleAllBtn"><%- icon('check') %> 全部标记已处理</button>
+      </div>
+      <p class="supporting-text">消费者扫码检测到区域不符时自动产生预警：轻度=同省跨市，重度=跨省流通。</p>
+      <% if (alerts.length === 0) { %>
+        <p class="empty-state empty-state-large">暂无预警记录</p>
+      <% } else { %>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>级别</th><th>溯源码</th><th>产品</th><th>代理商</th>
+            <th>指定区域</th><th>实际扫码位置</th><th>时间</th><th>状态</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% alerts.forEach(a => { %>
+          <tr class="<%= a.handled ? 'is-muted' : '' %>">
+            <td><span class="tag <%= a.level >= 2 ? 'tag-red' : 'tag-yellow' %>"><%= a.level >= 2 ? '重度' : '轻度' %></span></td>
+            <td class="code-cell"><%= a.item_code %></td>
+            <td><%= a.product_name || '-' %></td>
+            <td><%= a.distributor_name || '-' %></td>
+            <td><%= a.assigned_region || '-' %></td>
+            <td><%= a.scan_location || '-' %></td>
+            <td class="meta-cell"><%= a.created_at %></td>
+            <td><%= a.handled ? '已处理' : '<span class="tag tag-red">待处理</span>' %></td>
+            <td class="no-wrap"><% if (!a.handled) { %><button class="btn btn-outline btn-sm handle-one-btn success-action" data-alert-id="<%= a.id %>">处理</button><% } %><% if (user && (user.role === 'admin' || user.role === 'brand')) { %> <button class="btn btn-outline btn-sm delete-alert-btn danger-action" data-alert-id="<%= a.id %>" data-alert-code="<%= a.item_code %>">删除</button><% } %></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      <% } %>
+    </div>
+  </div>
+
+  <script nonce="<%= cspNonce %>">
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+    async function handleOne(id) {
+      const res = await fetch(`/api/alerts/${id}/handle`, { method: 'POST' });
+      const d = await res.json();
+      if (d.success) location.reload();
+      else toast(d.msg || '操作失败', 'error');
+    }
+    async function handleAll() {
+      if (!confirm('确定将全部预警标记为已处理？')) return;
+      const res = await fetch('/api/alerts/handle-all', { method: 'POST' });
+      const d = await res.json();
+      if (d.success) location.reload();
+      else toast(d.msg || '操作失败', 'error');
+    }
+    async function deleteAlert(id, code) {
+      if (!confirm('确定删除溯源码「' + code + '」的这条预警？操作会写入审计日志。')) return;
+      const res = await fetch(`/api/alerts/${id}`, { method: 'DELETE' });
+      const d = await res.json();
+      if (d.success) location.reload();
+      else toast(d.msg || '删除失败', 'error');
+    }
+    document.getElementById('handleAllBtn').addEventListener('click', handleAll);
+    document.querySelectorAll('.handle-one-btn').forEach(button => {
+      button.addEventListener('click', () => handleOne(Number(button.dataset.alertId)));
+    });
+    document.querySelectorAll('.delete-alert-btn').forEach(button => {
+      button.addEventListener('click', () => deleteAlert(Number(button.dataset.alertId), button.dataset.alertCode));
+    });
+
+    // ===== 全国扫码分布地图 =====
+    (async function initGeoMap() {
+      const mapEl = document.getElementById('geoMap');
+      if (!mapEl || typeof echarts === 'undefined') return;
+      try {
+        const [geoRes, dataRes] = await Promise.all([
+          fetch('/js/china.json'),
+          fetch('/api/alerts/geo-map')
+        ]);
+        const chinaGeo = await geoRes.json();
+        const mapData = await dataRes.json();
+        if (!mapData.success) return;
+
+        echarts.registerMap('china', chinaGeo);
+        const chart = echarts.init(mapEl);
+        const list = mapData.list || [];
+
+        // 热力值（各省扫码数）
+        const heatData = list.map(item => ({ name: item.name, value: item.total }));
+        const maxTotal = Math.max(1, ...list.map(i => i.total));
+
+        // 散点：串货红点 + 正常蓝点
+        const diversionPoints = [];
+        const normalPoints = [];
+        list.forEach(item => {
+          (item.points || []).forEach(pt => {
+            const p = { name: pt.name, value: pt.value };
+            if (item.diversion > 0) diversionPoints.push(p);
+            else normalPoints.push(p);
+          });
+        });
+
+        const option = {
+          tooltip: {
+            trigger: 'item',
+            formatter: function (params) {
+              if (params.seriesType === 'map') {
+                return params.name + '<br/>扫码 ' + (params.value || 0) + ' 次';
+              }
+              if (params.seriesType === 'scatter') {
+                return params.name + '<br/>扫码位置';
+              }
+              return params.name;
+            }
+          },
+          visualMap: {
+            min: 0,
+            max: maxTotal,
+            left: 20,
+            bottom: 20,
+            text: ['多', '少'],
+            calculable: true,
+            inRange: { color: ['#e8f1fd', '#4a90d9', '#1a56a8'] }
+          },
+          geo: {
+            map: 'china',
+            roam: true,
+            label: { show: false },
+            itemStyle: { areaColor: '#f2f3f5', borderColor: '#c9ccd1' },
+            emphasis: { itemStyle: { areaColor: '#dbe7f5' }, label: { show: true } }
+          },
+          series: [
+            {
+              name: '扫码省份',
+              type: 'map',
+              map: 'china',
+              geoIndex: 0,
+              data: heatData
+            },
+            {
+              name: '串货预警',
+              type: 'effectScatter',
+              coordinateSystem: 'geo',
+              data: diversionPoints,
+              symbolSize: 10,
+              itemStyle: { color: '#ea4335' },
+              rippleEffect: { brushType: 'stroke' }
+            },
+            {
+              name: '正常扫码',
+              type: 'scatter',
+              coordinateSystem: 'geo',
+              data: normalPoints,
+              symbolSize: 7,
+              itemStyle: { color: '#1a73e8' }
+            }
+          ]
+        };
+        chart.setOption(option);
+        window.addEventListener('resize', () => chart.resize());
+      } catch (e) {
+        mapEl.innerHTML = '<p class="empty-state">地图加载失败，请刷新重试</p>';
+      }
+    })();
+  </script>
+</body>
+</html>

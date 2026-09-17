@@ -1,0 +1,43 @@
+<%
+  // 移动端 iOS 风格底部 Tab 栏：按角色渲染 2-4 个标签
+  const u = user || null;
+  const r = u ? (u.role === 'AUDIT_VIEWER' ? 'admin' : u.role) : '';
+  function buildTabs(role) {
+    if (role === 'admin' || role === 'brand' || role === 'brand_staff') return [
+      { href: '/',              icon: 'home', label: '首页', key: 'home' },
+      { href: '/admin/business',icon: 'grid', label: '业务', key: 'business' },
+      { href: '/alerts',        icon: 'alert', label: '预警', key: 'alerts', badge: true },
+      { href: '/brand-check',   icon: 'search', label: '查串货', key: 'brand-check' },
+      { href: '/admin/me',      icon: 'user', label: '我的', key: 'me' }
+    ];
+    if (role === 'factory') return [
+      { href: '/factory',  icon: 'box', label: '装箱', key: 'factory' },
+      { href: '/profile',  icon: 'user', label: '我的', key: 'profile' }
+    ];
+    if (role === 'warehouse') return [
+      { href: '/warehouse',icon: 'truck', label: '发货', key: 'warehouse' },
+      { href: '/profile',  icon: 'user', label: '我的', key: 'profile' }
+    ];
+    if (role === 'distributor') return [
+      { href: '/portal',   icon: 'home', label: '工作台', key: 'portal' },
+      { href: '/profile',  icon: 'user', label: '我的', key: 'profile' }
+    ];
+    return [];
+  }
+  const list = buildTabs(r);
+  const currentKey = (typeof active !== 'undefined' ? active : '') || '';
+  const unread = (typeof alertsUnread !== 'undefined' ? alertsUnread : 0) || 0;
+%>
+<% if (u && list.length > 0) { %>
+<nav class="bottom-nav" aria-label="移动端主导航">
+  <% list.forEach(t => { %>
+    <a href="<%= t.href %>" class="bn-item <%= currentKey === t.key ? 'active' : '' %>" <%- currentKey === t.key ? 'aria-current="page"' : '' %>>
+      <span class="bn-icon">
+        <%- icon(t.icon) %>
+        <% if (t.badge && unread > 0) { %><span class="bn-badge"><%= unread %></span><% } %>
+      </span>
+      <span class="bn-label"><%= t.label %></span>
+    </a>
+  <% }); %>
+</nav>
+<% } %>

@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 品牌营销 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <style nonce="<%= cspNonce %>">
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+    @media (max-width: 800px) { .row { grid-template-columns: 1fr; } }
+    .inline-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  </style>
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260917-hardening-v1">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'settings' }) %>
+
+  <div class="container">
+    <h1 class="sr-only">品牌营销设置</h1>
+    <!-- 品牌设置 -->
+    <div class="card">
+      <div class="card-title">品牌设置（消费者扫码页展示）</div>
+      <div class="row">
+        <div>
+          <div class="form-group">
+            <label>品牌名称</label>
+            <input type="text" id="brandName" class="form-control" value="<%= settings.brand_name || '' %>" placeholder="如：XX品牌">
+          </div>
+          <div class="form-group">
+            <label>Logo 标识文字</label>
+            <input type="text" id="logoText" class="form-control" value="<%= settings.logo_text || '' %>" placeholder="例如公司简称或品牌首字">
+          </div>
+          <div class="form-group">
+            <label>Logo 图片（上传后优先于标识文字展示）</label>
+            <input type="file" id="logoFile" accept="image/jpeg,image/png,image/gif,image/webp" hidden>
+            <div class="brand-asset-row">
+              <button id="chooseLogoBtn" class="btn btn-outline btn-sm" type="button"><%- icon('camera') %> 上传LOGO图片</button>
+              <img id="logoPreview" src="<%= settings.logo_image || '' %>" alt="" class="logo-preview <%= settings.logo_image ? '' : 'is-hidden' %>">
+              <button class="btn btn-outline btn-sm danger-action <%= settings.logo_image ? '' : 'is-hidden' %>" id="logoRemoveBtn" type="button">移除图片</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>品牌副标题（验证页品牌名下方一行金色小字，如「晶球主粮开创者」，留空则不展示）</label>
+            <input type="text" id="brandSubtitle" class="form-control" value="<%= settings.brand_subtitle || '' %>" placeholder="如：晶球主粮开创者">
+          </div>
+          <div class="form-group">
+            <label>欢迎语</label>
+            <input type="text" id="welcomeMsg" class="form-control" value="<%= settings.welcome_msg || '' %>" placeholder="如：正品验证 · 一扫溯源">
+          </div>
+        </div>
+        <div>
+          <input type="hidden" id="themeColor" value="#000000">
+          <div class="form-group">
+            <label>客服电话（选填）</label>
+            <input type="text" id="contactPhone" class="form-control" value="<%= settings.contact_phone || '' %>" placeholder="如：400-888-8888">
+          </div>
+          <div class="mt-28">
+            <button id="saveSettingsBtn" class="btn btn-primary" type="button">保存品牌设置</button>
+            <button id="previewH5Btn" class="btn btn-outline" type="button">预览扫码页</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 品牌素材 -->
+      <hr class="section-divider dashed-divider">
+      <div class="card-title brand-assets-title">品牌素材（消费者扫码页展示）</div>
+      <div class="row">
+        <div>
+          <div class="form-group">
+            <label>产品图片（最多6张，扫码页轮播展示）</label>
+            <input type="file" id="imgFiles" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
+            <button id="chooseImagesBtn" class="btn btn-outline btn-sm" type="button"><%- icon('camera') %> 上传图片</button>
+            <span id="imgUploading" class="upload-status"></span>
+            <div id="imgList" class="image-asset-list"></div>
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label>宣传视频（mp4 等，扫码页展示）</label>
+            <input type="file" id="videoFile" accept="video/*" hidden>
+            <button id="chooseVideoBtn" class="btn btn-outline btn-sm" type="button"><%- icon('video') %> 上传视频</button>
+            <span id="videoUploading" class="upload-status"></span>
+            <div id="videoInfo" class="media-info"></div>
+          </div>
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="showScanCount" class="width-auto"> 在扫码页展示累计扫码统计
+            </label>
+          </div>
+          <p class="small-text muted-text">提示：图片和视频上传后需点击"保存品牌设置"才会生效。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 营销活动 -->
+    <div class="card">
+      <div class="card-title">扫码营销活动（消费者扫码后自动抽奖）</div>
+      <div class="row">
+        <div>
+          <div class="form-group">
+            <label>活动名称</label>
+            <input type="text" id="cName" class="form-control" placeholder="如：双11扫码抽红包">
+          </div>
+          <div class="form-group">
+            <label>活动时间</label>
+            <div class="inline-row">
+              <input type="date" id="cStart" class="form-control flex-1">
+              <span class="control-separator">至</span>
+              <input type="date" id="cEnd" class="form-control flex-1">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>中奖率（%）</label>
+            <input type="number" id="cRate" class="form-control" value="30" min="0" max="100" placeholder="如：30">
+          </div>
+        </div>
+        <div>
+          <div class="form-group">
+            <label>奖品类型</label>
+            <select id="cType" class="form-control">
+              <option value="red_packet">现金红包</option>
+              <option value="coupon">优惠券</option>
+              <option value="goods">实物奖品</option>
+              <option value="thanks">谢谢参与</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>奖品名称</label>
+            <input type="text" id="cPrizeName" class="form-control" placeholder="如：夏日红包 / 满100减20券 / 定制帆布袋">
+          </div>
+          <div class="form-group" id="amountRow">
+            <label>红包/券金额</label>
+            <div class="inline-row">
+              <input type="number" id="cMin" class="form-control flex-1" placeholder="最低" value="1">
+              <span class="control-separator">~</span>
+              <input type="number" id="cMax" class="form-control flex-1" placeholder="最高" value="5">
+            </div>
+          </div>
+          <div class="mt-28">
+            <button id="createCampaignBtn" class="btn btn-success" type="button">创建活动</button>
+          </div>
+        </div>
+      </div>
+
+      <table class="table mt-16">
+        <thead>
+          <tr>
+            <th>活动名称</th><th>奖品</th><th>中奖率</th><th>有效期</th><th>状态</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (campaigns.length === 0) { %>
+          <tr><td colspan="6" class="empty-cell">还没有创建活动</td></tr>
+          <% } %>
+          <% campaigns.forEach(c => { %>
+          <tr>
+            <td><%= c.name %></td>
+            <td>
+              <%= c.prize_type === 'red_packet' ? '红包' : c.prize_type === 'coupon' ? '优惠券' : c.prize_type === 'goods' ? '实物' : '无' %>
+              <%= c.prize_name ? '· ' + c.prize_name : '' %>
+              <% if (c.prize_type === 'red_packet' || c.prize_type === 'coupon') { %>（<%= c.prize_min %>~<%= c.prize_max %>元）<% } %>
+            </td>
+            <td><%= c.win_rate %>%</td>
+            <td class="small-text"><%= c.start_date %> ~ <%= c.end_date %></td>
+            <td>
+              <% if (c.enabled) { %>
+                <span class="tag tag-green">进行中</span>
+              <% } else { %>
+                <span class="tag tag-gray">已停用</span>
+              <% } %>
+            </td>
+            <td>
+              <button class="btn btn-outline btn-sm toggle-campaign-btn" type="button" data-campaign-id="<%= c.id %>"><%= c.enabled ? '停用' : '启用' %></button>
+              <button class="btn btn-outline btn-sm delete-campaign-btn danger-action" type="button" data-campaign-id="<%= c.id %>">删除</button>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 中奖记录 -->
+    <div class="card">
+      <div class="card-title">中奖记录（最近50条）</div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>溯源码</th><th>活动</th><th>奖品</th><th>金额/内容</th><th>扫码区域</th><th>中奖时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (prizes.length === 0) { %>
+          <tr><td colspan="6" class="empty-cell">暂无中奖记录</td></tr>
+          <% } %>
+          <% prizes.forEach(p => { %>
+          <tr>
+            <td class="code-cell"><%= p.item_code %></td>
+            <td><%= p.campaign_name || '-' %></td>
+            <td><%= p.prize_type === 'red_packet' ? '红包' : p.prize_type === 'coupon' ? '优惠券' : p.prize_type === 'goods' ? '实物' : '无' %></td>
+            <td><%= p.prize_name || '-' %><%= p.prize_value ? '（' + p.prize_value + '元）' : '' %></td>
+            <td class="small-text"><%= p.scan_location || '-' %></td>
+            <td class="small-text secondary-text"><%= p.created_at %></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 数据备份 -->
+    <div class="card">
+      <div class="card-title"><%- icon('database') %> 数据备份</div>
+      <p class="section-help">
+        服务器每日 03:00 自动备份（保留最近14份）。也可立即备份下载到本地留存。
+      </p>
+      <div class="backup-actions">
+        <form method="POST" action="/api/backup/download" class="m-0">
+          <button type="submit" class="btn btn-primary"><%- icon('download') %> 立即备份并下载</button>
+        </form>
+        <button id="loadBackupsBtn" class="btn btn-outline" type="button">查看历史备份</button>
+      </div>
+      <div id="backupList" class="mt-12"></div>
+    </div>
+  </div>
+
+  <script nonce="<%= cspNonce %>">
+    const escapeHtml = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const safeLocalMedia = value => /^\/uploads\/[A-Za-z0-9._-]+$/.test(String(value || '')) ? String(value) : '';
+    // ---- 历史备份列表 ----
+    async function loadBackups() {
+      const res = await fetch('/api/backups');
+      const d = await res.json();
+      const box = document.getElementById('backupList');
+      if (!d.success || d.backups.length === 0) {
+        box.innerHTML = '<p class="muted-supporting-text">暂无历史备份（自动备份每日凌晨生成）</p>';
+        return;
+      }
+      box.innerHTML = '<table class="table"><thead><tr><th>备份文件</th><th>大小</th><th>时间</th><th>操作</th></tr></thead><tbody>' +
+        d.backups.map(b => `<tr>
+          <td class="code-cell">${escapeHtml(b.name)}</td>
+          <td>${(b.size / 1024).toFixed(1)} KB</td>
+          <td class="small-text secondary-text">${escapeHtml(b.created_at)}</td>
+          <td><a class="btn btn-outline btn-sm" href="/api/backups/download/${encodeURIComponent(b.name)}">下载</a></td>
+        </tr>`).join('') + '</tbody></table>';
+    }
+
+    // ---- 品牌素材状态 ----
+    let imgArr = (<%- JSON.stringify(settings.product_images || '').replace(/</g, '\\u003c') %>).split(/\r?\n/).map(s => safeLocalMedia(s.trim())).filter(Boolean);
+    let videoUrl = safeLocalMedia(<%- JSON.stringify(settings.promo_video || '').replace(/</g, '\\u003c') %>);
+    let logoImage = safeLocalMedia(<%- JSON.stringify(settings.logo_image || '').replace(/</g, '\\u003c') %>);
+
+    async function uploadLogo() {
+      const f = document.getElementById('logoFile').files[0];
+      if (!f) return;
+      const fd = new FormData(); fd.append('files', f);
+      try {
+        const res = await fetch('/api/upload/images', { method: 'POST', body: fd });
+        const d = await res.json();
+        if (!d.success) return toast(d.msg || '上传失败', 'error');
+        logoImage = d.urls[0];
+        renderLogo();
+        toast('上传成功，记得点击"保存品牌设置"', 'success');
+      } catch (e) {
+        toast('上传失败，请重试', 'error');
+      }
+    }
+    function removeLogo() { logoImage = ''; renderLogo(); }
+    function renderLogo() {
+      const img = document.getElementById('logoPreview');
+      img.src = logoImage;
+      img.classList.toggle('is-hidden', !logoImage);
+      document.getElementById('logoRemoveBtn').classList.toggle('is-hidden', !logoImage);
+    }
+
+    function renderImgs() {
+      const box = document.getElementById('imgList');
+      box.innerHTML = imgArr.map((u, i) => `
+        <div class="image-asset-card">
+          <img src="${escapeHtml(safeLocalMedia(u))}" class="image-asset-preview" alt="产品图片 ${i + 1}">
+          <button class="remove-image-btn" type="button" data-image-index="${i}" title="删除" aria-label="删除第 ${i + 1} 张图片"><svg class="ui-icon" aria-hidden="true"><use href="/icons/ui.svg#xmark"></use></svg></button>
+          ${i === 0 ? '<div class="cover-badge">封面</div>' : ''}
+        </div>
+      `).join('') || '<span class="small-text muted-text">暂无图片</span>';
+      box.querySelectorAll('.remove-image-btn').forEach(button => {
+        button.addEventListener('click', () => removeImg(Number(button.dataset.imageIndex)));
+      });
+    }
+    function removeImg(i) { imgArr.splice(i, 1); renderImgs(); }
+    function removeVideo() { videoUrl = ''; renderVideo(); }
+
+    function renderVideo() {
+      const el = document.getElementById('videoInfo');
+      el.innerHTML = videoUrl
+        ? `<div class="video-asset-row">
+             <a href="${escapeHtml(safeLocalMedia(videoUrl))}" target="_blank" rel="noopener" class="text-13">已上传视频</a>
+             <button id="removeVideoBtn" class="btn btn-outline btn-sm danger-action" type="button">删除</button>
+           </div>`
+        : '<span class="small-text muted-text">暂无视频</span>';
+      const removeButton = document.getElementById('removeVideoBtn');
+      if (removeButton) removeButton.addEventListener('click', removeVideo);
+    }
+
+    async function uploadImages() {
+      const input = document.getElementById('imgFiles');
+      const files = [...input.files];
+      input.value = '';
+      if (!files.length) return;
+      if (imgArr.length + files.length > 6) return toast('最多6张图片', 'error');
+      const fd = new FormData();
+      files.forEach(f => fd.append('files', f));
+      document.getElementById('imgUploading').textContent = '上传中...';
+      try {
+        const res = await fetch('/api/upload/images', { method: 'POST', body: fd });
+        const d = await res.json();
+        document.getElementById('imgUploading').textContent = '';
+        if (!d.success) return toast(d.msg || '上传失败', 'error');
+        imgArr.push(...d.urls);
+        renderImgs();
+        toast('上传成功，记得点击"保存品牌设置"', 'success');
+      } catch (e) {
+        document.getElementById('imgUploading').textContent = '';
+        toast('上传失败，请重试', 'error');
+      }
+    }
+
+    async function uploadVideo() {
+      const input = document.getElementById('videoFile');
+      const file = input.files[0];
+      input.value = '';
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('file', file);
+      document.getElementById('videoUploading').textContent = '上传中（大视频请耐心等待）...';
+      try {
+        const res = await fetch('/api/upload/video', { method: 'POST', body: fd });
+        const d = await res.json();
+        document.getElementById('videoUploading').textContent = '';
+        if (!d.success) return toast(d.msg || '上传失败', 'error');
+        videoUrl = d.url;
+        renderVideo();
+        toast('上传成功，记得点击"保存品牌设置"', 'success');
+      } catch (e) {
+        document.getElementById('videoUploading').textContent = '';
+        toast('上传失败，请重试', 'error');
+      }
+    }
+
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    function saveSettings() {
+      const body = {
+        brand_name: document.getElementById('brandName').value.trim(),
+        brand_subtitle: document.getElementById('brandSubtitle').value.trim(),
+        logo_text: document.getElementById('logoText').value.trim(),
+        logo_image: logoImage,
+        welcome_msg: document.getElementById('welcomeMsg').value.trim(),
+        theme_color: document.getElementById('themeColor').value,
+        contact_phone: document.getElementById('contactPhone').value.trim(),
+        product_images: imgArr.join('\n'),
+        promo_video: videoUrl,
+        show_scan_count: document.getElementById('showScanCount').checked ? '1' : '0'
+      };
+      fetch('/api/settings', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      }).then(r => r.json()).then(d => {
+        if (d.success) toast(d.msg || '已保存', 'success');
+        else toast(d.msg || '保存失败', 'error');
+      });
+    }
+
+    function previewH5() {
+      window.open('/v/demo', '_blank');
+    }
+
+    function togglePrizeInputs() {
+      const type = document.getElementById('cType').value;
+      document.getElementById('amountRow').classList.toggle('is-hidden', type !== 'red_packet' && type !== 'coupon');
+    }
+
+    function createCampaign() {
+      const body = {
+        name: document.getElementById('cName').value.trim(),
+        start_date: document.getElementById('cStart').value,
+        end_date: document.getElementById('cEnd').value,
+        win_rate: document.getElementById('cRate').value,
+        prize_type: document.getElementById('cType').value,
+        prize_name: document.getElementById('cPrizeName').value.trim(),
+        prize_min: document.getElementById('cMin').value,
+        prize_max: document.getElementById('cMax').value,
+        enabled: 1
+      };
+      if (!body.name) return toast('请输入活动名称', 'error');
+      fetch('/api/campaigns', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      }).then(r => r.json()).then(d => {
+        if (d.success) { toast(d.msg || '创建成功', 'success'); setTimeout(() => location.reload(), 600); }
+        else toast(d.msg || '创建失败', 'error');
+      });
+    }
+
+    function toggleCampaign(id) {
+      fetch(`/api/campaigns/${id}/toggle`, { method: 'POST' })
+        .then(r => r.json()).then(() => location.reload());
+    }
+
+    function deleteCampaign(id) {
+      if (!confirm('确定删除该活动？')) return;
+      fetch(`/api/campaigns/${id}`, { method: 'DELETE' })
+        .then(r => r.json()).then(() => location.reload());
+    }
+
+    // 初始化素材区
+    document.getElementById('chooseLogoBtn').addEventListener('click', () => document.getElementById('logoFile').click());
+    document.getElementById('logoFile').addEventListener('change', uploadLogo);
+    document.getElementById('logoRemoveBtn').addEventListener('click', removeLogo);
+    document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+    document.getElementById('previewH5Btn').addEventListener('click', previewH5);
+    document.getElementById('chooseImagesBtn').addEventListener('click', () => document.getElementById('imgFiles').click());
+    document.getElementById('imgFiles').addEventListener('change', uploadImages);
+    document.getElementById('chooseVideoBtn').addEventListener('click', () => document.getElementById('videoFile').click());
+    document.getElementById('videoFile').addEventListener('change', uploadVideo);
+    document.getElementById('cType').addEventListener('change', togglePrizeInputs);
+    document.getElementById('createCampaignBtn').addEventListener('click', createCampaign);
+    document.getElementById('loadBackupsBtn').addEventListener('click', loadBackups);
+    document.querySelectorAll('.toggle-campaign-btn').forEach(button => {
+      button.addEventListener('click', () => toggleCampaign(Number(button.dataset.campaignId)));
+    });
+    document.querySelectorAll('.delete-campaign-btn').forEach(button => {
+      button.addEventListener('click', () => deleteCampaign(Number(button.dataset.campaignId)));
+    });
+    document.getElementById('showScanCount').checked = '<%= settings.show_scan_count === undefined || settings.show_scan_count === null ? '1' : settings.show_scan_count %>' !== '0';
+    renderImgs();
+    renderVideo();
+  </script>
+</body>
+</html>

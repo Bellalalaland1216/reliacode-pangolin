@@ -1,0 +1,90 @@
+<%
+  // 顶部导航：iOS 风格 - 白底毛玻璃，左 Logo，右用户信息
+  // 桌面端：显示完整顶部链接导航；移动端：隐藏链接，改由 bottom-nav 接管
+  const u = user || null;
+  const r = u ? (u.role === 'AUDIT_VIEWER' ? 'admin' : u.role) : '';
+  const roleText = { AUDIT_VIEWER: '只读体验账号', admin: '平台管理员', brand: '品牌管理员', brand_staff: '品牌工作账号', factory: '工厂', warehouse: '品牌方', distributor: '代理商' };
+%>
+<link rel="stylesheet" href="/css/workflow-layout.css?v=20260917a">
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="topbar-logo"><img class="brand-mark" src="/icons/pangolin-photo.png?v=20260905" alt="穿山甲真实动物图标"><span class="brand-name"><strong>ClawMaster</strong><small>/ 穿山甲溯源大师</small></span><% if (u && ['brand','brand_staff'].includes(u.role) && u.brand_name) { %><span class="topbar-brand-context">· <%= u.brand_name %></span><% } %></span>
+
+    <nav class="topnav desktop-only" aria-label="主导航">
+      <% if (r === 'admin' || r === 'brand' || r === 'brand_staff') { %>
+        <a href="/" <%- active==='home'?'class="active" aria-current="page"':'' %>>首页</a>
+        <a href="/admin/business" <%- active==='business'?'class="active" aria-current="page"':'' %>>业务</a>
+        <a href="/alerts" <%- active==='alerts'?'class="active" aria-current="page"':'' %>>预警<% if (alertsUnread > 0) { %><span class="tn-badge"><%= alertsUnread %></span><% } %></a>
+        <a href="/brand-check" <%- active==='brand-check'?'class="active" aria-current="page"':'' %>>查串货</a>
+        <a href="/admin/me" <%- active==='me'?'class="active" aria-current="page"':'' %>>我的</a>
+      <% } else if (r === 'factory') { %>
+        <a href="/factory" <%- active==='factory'?'class="active" aria-current="page"':'' %>>工厂装箱</a>
+      <% } else if (r === 'warehouse') { %>
+        <a href="/warehouse" <%- active==='warehouse'?'class="active" aria-current="page"':'' %>>品牌方发货</a>
+      <% } else if (r === 'distributor') { %>
+        <a href="/portal" <%- active==='portal'?'class="active" aria-current="page"':'' %>>我的工作台</a>
+      <% } %>
+    </nav>
+
+    <% if (u) { %>
+      <div class="topbar-right">
+        <details class="company-suite desktop-only">
+          <summary aria-label="打开 ClawMaster 平台切换器">切换平台</summary>
+          <div class="company-suite-menu">
+            <b>ClawMaster 产品</b>
+            <a href="https://47.116.30.60/">鸿雁知访</a>
+            <a href="http://47.116.30.60:18787/">知了猴电商经营</a>
+            <a href="https://47.116.30.60/pigeon/">智信鸽 AI 客服</a>
+            <a href="http://8.141.8.31/">猫头鹰控价助手</a>
+          </div>
+        </details>
+        <a href="/profile" class="tb-user" title="<%= u.display_name %>（<%= roleText[u.role] || u.role %>）">
+          <span class="avatar-circle"><%= (u.display_name || u.username).slice(0,1).toUpperCase() %></span>
+          <span class="tb-name desktop-only"><%= u.display_name %></span>
+        </a>
+        <form method="POST" action="/logout" class="desktop-only topbar-logout-form">
+          <button type="submit" class="tb-logout topbar-logout-button">退出</button>
+        </form>
+      </div>
+    <% } %>
+  </div>
+</header>
+<% if (u && u.role === 'AUDIT_VIEWER') { %>
+<div id="readonlyAccountNotice" class="readonly-account-notice" role="status">只读体验账号 · 可查看业务数据，不能新增、修改、删除或下载数据库备份。需要操作时请使用独立管理员账号。</div>
+<script nonce="<%= cspNonce %>" src="/js/readonly-ui.js?v=20260917-flow" defer></script>
+<style nonce="<%= cspNonce %>">[data-readonly-blocked]{opacity:.55;cursor:not-allowed!important}.readonly-account-notice{overflow-wrap:anywhere}</style>
+<style nonce="<%= cspNonce %>">.readonly-account-notice{margin:12px auto;padding:12px 16px;max-width:1200px;border:1px solid #d9ded8;border-radius:8px;background:#f5f6f3;color:#161a17;font:14px/1.6 system-ui;box-sizing:border-box}@media(max-width:768px){.readonly-account-notice{margin:12px 16px}}</style>
+<% } %>
+
+<%- include('bottom-nav', { active: active, alertsUnread: alertsUnread }) %>
+
+<script nonce="<%= cspNonce %>">
+  // 全局 fetch 包装：登录过期（401 needLogin）自动跳转登录页
+  (function () {
+    const _fetch = window.fetch;
+    const readOnly = <%- JSON.stringify(!!u && u.role === 'AUDIT_VIEWER') %>;
+    window.fetch = function (input, init) {
+      const options = init ? { ...init } : {};
+      const method = String(options.method || (typeof input === 'object' && input.method) || 'GET').toUpperCase();
+      const target = new URL(typeof input === 'string' || input instanceof URL ? input : input.url, location.href);
+      if (readOnly && target.origin === location.origin &&
+          (/^\/api\/(?:backups?|invitations|verify)(?:\/|$)/i.test(target.pathname) ||
+           (!['GET','HEAD','OPTIONS'].includes(method) && !['/login','/logout','/api/logout'].includes(target.pathname)))) {
+        return Promise.resolve(new Response(JSON.stringify({success:false,ok:false,code:'READ_ONLY_ACCOUNT',msg:'只读体验账号不能执行此操作，请使用独立管理员账号。'}), {status:403,headers:{'Content-Type':'application/json'}}));
+      }
+      if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+        if (target.origin === location.origin) {
+          const headers = new Headers(options.headers || (typeof input === 'object' && input.headers) || {});
+          headers.set('X-ReliaCode-Request', 'same-origin');
+          options.headers = headers;
+        }
+      }
+      return _fetch.call(this, input, options).then(res => {
+        if (res.status === 401) {
+          try { location.href = '/login'; } catch (e) {}
+        }
+        return res;
+      });
+    };
+  })();
+</script>

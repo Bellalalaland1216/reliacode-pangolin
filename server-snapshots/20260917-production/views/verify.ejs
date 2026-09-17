@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>ClawMaster / <%= settings.brand_name || '产品溯源验证' %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260901c">
+  <style nonce="<%= cspNonce %>">
+    /* iOS 风格消费者验证界面 */
+    :root {
+      --ios-bg: #f2f2f7;
+      --ios-card: #ffffff;
+      --ios-text: #1d1d1f;
+      --ios-text-2: #6e6e73;
+      --ios-text-3: #aeaeb2;
+      --ios-blue: #007aff;
+      --ios-green: #34c759;
+      --ios-red: #ff3b30;
+      --ios-orange: #ff9500;
+      --ios-sep: #e5e5ea;
+      --ios-shadow: 0 1px 3px rgba(0,0,0,.06), 0 6px 20px rgba(0,0,0,.04);
+    }
+    .h5-body { background: var(--ios-bg); color: var(--ios-text); min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Helvetica Neue', Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+    .h5-container { max-width: 480px; margin: 0 auto; min-height: 100vh; }
+
+    /* 顶部品牌区：白底、无边框、大圆角底部 */
+    .brand-hero {
+      position: relative;
+      background: #fff;
+      color: var(--ios-text);
+      text-align: center;
+      padding: 44px 24px 28px;
+      border-bottom-left-radius: 24px;
+      border-bottom-right-radius: 24px;
+      box-shadow: var(--ios-shadow);
+      overflow: hidden;
+    }
+    .brand-hero::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(120% 90% at 50% -10%, rgba(0,122,255,.08), transparent 55%);
+    }
+    .brand-hero .logo-wrap {
+      position: relative; z-index: 1;
+      width: 84px; height: 84px; margin: 0 auto 16px;
+      border-radius: 20px; overflow: hidden;
+      background: #f2f2f7;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    }
+    .brand-hero .logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    .brand-hero .logo-wrap .logo-text { font-size: 26px; line-height: 1; font-weight: 700; color: var(--ios-text); max-width: 74px; overflow: hidden; }
+    .brand-hero .logo-wrap .logo-svg { width: 40px; height: 40px; fill: none; stroke: var(--ios-blue); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .brand-hero .brand-name {
+      position: relative; z-index: 1;
+      font-size: 26px; font-weight: 700; color: var(--ios-text);
+      letter-spacing: 1px; margin-bottom: 6px;
+    }
+    .brand-hero .brand-sub {
+      position: relative; z-index: 1;
+      display: inline-block;
+      color: var(--ios-text-2); font-size: 13px;
+      letter-spacing: 3px; margin-top: 2px;
+    }
+    .brand-hero .welcome {
+      position: relative; z-index: 1;
+      font-size: 13px; color: var(--ios-text-2); margin-top: 16px;
+    }
+    .brand-hero .scan-stat {
+      position: relative; z-index: 1;
+      margin-top: 14px; font-size: 12px; color: var(--ios-text-3);
+    }
+
+    /* 卡片：纯白 + 大圆角 + 轻阴影（无边框）*/
+    .h5-card {
+      background: var(--ios-card); color: var(--ios-text);
+      border-radius: 18px; margin: 12px 16px; padding: 20px;
+      box-shadow: var(--ios-shadow);
+    }
+    .h5-card label { color: var(--ios-text-2); font-size: 13px; font-weight: 500; }
+    .h5-card input.form-control {
+      background: #f2f2f7; border: 1px solid transparent; color: var(--ios-text);
+      border-radius: 12px; padding: 12px 14px; font-size: 16px;
+    }
+    .h5-card input.form-control:focus { background: #fff; border-color: var(--ios-blue); box-shadow: 0 0 0 3px rgba(0,122,255,.15); }
+    .btn-primary { background: var(--ios-blue); color: #fff; border: none; border-radius: 12px; font-weight: 600; }
+    .btn-primary:hover { opacity: .88; }
+    #scanCodeBtn.btn-primary { background: var(--ios-blue); color: #fff; }
+
+    /* 验证状态：彩色图标 + 粗体文字 */
+    .verify-status { text-align: center; padding: 18px 0 10px; }
+    .verify-status .icon { font-size: 58px; }
+    .verify-status.ok .icon { color: var(--ios-green); }
+    .verify-status.warn .icon { color: var(--ios-orange); }
+    .verify-status.err .icon { color: var(--ios-red); }
+    .verify-status .text { font-size: 19px; font-weight: 700; margin-top: 10px; color: var(--ios-text); }
+    .verify-status.ok .text { color: var(--ios-green); }
+    .verify-status.warn .text { color: var(--ios-orange); }
+    .verify-status.err .text { color: var(--ios-red); }
+
+    /* 深色/药丸状态徽章 */
+    .scan-times {
+      background: #f2f2f7; border-radius: 12px;
+      padding: 12px 14px; margin: 12px 0; font-size: 13px; color: var(--ios-text-2);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .scan-times .ui-icon { color: var(--ios-orange); flex: none; }
+    .scan-times.warn { background: #fff5f3; color: var(--ios-red); }
+    .scan-times.warn .ui-icon { color: var(--ios-red); }
+
+    /* 串货警示 */
+    .alert-box.danger {
+      background: #fff5f3; color: var(--ios-red);
+      border-radius: 12px; padding: 12px 14px; margin: 12px 0;
+      font-size: 13px; line-height: 1.6;
+      display: flex; gap: 8px; align-items: flex-start;
+    }
+    .alert-box.danger .ui-icon { color: var(--ios-red); flex: none; margin-top: 1px; }
+
+    /* 奖品卡：iOS 渐变色 + 大圆角 */
+    .prize-card {
+      border-radius: 20px; text-align: center; padding: 28px 16px; margin: 16px;
+      background: linear-gradient(160deg, #fff 0%, #f2f2f7 100%);
+      color: var(--ios-text);
+      box-shadow: var(--ios-shadow);
+      animation: pop 0.5s ease;
+    }
+    .prize-card.thanks { background: linear-gradient(160deg, #fff 0%, #f0f9ff 100%); }
+    .prize-card .p-icon { font-size: 50px; color: var(--ios-orange); }
+    .prize-card .p-icon .ui-icon { color: var(--ios-orange); }
+    .prize-card .p-title { font-size: 20px; font-weight: 700; margin-top: 10px; }
+    .prize-card .p-sub { font-size: 13px; color: var(--ios-text-2); margin-top: 6px; }
+    .prize-card .p-money { font-size: 36px; font-weight: 800; margin-top: 8px; color: var(--ios-text); }
+    @keyframes pop { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+    /* 轮播 */
+    .carousel { position: relative; border-radius: 16px; overflow: hidden; background: #f2f2f7; }
+    .carousel img { width: 100%; display: block; max-height: 340px; object-fit: cover; }
+    .carousel .car-btn {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      width: 36px; height: 36px; border-radius: 50%; border: none;
+      background: rgba(255,255,255,.9); color: var(--ios-text); font-size: 18px; cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15); display: flex; align-items: center; justify-content: center;
+    }
+    .carousel .car-prev { left: 10px; }
+    .carousel .car-next { right: 10px; }
+    .car-dots { text-align: center; padding: 12px 0; }
+    .car-dots .car-dot {
+      display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--ios-text-3); margin: 0 4px; padding: 0; border: none; cursor: pointer;
+      transition: all .2s;
+    }
+    .car-dots .car-dot.active { background: var(--ios-blue); width: 20px; border-radius: 4px; }
+    .media-card { padding: 0; overflow: hidden; }
+    video { width: 100%; display: block; max-height: 360px; background: #000; border-radius: 16px; }
+    .carousel-image.is-hidden { display: none; }
+
+    /* 信息行 */
+    .info-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--ios-sep); gap: 12px; }
+    .info-row:last-child { border-bottom: none; }
+    .info-row .label { color: var(--ios-text-2); font-size: 13px; flex: none; }
+    .info-row .value { color: var(--ios-text); font-size: 14px; text-align: right; word-break: break-all; }
+
+    .verify-input-row { display: flex; gap: 8px; }
+    #codeInput { flex: 1; font-size: 16px; letter-spacing: 1px; }
+    #scanCodeBtn { width: 58px; flex: none; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+    #verifyBtn { width: 100%; }
+    .code-value { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+    .compact-value { font-size: 12px; color: var(--ios-text-2); }
+    .box-items-title { margin-top: 16px; font-weight: 600; font-size: 14px; margin-bottom: 8px; }
+    .box-items-list { font-size: 12px; font-family: ui-monospace, Menlo, monospace; color: var(--ios-text-2); max-height: 200px; overflow-y: auto; }
+    .box-item-row { padding: 4px 0; border-bottom: 1px solid var(--ios-sep); }
+    .tag-compact { font-size: 10px; }
+    .contact-link { color: var(--ios-blue); text-decoration: none; font-weight: 500; }
+
+    /* 标题 */
+    .section-heading { font-size: 17px; font-weight: 700; margin: 2px 0 14px; letter-spacing: 0; color: var(--ios-text); }
+    .section-kicker { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 8px; color: var(--ios-blue); }
+    .empty-state { background: #f2f2f7; border-radius: 14px; padding: 18px 14px; text-align: center; font-size: 13px; line-height: 1.65; color: var(--ios-text-2); }
+
+    /* 产品图 */
+    .product-cover { width: 100%; max-height: 340px; object-fit: cover; display: block; border-radius: 16px; margin-bottom: 16px; }
+    .product-gallery { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+    .product-gallery img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: 14px; }
+
+    /* 时间线：iOS 蓝圆点 */
+    .trace-list { list-style: none; margin: 0; padding: 0; }
+    .trace-item { position: relative; margin-left: 6px; padding: 0 0 22px 26px; border-left: 2px solid var(--ios-sep); }
+    .trace-item:last-child { padding-bottom: 0; border-left-color: transparent; }
+    .trace-item::before {
+      content: ''; position: absolute; width: 12px; height: 12px; left: -7px; top: 4px;
+      border-radius: 50%; background: var(--ios-blue); box-shadow: 0 0 0 3px rgba(0,122,255,.18);
+    }
+    .trace-title { font-size: 14px; font-weight: 600; color: var(--ios-text); }
+    .trace-meta { margin-top: 4px; font-size: 12px; line-height: 1.55; color: var(--ios-text-2); }
+    .trace-description { margin-top: 6px; font-size: 13px; line-height: 1.65; white-space: pre-wrap; color: var(--ios-text-2); }
+
+    /* 品牌活动 / 检测报告 */
+    .promotion-card { background: #f2f2f7; border-radius: 16px; padding: 16px; }
+    .promotion-card + .promotion-card { margin-top: 12px; }
+    .promotion-card img { width: 100%; max-height: 260px; object-fit: cover; border-radius: 12px; margin-bottom: 12px; }
+    .promotion-title { font-size: 15px; font-weight: 700; color: var(--ios-text); }
+    .promotion-description { font-size: 13px; line-height: 1.65; margin-top: 6px; white-space: pre-wrap; color: var(--ios-text-2); }
+    .promotion-link { display: inline-flex; min-height: 44px; align-items: center; margin-top: 12px; color: var(--ios-blue); font-weight: 600; text-underline-offset: 3px; }
+    .public-reports { display: grid; gap: 12px; }
+    .pub-report img { width: 100%; border-radius: 12px; border: 1px solid var(--ios-sep); }
+
+    /* 底部页脚 */
+    .brand-footer {
+      background: transparent;
+      color: var(--ios-text-2);
+      text-align: center;
+      padding: 28px 16px 36px;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    .brand-footer .footer-name { color: var(--ios-text); font-weight: 700; font-size: 16px; margin-bottom: 4px; }
+    .brand-footer .footer-sub { color: var(--ios-text-2); font-size: 12px; margin-bottom: 12px; }
+    .brand-footer .footer-phone { margin-bottom: 14px; }
+    .brand-footer .footer-phone a { color: var(--ios-blue); text-decoration: none; font-weight: 600; }
+    .brand-footer .footer-copy { opacity: 0.5; font-size: 11px; }
+  </style>
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260917-hardening-v1">
+</head>
+<body class="h5-body">
+  <div class="h5-container">
+
+    <!-- 顶部品牌区 -->
+    <% const safeLogoText = String(settings.logo_text || '').replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, '').trim().slice(0, 4); %>
+    <% const safeContactPhone = String(settings.contact_phone || '').replace(/[^0-9+() -]/g, '').trim().slice(0, 32); %>
+    <% const safeLogoImage = /^\/uploads\/[A-Za-z0-9._-]+$/.test(String(settings.logo_image || '')) ? String(settings.logo_image) : ''; %>
+    <div class="brand-hero">
+      <div class="company-consumer-lockup">ClawMaster / 穿山甲消费者验证</div>
+      <% if (safeLogoImage) { %>
+      <div class="logo-wrap"><img src="<%= safeLogoImage %>" alt="品牌标志"></div>
+      <% } else { %>
+      <div class="logo-wrap"><% if (safeLogoText) { %><span class="logo-text"><%= safeLogoText %></span><% } else { %><svg class="logo-svg" aria-hidden="true"><use href="/icons/ui.svg#tag"></use></svg><% } %></div>
+      <% } %>
+      <div class="brand-name"><%= settings.brand_name || '产品溯源验证' %></div>
+      <% if (settings.brand_subtitle) { %>
+      <div class="brand-sub"><%= settings.brand_subtitle %></div>
+      <% } %>
+      <div class="welcome"><%= settings.welcome_msg || '请输入或扫描产品上的溯源码进行验证' %></div>
+    </div>
+
+    <!-- 手动输入区 -->
+    <div class="h5-card" id="inputArea">
+      <div class="form-group">
+        <label>溯源码</label>
+        <div class="verify-input-row">
+          <input type="text" id="codeInput" class="form-control" placeholder="输入溯源码" value="<%= code %>">
+          <button id="scanCodeBtn" type="button" class="btn btn-primary" title="摄像头扫码" aria-label="摄像头扫码"><%- icon('camera') %></button>
+        </div>
+      </div>
+      <button id="verifyBtn" class="btn btn-primary" type="button">立即验证</button>
+    </div>
+
+    <!-- 验证结果区 -->
+    <div id="resultArea"></div>
+
+    <!-- 底部品牌页脚 -->
+    <div class="brand-footer">
+      <div class="footer-name"><small>ClawMaster / 穿山甲溯源服务</small><br><%= settings.brand_name || '产品溯源验证' %></div>
+      <% if (settings.brand_subtitle) { %>
+      <div class="footer-sub"><%= settings.brand_subtitle %></div>
+      <% } %>
+      <% if (safeContactPhone) { %>
+      <div class="footer-phone">客服热线：<a href="tel:<%= safeContactPhone %>"><%= safeContactPhone %></a></div>
+      <% } %>
+      <div class="footer-copy">© <%= new Date().getFullYear() %> <%= settings.brand_name || '溯源系统' %> · 正品验证 · 防伪溯源</div>
+    </div>
+
+  </div>
+
+  <%# html5-qrcode + scanner.js 改为按需加载：仅在用户点扫码按钮时动态 import，
+       避免 PC 浏览器加载页面时预检摄像头导致阻塞或弹权限框 %>
+  <script nonce="<%= cspNonce %>">
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch]);
+    }
+    function safeLocalImageUrl(value) {
+      const candidate = String(value == null ? '' : value).trim();
+      return /^\/uploads\/[A-Za-z0-9._-]+$/.test(candidate) ? candidate : '';
+    }
+    function safeHttpsUrl(value) {
+      try {
+        const parsed = new URL(String(value == null ? '' : value));
+        if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return '';
+        return parsed.href;
+      } catch (_) { return ''; }
+    }
+    function productMedia(data) {
+      if (!Array.isArray(data.product_media)) return [];
+      return data.product_media.map((media, index) => ({
+        url: safeLocalImageUrl(media && (media.url || media.image_url || media.path)),
+        alt: String(media && (media.alt_text || media.alt) || `产品图片 ${index + 1}`),
+        cover: Boolean(media && (media.is_cover === true || media.is_cover === 1))
+      })).filter(media => media.url);
+    }
+    function renderEmpty(message) {
+      return `<div class="empty-state">${escapeHtml(message)}</div>`;
+    }
+    function renderProductSection(data, media) {
+      const cover = media.find(item => item.cover) || media[0];
+      return `
+        <section class="h5-card" data-result-section="product">
+          <div class="section-kicker">产品信息</div>
+          <h2 class="section-heading">${escapeHtml(data.product_name || '产品信息待完善')}</h2>
+          ${cover ? `<img class="product-cover" src="${escapeHtml(cover.url)}" alt="${escapeHtml(cover.alt)}">` : renderEmpty('该产品暂未上传封面图片')}
+          <div class="info-row"><span class="label">产品名称</span><span class="value">${escapeHtml(data.product_name || ('本码未装箱 · 品牌：' + (data.brand_name || '已绑定品牌')))}</span></div>
+          ${data.product_spec ? `<div class="info-row"><span class="label">产品规格</span><span class="value">${escapeHtml(data.product_spec)}</span></div>` : ''}
+          <div class="info-row"><span class="label">批次号</span><span class="value">${escapeHtml(data.batch_no || '-')}</span></div>
+          <div class="info-row"><span class="label">生产时间</span><span class="value">${escapeHtml(data.created_at || '-')}</span></div>
+        </section>`;
+    }
+    function renderTraceSection(data) {
+      const timeline = Array.isArray(data.trace_timeline) ? data.trace_timeline : [];
+      const rows = timeline.map(event => {
+        const title = event && (event.title || event.stage_name || event.stage || event.event_type);
+        const occurredAt = event && (event.occurred_at || event.event_time || event.created_at);
+        const location = event && (event.public_location || event.location);
+        const description = event && (event.description || event.summary);
+        if (!title && !occurredAt && !location && !description) return '';
+        const meta = [occurredAt, location].filter(Boolean).map(escapeHtml).join(' · ');
+        return `<li class="trace-item"><div class="trace-title">${escapeHtml(title || '溯源节点')}</div>${meta ? `<div class="trace-meta">${meta}</div>` : ''}${description ? `<div class="trace-description">${escapeHtml(description)}</div>` : ''}</li>`;
+      }).filter(Boolean).join('');
+      return `<section class="h5-card" data-result-section="trace"><div class="section-kicker">批次履历</div><h2 class="section-heading">从来源到流通</h2>${rows ? `<ol class="trace-list">${rows}</ol>` : renderEmpty('该批次暂未发布公开溯源履历')}</section>`;
+    }
+    function renderDistributionSection(data) {
+      return `<section class="h5-card" data-result-section="distribution"><div class="section-kicker">流通状态</div><h2 class="section-heading">当前流通信息</h2>
+        <div class="info-row"><span class="label">发货状态</span><span class="value">${escapeHtml(data.status_text || '-')}</span></div>
+        <div class="info-row"><span class="label">流通区域</span><span class="value">${escapeHtml(data.assigned_region || '未发货')}</span></div>
+        ${data.scan_region ? `<div class="info-row"><span class="label">本次查询区域</span><span class="value">${escapeHtml(data.scan_region)}</span></div>` : ''}
+        ${data.shipped_at ? `<div class="info-row"><span class="label">发货时间</span><span class="value">${escapeHtml(data.shipped_at)}</span></div>` : ''}
+        ${data.type === 'box' ? `<div class="info-row"><span class="label">箱内数量</span><span class="value">${Number(data.item_count) || 0}</span></div><div class="info-row"><span class="label">已验证数量</span><span class="value">${Number(data.verified_count) || 0}</span></div>` : ''}
+      </section>`;
+    }
+    function renderGallerySection(media) {
+      const images = media.map((item, index) => `<img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.alt)}" loading="lazy" class="carousel-image ${index === 0 ? '' : 'is-hidden'}" data-product-carousel-image>`).join('');
+      const controls = media.length > 1 ? `<button class="car-btn car-prev" type="button" data-product-carousel-step="-1" aria-label="上一张">${iconSvg('chevron-left')}</button><button class="car-btn car-next" type="button" data-product-carousel-step="1" aria-label="下一张">${iconSvg('chevron-right')}</button>` : '';
+      const dots = media.length > 1 ? `<div class="car-dots">${media.map((_, index) => `<button class="car-dot ${index === 0 ? 'active' : ''}" type="button" data-product-carousel-index="${index}" aria-label="查看第 ${index + 1} 张产品图片"></button>`).join('')}</div>` : '';
+      const gallery = images ? `<div class="carousel" data-product-carousel data-active-index="0">${images}${controls}</div>${dots}` : '';
+      return `<section class="h5-card" data-result-section="gallery"><div class="section-kicker">产品相册</div><h2 class="section-heading">产品图片</h2>${gallery || renderEmpty('该产品暂未发布相册图片')}</section>`;
+    }
+    function renderPromotionSection(data) {
+      const source = Array.isArray(data.promotion) ? data.promotion : (data.promotion ? [data.promotion] : []);
+      const cards = source.map(item => {
+        if (!item || typeof item !== 'object') return '';
+        const image = safeLocalImageUrl(item.image_url || item.image || item.media_url);
+        const link = safeHttpsUrl(item.link_url || item.url || item.target_url);
+        const title = item.title || item.name;
+        const description = item.description || item.summary || item.content;
+        if (!image && !link && !title && !description) return '';
+        return `<article class="promotion-card">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(title || '品牌活动图片')}" loading="lazy">` : ''}<div class="promotion-title">${escapeHtml(title || '品牌活动')}</div>${description ? `<div class="promotion-description">${escapeHtml(description)}</div>` : ''}${link ? `<a class="promotion-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.cta_text || '了解品牌活动')}</a>` : ''}</article>`;
+      }).filter(Boolean).join('');
+      return `<section class="h5-card" data-result-section="promotion"><div class="section-kicker">品牌活动</div><h2 class="section-heading">品牌提供的活动信息</h2>${cards || renderEmpty('该产品当前没有品牌活动')}</section>`;
+    }
+    function renderCustomerServiceSection() {
+      const phone = <%- JSON.stringify(safeContactPhone) %>;
+      const content = phone
+        ? `<div class="info-row"><span class="label">客服电话</span><span class="value"><a class="contact-link" href="tel:${escapeHtml(phone)}">${escapeHtml(phone)}</a></span></div>`
+        : renderEmpty('如需协助，请通过产品包装上的官方渠道联系品牌方');
+      return `<section class="h5-card" data-result-section="customer-service"><div class="section-kicker">客服信息</div><h2 class="section-heading">需要帮助</h2>${content}</section>`;
+    }
+    function iconSvg(name) {
+      const allowed = new Set(['alert', 'check', 'box', 'search', 'gift', 'ticket', 'chevron-left', 'chevron-right']);
+      const safe = allowed.has(name) ? name : 'alert';
+      return `<svg class="ui-icon ui-icon-lg" aria-hidden="true"><use href="/icons/ui.svg#${safe}"></use></svg>`;
+    }
+    function loadScanner() {
+      if (window._scannerLoaded) return Promise.resolve();
+      const loadScript = src => new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+      window._scannerLoaded = loadScript('/js/html5-qrcode.min.js').then(() => loadScript('/js/scanner.js'));
+      return window._scannerLoaded;
+    }
+    async function scanCode() {
+      // PC 端无摄像头时降级：弹输入框引导手动输码，避免被 getUserMedia 阻塞
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const code = prompt('当前设备未检测到摄像头，请直接输入溯源码：');
+        if (code && code.trim()) {
+          document.getElementById('codeInput').value = code.trim();
+          doVerify(code.trim());
+        }
+        return;
+      }
+      try { await loadScanner(); } catch (e) { return toast('扫码组件加载失败', 'error'); }
+      openScanner({
+        title: '扫描产品上的溯源二维码',
+        onScanned: (code) => {
+          document.getElementById('codeInput').value = code;
+          doVerify(code);
+        }
+      });
+    }
+
+    // 图片轮播
+    let carIdx = 0;
+    function carRender() {
+      const imgs = document.querySelectorAll('#carousel img');
+      const dots = document.querySelectorAll('#carDots span');
+      imgs.forEach((im, i) => im.classList.toggle('is-hidden', i !== carIdx));
+      dots.forEach((d, i) => d.className = i === carIdx ? 'active' : '');
+    }
+    function carMove(step) {
+      const imgs = document.querySelectorAll('#carousel img');
+      if (!imgs.length) return;
+      carIdx = (carIdx + step + imgs.length) % imgs.length;
+      carRender();
+    }
+    function carGo(i) { carIdx = i; carRender(); }
+
+    document.querySelectorAll('.carousel-image').forEach(image => {
+      image.addEventListener('load', () => { image.dataset.ok = '1'; });
+      image.addEventListener('error', () => { image.classList.add('is-hidden'); });
+    });
+    document.querySelectorAll('[data-carousel-step]').forEach(button => {
+      button.addEventListener('click', () => carMove(Number(button.dataset.carouselStep)));
+    });
+    document.querySelectorAll('[data-carousel-index]').forEach(button => {
+      button.addEventListener('click', () => carGo(Number(button.dataset.carouselIndex)));
+    });
+
+    function verify() {
+      const code = document.getElementById('codeInput').value.trim();
+      if (!code) { alert('请输入溯源码'); return; }
+      doVerify(code);
+    }
+
+    document.getElementById('scanCodeBtn').addEventListener('click', scanCode);
+    document.getElementById('verifyBtn').addEventListener('click', verify);
+    document.getElementById('codeInput').addEventListener('keydown', event => {
+      if (event.key === 'Enter') verify();
+    });
+    document.getElementById('resultArea').addEventListener('click', event => {
+      const stepButton = event.target.closest('[data-product-carousel-step]');
+      const indexButton = event.target.closest('[data-product-carousel-index]');
+      const section = event.target.closest('[data-result-section="gallery"]');
+      const carousel = section && section.querySelector('[data-product-carousel]');
+      if (!carousel || (!stepButton && !indexButton)) return;
+      const images = [...carousel.querySelectorAll('[data-product-carousel-image]')];
+      if (!images.length) return;
+      let nextIndex = indexButton ? Number(indexButton.dataset.productCarouselIndex) : Number(carousel.dataset.activeIndex || 0) + Number(stepButton.dataset.productCarouselStep);
+      nextIndex = ((nextIndex % images.length) + images.length) % images.length;
+      carousel.dataset.activeIndex = String(nextIndex);
+      images.forEach((image, index) => image.classList.toggle('is-hidden', index !== nextIndex));
+      section.querySelectorAll('[data-product-carousel-index]').forEach((dot, index) => dot.classList.toggle('active', index === nextIndex));
+    });
+
+    // 检测报告：拉取产品公开检测报告图片
+    async function renderReportsSection(code) {
+      try {
+        const res = await fetch(`/api/public/reports/${encodeURIComponent(code)}`);
+        const data = await res.json();
+        if (!data || !data.success || !data.reports || !data.reports.length) return '';
+        const imgs = data.reports.map(r => `<div class="pub-report" data-report-id="${r.id}"><img src="${escapeHtml(r.url)}" alt="检测报告" loading="lazy"></div>`).join('');
+        return `<section class="h5-card" data-result-section="reports"><div class="section-kicker">检测报告</div><h2 class="section-heading">${escapeHtml(data.product_name || '产品')} · 质量检测</h2><div class="public-reports">${imgs}</div></section>`;
+      } catch (_e) { return ''; }
+    }
+
+    async function doVerify(code, location) {
+      const area = document.getElementById('resultArea');
+      area.innerHTML = '<div class="h5-card"><div class="loading">正在验证...</div></div>';
+
+      let url = `/api/verify/${encodeURIComponent(code)}`;
+      const q = [];
+      if (location) q.push('location=' + encodeURIComponent(location));
+      if (q.length) url += '?' + q.join('&');
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (!data.success) {
+        area.innerHTML = `
+          <div class="h5-card">
+            <div class="verify-status err">
+              <div class="icon">${iconSvg('alert')}</div>
+              <div class="text">${escapeHtml(data.msg)}</div>
+            </div>
+            <div class="info-row"><span class="label">查询码</span><span class="value code-value">${escapeHtml(code)}</span></div>
+            <div class="info-row"><span class="label">查询时间</span><span class="value">${new Date().toLocaleString('zh-CN')}</span></div>
+          </div>
+        `;
+        return;
+      }
+
+      let statusIcon, statusClass, statusText;
+      if (data.type === 'item') {
+        statusIcon = iconSvg('check'); statusClass = 'ok'; statusText = '正品验证通过';
+      } else {
+        statusIcon = iconSvg('box'); statusClass = 'ok'; statusText = '箱码验证通过';
+      }
+
+      let html = `
+        <div class="h5-card" data-result-section="verification">
+          <div class="verify-status ${statusClass}">
+            <div class="icon">${statusIcon}</div>
+            <div class="text">${statusText}</div>
+          </div>
+      `;
+
+      html += `<div class="info-row"><span class="label">验证时间</span><span class="value">${new Date().toLocaleString('zh-CN')}</span></div></div>`;
+
+      const media = productMedia(data);
+      html += renderProductSection(data, media);
+      html += renderTraceSection(data);
+      html += renderGallerySection(media);
+      html += await renderReportsSection(code);
+      html += renderPromotionSection(data);
+
+      // 抽奖结果
+      if (data.prize) {
+        const p = data.prize;
+        let prizeHtml = '';
+        if (p.prize_type === 'red_packet') {
+          prizeHtml = `
+            <div class="prize-card">
+              <div class="p-icon">${iconSvg('gift')}</div>
+              <div class="p-title">恭喜中奖！</div>
+              <div class="p-money">¥ ${escapeHtml(p.prize_value)}</div>
+              <div class="p-sub">${escapeHtml(p.prize_name || '现金红包')} · 联系客服领取</div>
+            </div>`;
+        } else if (p.prize_type === 'coupon') {
+          prizeHtml = `
+            <div class="prize-card">
+              <div class="p-icon">${iconSvg('ticket')}</div>
+              <div class="p-title">恭喜获得优惠券</div>
+              <div class="p-money">¥ ${escapeHtml(p.prize_value || p.prize_name)}</div>
+              <div class="p-sub">${escapeHtml(p.prize_name || '优惠券')} · 下单时使用</div>
+            </div>`;
+        } else if (p.prize_type === 'goods') {
+          prizeHtml = `
+            <div class="prize-card">
+              <div class="p-icon">${iconSvg('gift')}</div>
+              <div class="p-title">恭喜获得实物奖品</div>
+              <div class="p-sub">${escapeHtml(p.prize_name || '神秘好礼')} · 联系客服领取</div>
+            </div>`;
+        } else {
+          prizeHtml = `
+            <div class="prize-card thanks">
+              <div class="p-icon">${iconSvg('check')}</div>
+              <div class="p-title">谢谢参与</div>
+              <div class="p-sub">感谢支持${'<%= settings.brand_name || "本品牌" %>'}，下次好运！</div>
+            </div>`;
+        }
+        area.innerHTML = html + prizeHtml + renderCustomerServiceSection();
+      } else {
+        area.innerHTML = html + renderCustomerServiceSection();
+      }
+    }
+
+    // 如果URL中带有码，自动验证
+    const code = <%- JSON.stringify(code) %>;
+    if (code && code !== ':code' && code !== 'demo') {
+      doVerify(code, '');
+    }
+  </script>
+</body>
+</html>

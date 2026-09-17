@@ -1,0 +1,1169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff">
+  <title>ClawMaster / 工厂装箱 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css?v=20260912a">
+  <style nonce="<%= cspNonce %>">
+    .state-idle, .state-packing, .state-full { color:#000; }
+    .big-status {
+      font-size:20px; font-weight:bold; text-align:center; padding:10px;
+      border-radius:8px; margin-bottom:12px;
+    }
+    .big-idle, .big-packing, .big-full, .big-error, .big-select { background:#fff; color:#000; border:1px solid #000; }
+  </style>
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260917-hardening-v1">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'factory' }) %>
+
+  <div class="container">
+    <header class="page-heading page-heading-with-action">
+      <div>
+        <span class="eyebrow">现场作业</span>
+        <h1>工厂装箱</h1>
+        <p>先确认产品和批次，再连续扫描箱码与子码。</p>
+      </div>
+      <form method="POST" action="/logout" class="page-heading-action">
+        <button type="submit" class="btn btn-outline btn-sm">退出登录</button>
+      </form>
+    </header>
+    <div class="card factory-workflow-card">
+      <details class="workflow-tools">
+        <summary>查看连续扫码说明</summary>
+        <div class="workflow-tools-body"><p class="section-help mb-0">
+        一个框连续扫：<strong>扫箱码（B开头）</strong> → <strong>选产品+箱规</strong>（第一箱，之后自动沿用） → <strong>逐个扫子码（S开头）</strong>自动绑定 → 扫满自动完成，扫下一个箱码开始新一箱。产品不符 / 重复扫 / 多扫都会自动拦截。<br>
+        点<strong>「连续扫码」</strong>后摄像头保持常开：子码一个接一个扫，中途不用再点按钮；本箱扫满后直接把摄像头对准下一个箱码即可开新箱。
+        </p></div>
+      </details>
+
+      <!-- 选择产品面板（打开页面即可预先选择，扫码后自动沿用） -->
+      <section class="workflow-step" aria-labelledby="factoryStepOneTitle">
+        <div class="workflow-step-title" id="factoryStepOneTitle"><span class="workflow-step-number">1</span>选择产品、箱规和批次</div>
+      <div id="productPanel" class="product-selection-panel">
+        <span id="productPanelBox" class="product-panel-code"></span>
+        <div class="product-selection-grid">
+          <div class="form-group mb-0">
+            <label class="text-13" for="selProduct">产品</label>
+            <select id="selProduct" class="form-control"><option value="">加载中...</option></select>
+          </div>
+          <div class="form-group mb-0">
+            <label class="text-13" for="selBoxSize">箱规（每箱几个）</label>
+            <input type="number" id="selBoxSize" class="form-control" min="1" placeholder="选产品后自动带出">
+          </div>
+          <div class="form-group mb-0">
+            <label class="text-13" for="selBatch">批次号 <span class="required-mark">*</span></label>
+            <input type="text" id="selBatch" class="form-control" placeholder="必填，如：20260829">
+          </div>
+        </div>
+        <div class="flex-actions-wrap">
+          <button id="confirmProductBtn" class="btn btn-primary" type="button"><%- icon('check') %> 确认并开始扫码</button>
+          <button id="cancelProductBtn" class="btn btn-outline" type="button">取消</button>
+        </div>
+      </div>
+      </section>
+
+      <section class="workflow-step" aria-labelledby="factoryStepTwoTitle">
+        <div class="workflow-step-title" id="factoryStepTwoTitle"><span class="workflow-step-number">2</span>连续扫描箱码与子码</div>
+        <!-- 大状态条 -->
+        <div id="bigStatus" class="big-status big-idle">请扫描箱码开始装箱</div>
+
+        <!-- 唯一扫码输入框 -->
+        <div class="scan-box">
+          <div class="scan-hero-icon" id="scanIcon"><%- icon('box', 'ui-icon-lg') %></div>
+          <div class="factory-scan-row">
+            <label for="scanInput" class="sr-only">扫描箱码或子码</label>
+            <input type="text" id="scanInput" class="form-control scan-box-input flex-1"
+              placeholder="扫箱码(B开头) / 扫子码(S开头)" autofocus autocomplete="off">
+            <button id="cameraScanBtn" type="button" class="btn btn-outline no-wrap"><%- icon('camera') %> 连续扫码</button>
+          </div>
+        </div>
+      </section>
+
+      <details class="workflow-tools">
+        <summary>纠错与特殊入库</summary>
+        <div class="workflow-tools-body">
+          <!-- 取消入库入口 -->
+          <div class="form-group">
+            <button id="cancelStockBtn" type="button" class="btn btn-outline btn-sm"><%- icon('refresh') %> 箱码/装箱子码取消入库</button>
+            <button id="noBoxCancelBtn" type="button" class="btn btn-outline btn-sm"<% if (user.role === 'AUDIT_VIEWER') { %> disabled aria-disabled="true"<% } %>><%- icon('refresh') %> 无箱码子码取消入库</button>
+            <span class="muted-supporting-text" id="cancelStockHint">按实际类型选择入口；系统会阻止把箱内码与无箱码子码混用</span>
+          </div>
+          <!-- 待取消入库清单 + 确认按钮（取消入库模式下显示） -->
+          <div class="form-group is-hidden" id="cancelStockPanel">
+            <div class="split-title">
+              <label>待取消入库清单（<span id="cancelStockCount">0</span> 项）</label>
+              <button type="button" class="btn btn-outline btn-sm" id="clearCancelStockBtn">清空</button>
+            </div>
+            <div id="cancelStockList" class="pending-ship-list">
+              <p class="empty-list-state">扫码后自动累积到清单（支持箱码/子码混扫）</p>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm mt-12" id="confirmCancelStockBtn"><%- icon('check') %> 确认取消入库</button>
+          </div>
+
+          <!-- 无箱码入库入口：不需要扫箱码，直接扫子码关联产品完成入库（大包粮等） -->
+          <div class="form-group">
+            <button id="noBoxModeBtn" type="button" class="btn btn-outline btn-sm"><%- icon('check') %> 无箱码入库</button>
+            <span class="muted-supporting-text" id="noBoxModeHint">大包粮等无需装箱的货品：先在上方选好产品/批次，点「无箱码入库」后直接扫子码即完成入库</span>
+          </div>
+          <!-- 无箱码入库会话统计 -->
+          <div id="noBoxStats" class="form-group is-hidden">
+            <span class="muted-supporting-text">本次已入库：<strong id="noBoxCount">0</strong> 个</span>
+          </div>
+        </div>
+      </details>
+
+      <!-- 当前箱信息 -->
+      <div id="boxPanel" class="box-panel is-hidden">
+        <div class="split-title mb-10">
+          <div class="workflow-step-title mb-0"><span class="workflow-step-number">3</span>核对当前箱并完成装箱</div>
+          <button id="changeProductBtn" class="btn btn-outline btn-sm" type="button"><%- icon('refresh') %> 更换本次产品</button>
+        </div>
+        <!-- 箱信息 -->
+        <div class="box-summary">
+          <div class="box-summary-grid">
+            <div>
+              <div class="small-text muted-text">箱码</div>
+              <div id="curBoxCode" class="mono-text font-bold"></div>
+            </div>
+            <div>
+              <div class="small-text muted-text">产品</div>
+              <div id="curProduct"></div>
+            </div>
+            <div>
+              <div class="small-text muted-text">批次</div>
+              <div id="curBatch"></div>
+            </div>
+            <div>
+              <div class="small-text muted-text">箱规（可改）</div>
+              <div class="box-size-editor">
+                <label for="boxSizeInput" class="sr-only">当前箱规</label>
+                <input type="number" id="boxSizeInput" class="form-control compact-number-input" min="1">
+                <button id="applyBoxSizeBtn" class="btn btn-outline btn-sm" type="button">改</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 进度 -->
+        <div class="progress-heading">
+          <span class="font-bold">装箱进度</span>
+          <span id="progressText" class="progress-text">0 / 0</span>
+        </div>
+        <progress id="progressBar" class="packing-progress" value="0" max="1">0%</progress>
+
+        <!-- 已绑子码列表 -->
+        <div class="font-bold mb-8">已绑子码 (<span id="boundCount">0</span>)</div>
+        <div id="itemList" class="packed-item-list">
+          <p class="empty-list-state">暂无子码</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 本次会话统计 -->
+    <div class="card">
+      <div class="card-title">本次会话统计</div>
+      <div class="session-stats">
+        <div class="stat-column">
+          <div class="stat-value" id="statBoxes">0</div>
+          <div class="muted-supporting-text">完成箱数</div>
+        </div>
+        <div class="stat-column">
+          <div class="stat-value" id="statItems">0</div>
+          <div class="muted-supporting-text">绑定子码</div>
+        </div>
+        <div class="stat-column">
+          <div class="stat-value" id="statErrors">0</div>
+          <div class="muted-supporting-text">扫错次数</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 按产品汇总装箱（独立主导视图：日期维度筛选 + 产品名称汇总 + 逐级下钻） -->
+    <details class="card workflow-tools factory-history-section">
+      <summary>装箱汇总与历史记录</summary>
+      <div class="workflow-tools-body">
+      <div class="card-title split-title">
+        <span>装箱汇总视图</span>
+        <div class="inline-control-row">
+          <label class="text-13 muted-text" for="packSummaryDate">日期</label>
+          <select id="packSummaryDate" class="form-control compact-select"><option value="">全部日期</option></select>
+          <button id="packSummaryBtn" class="btn btn-outline btn-sm" type="button"><%- icon('refresh') %> 查询</button>
+        </div>
+      </div>
+      <div class="pack-summary-total" id="packSummaryTotal"></div>
+      <div id="packSummaryList" class="empty-list-state">加载中...</div>
+      </div>
+    </details>
+
+    <!-- 扫码记录（累计数字概览） -->
+    <details class="card workflow-tools factory-history-section">
+      <summary>扫码记录与累计数据</summary>
+      <div class="workflow-tools-body">
+      <div class="card-title">扫码记录 <button id="packRecordsBtn" class="btn btn-outline btn-sm" type="button"><%- icon('refresh') %> 刷新</button></div>
+      <div class="pack-records-summary" id="packRecordsSummary">
+        <div class="stat-column"><div class="stat-value" id="prScanCount">-</div><div class="muted-supporting-text">累计扫码</div></div>
+        <div class="stat-column"><div class="stat-value" id="prBoxCount">-</div><div class="muted-supporting-text">累计装箱</div></div>
+        <div class="stat-column"><div class="stat-value" id="prErrorCount">-</div><div class="muted-supporting-text">累计扫错</div></div>
+      </div>
+      <div class="table-wrap mt-12">
+        <table class="table">
+          <thead><tr><th>时间</th><th>类型</th><th>产品</th><th>扫码</th><th>结果</th></tr></thead>
+          <tbody id="packRecordsList"><tr><td colspan="5" class="empty-cell">加载中...</td></tr></tbody>
+        </table>
+      </div>
+      </div>
+    </details>
+  </div>
+
+  <script src="/js/html5-qrcode.min.js"></script>
+  <script src="/js/scanner.js?v=20260910a"></script>
+  <script nonce="<%= cspNonce %>">
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      setTimeout(() => t.remove(), 3000);
+      document.body.appendChild(t);
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[ch]);
+    }
+
+    // 手机震动提示（浏览器/微信里比声音更可靠）
+    function vibrate(pattern) {
+      try {
+        if (navigator.vibrate) navigator.vibrate(pattern);
+      } catch (e) { /* 静默失败 */ }
+    }
+
+    // 扫码提示音（Web Audio API 生成，无需音频文件）+ 震动
+    // 四档区分：box=箱码 / item=子码 / dup=重复扫码 / err=失败
+    let _audioCtx = null;
+    function _beep(freqA, freqB, durA, delayB, total, vib) {
+      if (vib) vibrate(vib);
+      try {
+        if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const ctx = _audioCtx;
+        if (ctx.state === 'suspended') ctx.resume();
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freqA, now);
+        if (freqB) osc.frequency.setValueAtTime(freqB, now + delayB);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + total);
+        osc.start(now); osc.stop(now + total + 0.05);
+      } catch (e) { /* 静默失败，不影响扫码 */ }
+    }
+    function playBeep(type) {
+      if (type === 'box') {      // 箱码：短促中音“滴”
+        _beep(660, 0, 0.12, 0, 0.16, 30);
+      } else if (type === 'item') {  // 子码：清脆双音“滴-滴”（升调）
+        _beep(880, 1174.66, 0.1, 0.08, 0.22, 20);
+      } else if (type === 'dup') {   // 重复扫码：低沉拉长“嗡--”（明显区分）
+        _beep(196, 156.82, 0.22, 0.15, 0.4, [80, 60, 80]);
+      } else {                    // 失败/其他错误：低沉单音
+        _beep(220, 0, 0.18, 0, 0.32, [80, 60, 80]);
+      }
+    }
+
+    // 满箱弹窗：提示扫下一个箱码
+    function showBoxFullModal(boundCount, size) {
+      let mask = document.getElementById('boxFullMask');
+      if (!mask) {
+        mask = document.createElement('div');
+        mask.id = 'boxFullMask';
+        mask.className = 'box-full-mask';
+        mask.innerHTML = `
+          <div class="box-full-panel">
+            <div class="box-full-icon"><svg class="ui-icon ui-icon-lg" aria-hidden="true"><use href="/icons/ui.svg#check"></use></svg></div>
+            <div class="box-full-title">本箱已装满</div>
+            <div class="box-full-sub" id="boxFullSub"></div>
+            <button class="btn btn-primary box-full-btn" id="boxFullNextBtn" type="button">扫下一箱</button>
+          </div>
+        `;
+        document.body.appendChild(mask);
+        const nextBtn = mask.querySelector('#boxFullNextBtn');
+        nextBtn.addEventListener('click', () => {
+          mask.classList.remove('is-open');
+          // 复位为待扫箱码状态
+          currentBox = null;
+          boxSize = 0;
+          document.getElementById('boxPanel').classList.add('is-hidden');
+          setBigStatus('请扫描箱码开始装箱', 'big-idle', 'box');
+          // 连续扫码模式下继续开启相机扫箱码
+          if (scanning) {
+            cameraScan();
+          } else {
+            document.getElementById('scanInput').focus();
+          }
+        });
+      }
+      document.getElementById('boxFullSub').textContent = `本箱已装满（${boundCount}/${size}），请扫下一箱`;
+      mask.classList.add('is-open');
+      playBeep('item');
+    }
+    function iconSvg(name) {
+      const allowed = new Set(['alert', 'box', 'check', 'cart', 'refresh']);
+      const safe = allowed.has(name) ? name : 'box';
+      return `<svg class="ui-icon ui-icon-lg" aria-hidden="true"><use href="/icons/ui.svg#${safe}"></use></svg>`;
+    }
+
+    let currentBox = null;   // 当前装箱中的箱信息
+    let currentBoxCompleted = false;
+    let scanInFlight = false;
+    let productConfirming = false;
+    let cancelSubmitting = false;
+    let boxSize = 0;         // 当前箱规
+    let products = [];       // 可选产品列表
+    let stat = { boxes: 0, items: 0, errors: 0 };
+    let errorTimer = null;
+    let packingReady = false;  // 前置条件满足（已选产品+箱规+批次号），未就绪时禁止扫码录入
+    let cancelStockMode = false;   // 取消入库模式开关
+    let cancelStockKind = 'boxed'; // boxed=箱码/装箱子码；nobox=无箱码已入库子码
+    let noBoxMode = false;         // 无箱码入库模式开关
+    let noBoxInCount = 0;          // 本次会话无箱码入库数量
+
+    // 沿用上一箱的产品+箱规（刷新页面也不丢）
+    function getLastPack() {
+      try { return JSON.parse(sessionStorage.getItem('lastPack') || 'null'); } catch(e) { return null; }
+    }
+    function setLastPack(p) {
+      try { sessionStorage.setItem('lastPack', JSON.stringify(p)); } catch(e) {}
+    }
+
+    const scanInput = document.getElementById('scanInput');
+    scanInput.addEventListener('keypress', e => { if (e.key === 'Enter') handleScan(); });
+    // 前置条件就绪前禁用扫码录入
+    updateReadyState();
+    setBigStatus('请先选择产品、箱规、批次号并确认后开始装箱', 'big-select', 'cart');
+
+    // 加载本厂可选产品
+    (async function loadProducts() {
+      try {
+        const res = await fetch('/api/products');
+        const data = await res.json();
+        products = (data.products || []).map(p => ({
+          id: p.id, name: p.name, spec: p.spec || '', box_size: p.box_size || 0, batch_no: p.batch_no || ''
+        }));
+        renderProductOptions();
+      } catch (e) {
+        products = [];
+      }
+    })();
+
+    function renderProductOptions(selectedId) {
+      const sel = document.getElementById('selProduct');
+      sel.innerHTML = '<option value="">请选择产品</option>' + products.map(p =>
+        `<option value="${Number(p.id)}">${escapeHtml(p.name)}${p.spec ? ' (' + escapeHtml(p.spec) + ')' : ''}${p.box_size ? ' · 默认箱规' + Number(p.box_size) : ''}</option>`
+      ).join('');
+      if (selectedId) sel.value = String(selectedId);
+    }
+
+    function setBigStatus(text, cls, iconName) {
+      const el = document.getElementById('bigStatus');
+      el.textContent = text;
+      el.className = 'big-status ' + cls;
+      document.getElementById('scanIcon').innerHTML = iconSvg(iconName);
+    }
+
+    // 连续扫码：摄像头常开，识别到码直接处理（箱码/子码自动区分），中途无需再点按钮
+    let scanning = false;                    // 摄像头连续扫码是否进行中
+    let resumeScanAfterProduct = false;      // 选完产品后是否自动恢复连续扫码
+
+    function cameraScan() {
+      scanning = true;
+      const tip = cancelStockMode
+        ? (cancelStockKind === 'nobox' ? '无箱码取消入库：只扫子码（S开头）' : '取消箱码/装箱子码入库：扫码加入待取消清单')
+        : currentBox
+        ? `连续扫码：子码(S开头) ${boxSize > 0 ? '· ' + (parseInt(document.getElementById('boundCount').textContent) || 0) + '/' + boxSize : ''} · 箱满后直接扫下一箱码`
+        : '连续扫码：请先扫箱码(B开头)';
+      openScanner({
+        title: tip,
+        continuous: true,
+        onScanned: code => processCode(code)
+      });
+    }
+
+    // 输入框/扫码枪回车入口
+    async function handleScan() {
+      const code = extractCode(scanInput.value);
+      scanInput.value = '';
+      if (!code) return;
+      await processCode(code);
+      if (!scanning) scanInput.focus();
+    }
+
+    // 核心：自动识别 B开头=箱码 / S开头=子码
+    async function processCode(code) {
+      if (scanInFlight || productConfirming || cancelSubmitting) return toast('上一项正在处理，请稍后再扫码', 'error');
+      scanInFlight = true;
+      try { await processCodeNow(code); }
+      catch (error) { flashError('扫码请求未完成，请核对记录后重试'); }
+      finally { scanInFlight = false; }
+    }
+    async function processCodeNow(code) {
+      if (cancelStockMode) {
+        await cancelStock(code);
+        return;
+      }
+      if (noBoxMode) {
+        if (!packingReady) return flashError('产品信息已变更，请先确认产品、箱规和批次');
+        // 无箱码入库模式：子码直接入库，箱码仍走正常装箱
+        if (/^S/i.test(code)) {
+          await scanNoBoxItem(code);
+        } else if (/^B/i.test(code)) {
+          await startPacking(code);
+        } else {
+          flashError('无法识别：' + code + '（无箱码入库请扫 S 开头子码）');
+        }
+        return;
+      }
+      if (/^B/i.test(code)) {
+        if (!packingReady) {
+          return flashError('请先在上方选择产品、箱规、批次号并点「确认」后，才能扫码装箱', 'err');
+        }
+        await startPacking(code);
+      } else if (/^S/i.test(code)) {
+        if (!packingReady) {
+          return flashError('请先在上方选择产品、箱规、批次号并点「确认」后，才能扫码录入', 'err');
+        }
+        await scanItem(code);
+      } else {
+        flashError('无法识别：' + code + '（B开头是箱码，S开头是子码）');
+      }
+    }
+
+    // 前置条件就绪状态：未选择产品/箱规/批次号前，禁用扫码录入
+    function updateReadyState() {
+      const input = document.getElementById('scanInput');
+      const camBtn = document.getElementById('cameraScanBtn');
+      if (cancelStockMode || packingReady) {
+        input.removeAttribute('disabled');
+        camBtn.removeAttribute('disabled');
+        input.placeholder = cancelStockMode
+          ? (cancelStockKind === 'nobox' ? '无箱码取消入库：只扫子码(S开头)…' : '取消箱码/装箱子码入库：扫码加入清单…')
+          : '扫箱码(B开头) / 扫子码(S开头)';
+      } else {
+        input.setAttribute('disabled', 'disabled');
+        camBtn.setAttribute('disabled', 'disabled');
+        input.placeholder = '请先完成产品/箱规/批次号选择';
+      }
+    }
+
+    // 取消入库：扫码累积到待取消清单（不立即执行），点「确认取消入库」二次确认后批量执行
+    let cancelStockCodes = [];   // 待取消入库的码清单（支持箱码/子码混扫）
+    function renderCancelStock() {
+      const list = document.getElementById('cancelStockList');
+      document.getElementById('cancelStockCount').textContent = cancelStockCodes.length;
+      if (cancelStockCodes.length === 0) {
+        list.innerHTML = '<p class="empty-list-state">' + (cancelStockKind === 'nobox'
+          ? '扫描无箱码已入库子码后自动累积到清单'
+          : '扫码后自动累积到清单（支持箱码/装箱子码混扫）') + '</p>';
+      } else {
+        list.innerHTML = cancelStockCodes.map((c, i) => `
+          <div class="pending-ship-row">
+            <span class="code-cell">${escapeHtml(c)}</span>
+            <button type="button" class="btn btn-outline btn-sm remove-cancel-stock-btn" data-index="${i}">移除</button>
+          </div>
+        `).join('');
+      }
+    }
+    function cancelStock(code) {
+      if (cancelStockKind === 'nobox' && !/^S/i.test(code)) {
+        playBeep('err');
+        toast('无箱码取消入库只接受 S 开头子码', 'error');
+        return;
+      }
+      if (cancelStockCodes.includes(code)) {
+        playBeep('dup');
+        toast('该码已在待取消清单中', 'error');
+        return;
+      }
+      cancelStockCodes.push(code);
+      renderCancelStock();
+      playBeep(/^B/i.test(code) ? 'box' : 'item');
+      toast('已添加待取消：' + code, 'success');
+    }
+    // 单个码真正执行取消入库
+    async function doCancelStockOne(code) {
+      const res = await fetch('/api/codes/cancel-stock', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ code, expected_mode: cancelStockKind })
+      });
+      const data = await res.json();
+      return { code, success: data.success, msg: data.msg };
+    }
+    // 二次确认后批量执行取消入库
+    async function confirmCancelStock() {
+      if (cancelSubmitting || scanInFlight || productConfirming) return toast('上一项正在处理，请稍后重试', 'error');
+      if (!cancelStockCodes.length) return toast('请先扫码添加要取消入库的码', 'error');
+      const codes = cancelStockCodes.slice();
+      const confirmedKind = cancelStockKind;
+      showCancelConfirm(
+        cancelStockKind === 'nobox' ? '确认取消无箱码入库' : '确认取消箱码/装箱子码入库',
+        cancelStockKind === 'nobox'
+          ? `即将撤销 <b>${cancelStockCodes.length}</b> 个无箱码子码的入库，清除当前商品与批次关联，保留历史记录：`
+          : `即将取消入库 <b>${cancelStockCodes.length}</b> 个码，清除当前商品与批次关联，保留历史记录（箱码会整箱解绑）：`,
+        cancelStockCodes.slice(),
+        async () => {
+          if (cancelSubmitting) return;
+          if (confirmedKind !== cancelStockKind) return toast('取消类型已变更，请重新确认清单', 'error');
+          cancelSubmitting = true;
+          const confirmButton = document.getElementById('confirmCancelStockBtn');
+          confirmButton.disabled = true;
+          try {
+          const results = [];
+          for (const code of codes) {
+            let r;
+            try { r = await doCancelStockOne(code); }
+            catch (_) { r = { code, success: false, msg: '网络中断，结果未确认，请先查记录再重试' }; }
+            results.push(r);
+            if (r.success) {
+              // 实时刷新：若取消的是当前正在装箱的整箱，清空状态
+              if (currentBox && /^B/i.test(code) && code === currentBox.box_code) {
+                currentBox = null;
+                boxSize = 0;
+                document.getElementById('boxPanel').classList.add('is-hidden');
+                document.getElementById('boundCount').textContent = '0';
+                document.getElementById('itemList').innerHTML = '<p class="empty-list-state">暂无子码</p>';
+                document.getElementById('progressText').textContent = '0 / ' + (boxSize || '?');
+              } else if (currentBox && currentBox.box_code) {
+                try { await startPacking(currentBox.box_code, true); }
+                catch (_) { toast('取消已成功，但当前箱信息刷新失败，请重新扫描箱码核对', 'error'); }
+              }
+            }
+          }
+          const ok = results.filter(r => r.success).length;
+          const fail = results.filter(r => !r.success).length;
+          clearTimeout(errorTimer);
+          if (fail) {
+            const message = `取消入库：成功 ${ok} 个，失败或待确认 ${fail} 个：${results.filter(r=>!r.success).map(r=>r.code+'：'+r.msg).join('；')}`;
+            toast(message, 'error');
+            setBigStatus(message, 'big-error', 'alert');
+          } else {
+            playBeep('dup');
+            toast(`已取消入库 ${ok} 个`, 'success');
+            setBigStatus(`已取消入库 ${ok} 个`, 'big-idle', 'check');
+          }
+          const succeeded = new Set(results.filter(r => r.success).map(r => r.code));
+          cancelStockCodes = cancelStockCodes.filter(code => !succeeded.has(code));
+          renderCancelStock();
+          refreshPackSummary();
+          loadPackRecords();
+          scanInput.focus();
+          } finally {
+            cancelSubmitting = false;
+            confirmButton.disabled = <%- JSON.stringify(user.role === 'AUDIT_VIEWER') %>;
+          }
+        }
+      );
+    }
+
+    // 取消入库模式切换按钮
+    (function bindCancelStock() {
+      const btn = document.getElementById('cancelStockBtn');
+      const noBoxBtn = document.getElementById('noBoxCancelBtn');
+      const hint = document.getElementById('cancelStockHint');
+      const input = document.getElementById('scanInput');
+      const panel = document.getElementById('cancelStockPanel');
+      const confirmBtn = document.getElementById('confirmCancelStockBtn');
+      const clearBtn = document.getElementById('clearCancelStockBtn');
+      confirmBtn.addEventListener('click', confirmCancelStock);
+      clearBtn.addEventListener('click', () => { if (cancelSubmitting) return; cancelStockCodes = []; renderCancelStock(); });
+      document.getElementById('cancelStockList').addEventListener('click', e => {
+        if (cancelSubmitting) return;
+        const b = e.target.closest('.remove-cancel-stock-btn');
+        if (!b) return;
+        cancelStockCodes.splice(parseInt(b.dataset.index), 1);
+        renderCancelStock();
+      });
+      function toggleCancelMode(kind) {
+        if (cancelSubmitting) return toast('取消入库正在处理，请稍后切换', 'error');
+        const sameMode = cancelStockMode && cancelStockKind === kind;
+        cancelStockMode = !sameMode;
+        cancelStockKind = kind;
+        if (cancelStockMode) {
+          if (noBoxMode) {
+            noBoxMode = false;
+            document.getElementById('noBoxModeBtn').classList.remove('active');
+            document.getElementById('noBoxModeBtn').textContent = '无箱码入库';
+            document.getElementById('noBoxStats').classList.add('is-hidden');
+          }
+          btn.textContent = kind === 'boxed' ? '退出箱码/装箱子码取消' : '箱码/装箱子码取消入库';
+          noBoxBtn.textContent = kind === 'nobox' ? '退出无箱码子码取消' : '无箱码子码取消入库';
+          btn.classList.toggle('active', kind === 'boxed');
+          noBoxBtn.classList.toggle('active', kind === 'nobox');
+          confirmBtn.textContent = kind === 'nobox' ? '确认取消无箱码入库' : '确认取消入库';
+          panel.classList.remove('is-hidden');
+          hint.textContent = kind === 'nobox'
+            ? '已开启无箱码子码取消：只扫 S 开头子码，确认后恢复未绑定商品状态'
+            : '已开启箱码/装箱子码取消：扫码累积清单，确认后解绑';
+          toast(kind === 'nobox' ? '已开启无箱码子码取消入库' : '已开启箱码/装箱子码取消入库', 'success');
+        } else {
+          btn.textContent = '箱码/装箱子码取消入库';
+          noBoxBtn.textContent = '无箱码子码取消入库';
+          btn.classList.remove('active');
+          noBoxBtn.classList.remove('active');
+          panel.classList.add('is-hidden');
+          hint.textContent = '按实际类型选择入口；系统会阻止把箱内码与无箱码子码混用';
+        }
+        cancelStockCodes = [];
+        renderCancelStock();
+        updateReadyState();
+        input.focus();
+      }
+      btn.addEventListener('click', () => toggleCancelMode('boxed'));
+      noBoxBtn.addEventListener('click', () => toggleCancelMode('nobox'));
+    })();
+
+    // 无箱码入库模式切换按钮
+    (function bindNoBoxMode() {
+      const btn = document.getElementById('noBoxModeBtn');
+      const hint = document.getElementById('noBoxModeHint');
+      const input = document.getElementById('scanInput');
+      const stats = document.getElementById('noBoxStats');
+      btn.addEventListener('click', () => {
+        if (cancelSubmitting) return toast('取消入库正在处理，请稍后切换', 'error');
+        if (!noBoxMode && cancelStockMode) {
+          document.getElementById(cancelStockKind === 'nobox' ? 'noBoxCancelBtn' : 'cancelStockBtn').click();
+        }
+        noBoxMode = !noBoxMode;
+        if (noBoxMode) {
+          btn.textContent = '退出无箱码入库';
+          btn.classList.add('active');
+          input.placeholder = '无箱码入库：扫子码(S开头)…';
+          hint.textContent = '已开启无箱码入库：直接扫子码即完成入库（自动关联上方选的产品+批次号），再点一次退出';
+          stats.classList.remove('is-hidden');
+          toast('已开启无箱码入库模式', 'success');
+        } else {
+          btn.textContent = '无箱码入库';
+          btn.classList.remove('active');
+          input.placeholder = '扫箱码(B开头) / 扫子码(S开头)';
+          hint.textContent = '大包粮等无需装箱的货品：先在上方选好产品/批次，点「无箱码入库」后直接扫子码即完成入库';
+          stats.classList.add('is-hidden');
+        }
+        input.focus();
+      });
+    })();
+
+    // 无箱码直接扫子码入库（大包粮等无需装箱）：关联产品+批次号，跳过箱码
+    async function scanNoBoxItem(itemCode) {
+      const productId = parseInt(document.getElementById('selProduct').value);
+      const batch = document.getElementById('selBatch').value.trim();
+      if (!productId) return flashError('请先在上方选择产品（无箱码入库需指定产品）', 'err');
+
+      const res = await fetch('/api/factory/pack/scan-nobox', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ item_code: itemCode, product_id: productId, batch_no: batch })
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        const isDup = /重复|已入库|已绑定/.test(data.msg || '');
+        return flashError(data.msg || '入库失败', isDup ? 'dup' : 'err');
+      }
+
+      playBeep('item');
+      noBoxInCount++;
+      document.getElementById('noBoxCount').textContent = noBoxInCount;
+      stat.items++;
+      document.getElementById('statItems').textContent = stat.items;
+      setBigStatus(`无箱码入库成功：${data.product_name}${data.product_spec ? '（'+data.product_spec+'）' : ''} · 已入库 ${noBoxInCount} 个`, 'big-packing', 'check');
+      toast(`已入库 ${data.item_code}（${data.product_spec || data.product_name}）`, 'success');
+      refreshPackSummary();
+      loadPackRecords();
+    }
+
+    function flashError(msg, beepType) {
+      stat.errors++;
+      document.getElementById('statErrors').textContent = stat.errors;
+      playBeep(beepType || 'err');
+      // 大状态条闪红2秒后恢复
+      setBigStatus(msg, 'big-error', 'alert');
+      toast(msg, 'error');
+      clearTimeout(errorTimer);
+      errorTimer = setTimeout(() => {
+        if (currentBox) {
+          const bound = parseInt(document.getElementById('boundCount').textContent) || 0;
+          if (boxSize > 0 && bound >= boxSize) {
+            setBigStatus(`本箱已完成（${bound}/${boxSize}），扫下一个箱码开始新箱`, 'big-full', 'check');
+          } else {
+            setBigStatus(`正在装箱：${currentBox.box_code}（${bound}/${boxSize || '?'}）`, 'big-packing', 'box');
+          }
+        } else {
+          setBigStatus('请扫描箱码开始装箱', 'big-idle', 'box');
+        }
+      }, 2000);
+    }
+
+    // ---- 选择产品面板 ----
+    function showProductPanel(boxCode, prefillProduct) {
+      const panel = document.getElementById('productPanel');
+      document.getElementById('productPanelBox').textContent = boxCode ? '（箱码：' + boxCode + '）' : '';
+      renderProductOptions(prefillProduct && prefillProduct.id);
+      const sel = document.getElementById('selProduct');
+      if (prefillProduct) {
+        const p = products.find(x => x.id === prefillProduct.id) || prefillProduct;
+        document.getElementById('selBoxSize').value = prefillProduct.box_size || p.box_size || '';
+        document.getElementById('selBatch').value = prefillProduct.batch_no || '';
+      } else {
+        document.getElementById('selBoxSize').value = '';
+        document.getElementById('selBatch').value = '';
+      }
+      panel.classList.remove('is-hidden');
+      // 手机端按钮位于面板下方：即使已有产品，也要把选择区带入视野。
+      sel.focus({ preventScroll: true });
+      panel.scrollIntoView({ block: 'start', behavior: 'auto' });
+    }
+    function hideProductPanel() {
+      // 产品面板常驻显示（打开页面即可预选），这里不再隐藏，仅恢复扫码/焦点
+      // 若连续扫码因弹表单被暂停，自动恢复摄像头（确认产品/取消都走这里）
+      if (resumeScanAfterProduct && !scanning) {
+        resumeScanAfterProduct = false;
+        cameraScan();
+      } else if (!scanning) {
+        scanInput.focus();
+      }
+    }
+
+    function cancelProductEdits() {
+      if (productConfirming || scanInFlight || cancelSubmitting) return toast('上一项正在处理，请稍后取消编辑', 'error');
+      const saved = currentBox && !noBoxMode
+        ? { id: currentBox.product_id, box_size: boxSize, batch_no: currentBox.batch_no || '' }
+        : getLastPack();
+      const product = saved && products.find(p => p.id === saved.id);
+      document.getElementById('selProduct').value = product ? String(product.id) : '';
+      document.getElementById('selBoxSize').value = product ? saved.box_size : '';
+      document.getElementById('selBatch').value = product ? saved.batch_no : '';
+      packingReady = !!(product && saved.box_size > 0 && saved.batch_no);
+      updateReadyState();
+      document.getElementById('productPanelBox').textContent = packingReady ? '（' + product.name + ' · 每箱 ' + saved.box_size + ' · 批次 ' + saved.batch_no + '）' : '';
+      setBigStatus(packingReady ? '已取消修改，继续使用已确认的产品和批次' : '已取消修改，请先选择产品、箱规和批次', 'big-idle', 'box');
+      hideProductPanel();
+    }
+
+    // 选产品时自动带出该产品的默认箱规（避免工人手动填错）
+    function bindProductBoxSize() {
+      const sel = document.getElementById('selProduct');
+      const sizeInput = document.getElementById('selBoxSize');
+      if (!sel || !sizeInput) return;
+      sel.addEventListener('change', () => {
+        packingReady = false;
+        updateReadyState();
+        const pid = parseInt(sel.value);
+        const p = products.find(x => x.id === pid);
+        if (p && p.box_size > 0) {
+          sizeInput.value = p.box_size;
+        } else {
+          sizeInput.value = '';
+        }
+      });
+    }
+    bindProductBoxSize();
+    ['selBoxSize', 'selBatch'].forEach(id => document.getElementById(id).addEventListener('input', () => {
+      packingReady = false;
+      updateReadyState();
+    }));
+
+    // 确认产品+箱规
+    async function confirmProduct() {
+      if (scanInFlight || productConfirming) return toast('上一项正在处理，请稍后确认产品', 'error');
+      productConfirming = true;
+      const button = document.getElementById('confirmProductBtn');
+      button.disabled = true;
+      try { await confirmProductSelection(); }
+      catch (error) { toast('确认产品失败，请稍后重试', 'error'); }
+      finally { productConfirming = false; button.disabled = <%- JSON.stringify(user.role === 'AUDIT_VIEWER') %>; }
+    }
+    async function confirmProductSelection() {
+      const productId = parseInt(document.getElementById('selProduct').value);
+      const size = parseInt(document.getElementById('selBoxSize').value);
+      const batch = document.getElementById('selBatch').value.trim();
+      if (!productId) return toast('请选择产品', 'error');
+      if (!size || size < 1) return toast('请输入有效箱规（每箱装几个）', 'error');
+      if (!batch) return toast('请输入批次号', 'error');
+
+      const p = products.find(x => x.id === productId);
+
+      // 已完成的箱属于上一笔作业，确认新产品仅预选下一箱，不能改写上一箱。
+      const bound = Number(document.getElementById('boundCount').textContent) || 0;
+      if (currentBox && (noBoxMode || currentBoxCompleted || (boxSize > 0 && bound >= boxSize))) {
+        currentBox = null;
+        currentBoxCompleted = false;
+        boxSize = 0;
+        document.getElementById('boxPanel').classList.add('is-hidden');
+        updateItemList([]);
+        updateProgress();
+      }
+      if (currentBox && bound > 0 && (currentBox.product_id !== productId ||
+          (currentBox.batch_no || '') !== batch || boxSize !== size)) {
+        return toast('当前箱尚未完成，请先完成当前箱；下一款产品请使用新箱码', 'error');
+      }
+
+      // 尚未扫码（无当前箱）：仅记录“预选”产品+箱规，供后续扫码自动沿用
+      if (!currentBox) {
+        setLastPack({ id: productId, name: p ? p.name : '', box_size: size, batch_no: batch });
+        packingReady = true;
+        updateReadyState();
+        playBeep('item');
+        toast('已选好产品/箱规/批次号，可以扫码装箱了', 'success');
+        document.getElementById('productPanelBox').textContent = '（' + (p ? p.name : '') + ' · 每箱 ' + size + ' · 批次 ' + batch + '）';
+        setBigStatus('已就绪：' + (p ? p.name : '') + (noBoxMode ? '，请直接扫子码入库' : ' 每箱 ' + size + ' 个，请扫新箱码开始装箱'), 'big-idle', 'box');
+        hideProductPanel();
+        scanInput.focus();
+        return;
+      }
+
+      const res = await fetch('/api/factory/pack/set-product', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ box_code: currentBox.box_code, product_id: productId, box_size: size, batch_no: batch })
+      });
+      const data = await res.json();
+      if (!data.success) return flashError(data.msg || '设置产品失败');
+
+      packingReady = true;
+      updateReadyState();
+
+      setLastPack({ id: productId, name: p ? p.name : '', box_size: size, batch_no: batch });
+      // 重新拉取箱信息（此时已带产品）；hideProductPanel 会自动恢复连续扫码
+      await startPacking(currentBox.box_code, true);
+      hideProductPanel();
+    }
+
+    // 换产品（当前箱）
+    function changeProduct() {
+      if (scanInFlight || productConfirming) return toast('上一项正在处理，请稍后更换产品', 'error');
+      if (!currentBox) return;
+      // 弹表单前暂停摄像头，确认后自动恢复
+      resumeScanAfterProduct = scanning;
+      if (scanning) { stopScanner(); scanning = false; }
+      const cur = currentBox.product_id ? {
+        id: currentBox.product_id,
+        box_size: boxSize,
+        batch_no: currentBox.batch_no || ''
+      } : getLastPack();
+      showProductPanel(currentBox.box_code, cur);
+      setBigStatus('请选择新产品并确认箱规', 'big-select', 'refresh');
+    }
+
+    // ---- 扫箱码：开始/切换装箱 ----
+    async function startPacking(boxCode, isRefresh) {
+      const res = await fetch('/api/factory/pack/start', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ box_code: boxCode })
+      });
+      const data = await res.json();
+      if (!data.success) return flashError(data.msg || '箱码不存在');
+
+      currentBox = data.box;
+      currentBoxCompleted = false;
+
+      // 空白箱码：需要先选产品
+      if (data.need_product) {
+        // 优先用页面上已预选的产品+箱规（打开页面即可先选好）
+        const preProductId = parseInt(document.getElementById('selProduct').value);
+        const preSize = parseInt(document.getElementById('selBoxSize').value);
+        const preBatch = document.getElementById('selBatch').value.trim();
+        const last = getLastPack();
+        const chosen = (preProductId && preSize && preSize > 0)
+          ? { id: preProductId, box_size: preSize, batch_no: preBatch }
+          : (last && last.id ? last : null);
+        if (chosen && !isRefresh) {
+          // 自动沿用已选/上次产品+箱规，直接进入扫码
+          const r2 = await fetch('/api/factory/pack/set-product', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ box_code: boxCode, product_id: chosen.id, box_size: chosen.box_size, batch_no: chosen.batch_no || '' })
+          });
+          const d2 = await r2.json();
+          if (d2.success) {
+            return startPacking(boxCode, true);
+          }
+          // 沿用失败（如产品下架/权限变化），回落到手动选择
+          toast(d2.msg || '沿用已选产品失败，请重新选择', 'error');
+        }
+        boxSize = 0;
+        document.getElementById('boxPanel').classList.add('is-hidden');
+        // 未预选产品时暂停连续扫码，让用户在常驻面板上选择；确认后自动恢复
+        resumeScanAfterProduct = scanning;
+        if (scanning) { stopScanner(); scanning = false; }
+        showProductPanel(boxCode, chosen || last);
+        setBigStatus('已识别箱码，请选择本箱产品并确认箱规', 'big-select', 'cart');
+        return;
+      }
+
+      // 箱规自动带产品默认值（或沿用值）
+      boxSize = data.box.box_size || data.box_size || 0;
+      currentBoxCompleted = boxSize > 0 && data.bound_count >= boxSize;
+      document.getElementById('boxSizeInput').value = boxSize || '';
+
+      hideProductPanel();
+      // 箱码识别成功：绿色提示 + 轻微震动 + 箱码音
+      toast('箱码已识别，请继续扫描产品子码', 'success');
+      playBeep('box');
+      document.getElementById('boxPanel').classList.remove('is-hidden');
+      document.getElementById('curBoxCode').textContent = currentBox.box_code;
+      document.getElementById('curProduct').textContent = (currentBox.product_name || '-') + (currentBox.product_spec ? ' (' + currentBox.product_spec + ')' : '');
+      document.getElementById('curBatch').textContent = currentBox.batch_no || '-';
+
+      updateItemList(data.items);
+      updateProgress();
+
+      if (data.bound_count > 0) {
+        toast(`该箱已有 ${data.bound_count} 个子码，继续扫码即可`, 'success');
+        if (boxSize > 0 && data.bound_count >= boxSize) {
+          setBigStatus(`该箱已装满（${data.bound_count}/${boxSize}），扫下一个箱码开始新箱`, 'big-full', 'check');
+          stat.boxes = stat.boxes + 1;
+          document.getElementById('statBoxes').textContent = stat.boxes;
+        } else {
+          setBigStatus(`继续装箱：${currentBox.product_name}（${data.bound_count}/${boxSize || '?'}）`, 'big-packing', 'box');
+        }
+      } else {
+        setBigStatus(boxSize > 0
+          ? `开始装箱：${currentBox.product_name}，请扫 ${boxSize} 个子码`
+          : `开始装箱：${currentBox.product_name}（未设箱规，请先在下方填写）`, 'big-packing', 'box');
+      }
+    }
+
+    // ---- 扫子码：绑定到当前箱 ----
+    async function scanItem(itemCode) {
+      if (!currentBox) return flashError('请先扫箱码（B开头）再扫子码');
+      if (!currentBox.product_id) return flashError('本箱还未选产品，请先在上方选择产品');
+
+      const res = await fetch('/api/factory/pack/scan', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ box_code: currentBox.box_code, item_code: itemCode, box_size: boxSize })
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        if (data.bound_count !== undefined) {
+          document.getElementById('boundCount').textContent = data.bound_count;
+        }
+        // 区分重复扫码与普通失败的不同提示音
+        const isDup = /重复|已在本箱|已绑定/.test(data.msg || '');
+        return flashError(data.msg || '绑定失败', isDup ? 'dup' : 'err');
+      }
+
+      playBeep('item');
+
+      // 后端箱规兜底（首次未填箱规时从产品默认取）
+      if (data.box_size && !boxSize) {
+        boxSize = data.box_size;
+        document.getElementById('boxSizeInput').value = boxSize;
+      }
+
+      stat.items++;
+      document.getElementById('statItems').textContent = stat.items;
+      updateItemList(data.items || []);
+      updateProgress();
+
+      if (data.full) {
+        currentBoxCompleted = true;
+        stat.boxes++;
+        document.getElementById('statBoxes').textContent = stat.boxes;
+        setBigStatus(`本箱装箱完成（${data.bound_count}/${data.box_size}）！扫下一个箱码开始新箱`, 'big-full', 'check');
+        toast(`本箱完成！共 ${data.bound_count} 个，扫下一个箱码继续`, 'success');
+        refreshPackSummary();
+      } else {
+        setBigStatus(`正在装箱：${currentBox.product_name}（${data.bound_count}/${data.box_size || '?'}）`, 'big-packing', 'box');
+        toast(`绑定成功 (${data.bound_count}/${data.box_size || '?'})`, 'success');
+      }
+    }
+
+    // 手动修改箱规
+    async function applyBoxSize() {
+      if (productConfirming || scanInFlight || cancelSubmitting) return toast('上一项正在处理，请稍后修改箱规', 'error');
+      if (!currentBox || !currentBox.product_id) return toast('请先扫描箱码并确认产品', 'error');
+      const input = document.getElementById('boxSizeInput');
+      const size = Number(input.value);
+      const bound = parseInt(document.getElementById('boundCount').textContent) || 0;
+      if (!Number.isSafeInteger(size) || size < 1 || size < bound) return toast('箱规必须是正整数，且不能小于已绑子码数量', 'error');
+      productConfirming = true;
+      const button = document.getElementById('applyBoxSizeBtn');
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/factory/pack/set-product', { method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({box_code: currentBox.box_code, product_id: currentBox.product_id, batch_no: currentBox.batch_no, box_size: size}) });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.msg || '箱规保存失败');
+        boxSize = data.box_size;
+        currentBox.box_size = boxSize;
+        currentBoxCompleted = bound >= boxSize;
+        input.value = boxSize;
+        if (Number(document.getElementById('selProduct').value) === currentBox.product_id) document.getElementById('selBoxSize').value = boxSize;
+        setLastPack({id: currentBox.product_id, name: currentBox.product_name, box_size: boxSize, batch_no: currentBox.batch_no});
+        updateProgress();
+        toast('箱规已保存为 ' + boxSize, 'success');
+        setBigStatus(`箱规已保存（${bound}/${boxSize}）`, currentBoxCompleted ? 'big-full' : 'big-packing', 'box');
+      } catch (error) {
+        input.value = boxSize || '';
+        toast((error.message || '网络错误') + '；未确认保存，请重新扫箱码核对后重试', 'error');
+      } finally {
+        productConfirming = false;
+        button.disabled = <%- JSON.stringify(user.role === 'AUDIT_VIEWER') %>;
+      }
+      scanInput.focus();
+    }
+
+    function updateItemList(items) {
+      const list = document.getElementById('itemList');
+      document.getElementById('boundCount').textContent = items.length;
+      list.innerHTML = items.length === 0
+        ? '<p class="empty-list-state">暂无子码</p>'
+        : items.map((it, i) => `
+          <div class="packed-item-row">
+            <span class="mono-text">${i+1}. ${escapeHtml(it.item_code)}</span>
+            <span class="small-text muted-text">${escapeHtml(it.bound_at || it.created_at || '')}</span>
+          </div>`).join('');
+    }
+
+    function updateProgress() {
+      const bound = parseInt(document.getElementById('boundCount').textContent) || 0;
+      document.getElementById('progressText').textContent = bound + ' / ' + (boxSize || '?');
+      const progress = document.getElementById('progressBar');
+      progress.max = boxSize > 0 ? boxSize : 1;
+      progress.value = boxSize > 0 ? Math.min(bound, boxSize) : 0;
+      progress.textContent = boxSize > 0 ? Math.round(Math.min(bound / boxSize, 1) * 100) + '%' : '0%';
+    }
+
+    // ---- 扫码记录查询（累计概览 + 最近明细） ----
+    async function loadPackRecords() {
+      const list = document.getElementById('packRecordsList');
+      try {
+        const res = await fetch('/api/factory/pack/records');
+        const data = await res.json();
+        if (!data.success) throw new Error(data.msg || '加载失败');
+        const st = data.stats || {};
+        document.getElementById('prScanCount').textContent = st.scan_count ?? 0;
+        document.getElementById('prBoxCount').textContent = st.box_count ?? 0;
+        document.getElementById('prErrorCount').textContent = st.error_count ?? 0;
+        const records = data.records || [];
+        const actionText = { nobox: '无箱码入库', nobox_cancel: '取消无箱码入库', bind: '绑定子码', box_full: '装箱完成', error: '扫码失败' };
+        list.innerHTML = records.length ? records.map(row => `
+          <tr>
+            <td class="small-text">${escapeHtml(row.created_at || '-')}</td>
+            <td>${escapeHtml(actionText[row.action] || row.action || '-')}</td>
+            <td><strong>${escapeHtml(row.product_name || '-')}</strong>${row.spec ? '<small>' + escapeHtml(row.spec) + '</small>' : ''}</td>
+            <td class="mono-text">${escapeHtml(row.item_code || row.box_code || '-')}</td>
+            <td>${escapeHtml(row.detail || '-')}</td>
+          </tr>`).join('') : '<tr><td colspan="5" class="empty-cell">暂无扫码记录</td></tr>';
+      } catch (e) {
+        document.getElementById('prScanCount').textContent = '-';
+        document.getElementById('prBoxCount').textContent = '-';
+        document.getElementById('prErrorCount').textContent = '-';
+        list.innerHTML = '<tr><td colspan="5" class="empty-cell">扫码记录加载失败，请刷新重试</td></tr>';
+      }
+    }
+    document.getElementById('packRecordsBtn').addEventListener('click', loadPackRecords);
+    loadPackRecords();
+
+    // ---- 按日期维度筛选 + 以产品名称为主导汇总 ----
+    const packSummaryDate = document.getElementById('packSummaryDate');
+    const packSummaryList = document.getElementById('packSummaryList');
+    const packSummaryTotal = document.getElementById('packSummaryTotal');
+
+    async function loadPackSummary() {
+      const date = packSummaryDate.value || '';
+      try {
+        const url = '/api/factory/pack/summary' + (date ? '?date=' + encodeURIComponent(date) : '');
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.msg || '加载失败');
+        // 同步日期下拉（保留用户当前选择，新增的日期自动出现）
+        if (data.dates && data.dates.length) {
+          const existing = new Set(Array.from(packSummaryDate.options).map(o => o.value));
+          data.dates.forEach(d => {
+            if (!existing.has(d)) {
+              const opt = document.createElement('option');
+              opt.value = d; opt.textContent = d;
+              packSummaryDate.appendChild(opt);
+            }
+          });
+        }
+        const total = data.total || {};
+        packSummaryTotal.innerHTML = `
+          <div class="stat-column"><div class="stat-value">${total.box_count ?? 0}</div><div class="muted-supporting-text">入库箱数</div></div>
+          <div class="stat-column"><div class="stat-value">${total.no_box_count ?? 0}</div><div class="muted-supporting-text">无箱码件数</div></div>
+          <div class="stat-column"><div class="stat-value">${total.item_count ?? 0}</div><div class="muted-supporting-text">产品总数</div></div>
+          <div class="stat-column"><div class="stat-value">${total.product_count ?? 0}</div><div class="muted-supporting-text">产品款数</div></div>`;
+        const summary = data.summary || [];
+        if (summary.length === 0) {
+          packSummaryList.innerHTML = '<p class="empty-list-state">' + (date ? '该日期暂无入库记录' : '暂无入库记录') + '</p>';
+          return;
+        }
+        packSummaryList.innerHTML = summary.map((p, pi) => {
+          const boxes = p.boxes || [];
+          const boxRowsHtml = boxes.map((bx, bi) => {
+            const codes = (bx.item_codes || []).map(escapeHtml);
+            const codesHtml = codes.length
+              ? codes.map(c => `<span class="code-chip">${c}</span>`).join('')
+              : '<span class="muted-text">（无子码）</span>';
+            return `<div class="box-detail-row">
+              <div class="box-detail-head"><span class="mono-text bold-text">${escapeHtml(bx.box_code)}</span><span class="small-text muted-text">${Number(bx.item_count) || 0} 个子码${bx.batch_no ? ' · 批次 ' + escapeHtml(bx.batch_no) : ''}${bx.box_size ? ' · 箱规' + Number(bx.box_size) : ''}</span></div>
+              <div class="box-detail-codes">${codesHtml}</div>
+            </div>`;
+          }).join('');
+          const looseItems = p.loose_items || [];
+          const looseRowsHtml = looseItems.length ? `<div class="box-detail-row">
+            <div class="box-detail-head"><span class="bold-text">无箱码入库</span><span class="small-text muted-text">${looseItems.length} 个单品</span></div>
+            <div class="box-detail-codes">${looseItems.map(it => `<span class="code-chip" title="${escapeHtml((it.boxed_at || '') + (it.batch_no ? ' · 批次 ' + it.batch_no : ''))}">${escapeHtml(it.item_code || '')}</span>`).join('')}</div>
+          </div>` : '';
+          return `<div class="product-summary-card">
+            <div class="product-summary-head" data-toggle="ps-${pi}">
+              <div class="product-summary-title">
+                <span class="chevron" id="chev-${pi}">▸</span>
+                <span class="bold-text">${escapeHtml(p.product_name || '未命名')}</span>${p.spec ? '<span class="small-text muted-text">（' + escapeHtml(p.spec) + '）</span>' : ''}
+              </div>
+              <div class="product-summary-meta">
+                <span class="badge-num">${Number(p.box_count)} 箱</span>
+                ${Number(p.no_box_count) ? '<span class="badge-num">' + Number(p.no_box_count) + ' 无箱码</span>' : ''}
+                <span class="badge-num">${Number(p.item_count)} 个产品</span>
+              </div>
+            </div>
+            <div class="product-summary-body" id="ps-body-${pi}">${boxRowsHtml}${looseRowsHtml}</div>
+          </div>`;
+        }).join('');
+        // 点击产品头展开/收起箱明细
+        packSummaryList.querySelectorAll('.product-summary-head').forEach(head => {
+          head.addEventListener('click', () => {
+            const idx = head.getAttribute('data-toggle').replace('ps-', '');
+            const body = document.getElementById('ps-body-' + idx);
+            const chev = document.getElementById('chev-' + idx);
+            if (!body) return;
+            const open = body.classList.toggle('is-open');
+            if (chev) chev.textContent = open ? '▾' : '▸';
+          });
+        });
+      } catch (e) {
+        packSummaryList.innerHTML = '<p class="empty-list-state">加载失败</p>';
+      }
+    }
+    document.getElementById('packSummaryBtn').addEventListener('click', loadPackSummary);
+    loadPackSummary();
+
+    // 装箱/无箱码入库成功后，实时刷新当日汇总（跟随当前选中的日期）
+    let _packSummaryTimer = null;
+    function refreshPackSummary() {
+      // 防抖：装箱连续扫码时只刷一次，避免频繁请求
+      clearTimeout(_packSummaryTimer);
+      _packSummaryTimer = setTimeout(() => loadPackSummary(), 300);
+    }
+
+    document.getElementById('cameraScanBtn').addEventListener('click', cameraScan);
+    document.getElementById('confirmProductBtn').addEventListener('click', confirmProduct);
+    document.getElementById('cancelProductBtn').addEventListener('click', cancelProductEdits);
+    document.getElementById('applyBoxSizeBtn').addEventListener('click', applyBoxSize);
+    document.getElementById('changeProductBtn').addEventListener('click', changeProduct);
+  </script>
+</body>
+</html>
