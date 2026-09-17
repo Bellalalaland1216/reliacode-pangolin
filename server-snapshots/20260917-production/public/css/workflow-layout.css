@@ -511,3 +511,42 @@ body {
     transition-duration: .01ms !important;
   }
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --workflow-border: #3b443d;
+    --workflow-canvas: #242a25;
+    --workflow-text: #f1f4f1;
+    --workflow-muted: #b4beb7;
+    --workflow-accent: #82c9a3;
+  }
+
+  .workflow-switcher,
+  .workflow-step,
+  .mobile-action-popover,
+  .codes-mobile-table tr,
+  .package-mobile-card,
+  .shipment-mobile-card {
+    background: var(--cm-surface, #181c19) !important;
+    color: var(--workflow-text) !important;
+    border-color: var(--workflow-border) !important;
+  }
+
+  .package-mobile-meta span,
+  .workflow-tools {
+    background: var(--workflow-canvas) !important;
+    border-color: var(--workflow-border) !important;
+  }
+
+  .workflow-switcher a.is-active,
+  .workflow-switcher button.is-active,
+  .workflow-step-number {
+    background: var(--workflow-text) !important;
+    color: #101311 !important;
+  }
+
+  .package-primary .form-actions {
+    background: rgba(24, 28, 25, .96) !important;
+    border-color: var(--workflow-border) !important;
+  }
+}

@@ -266,6 +266,14 @@ input, select, textarea {
   .me-alert-count,
   .alert-count.tag-red { background: #b42318 !important; color: #fff !important; }
   .ov-item .ov-num.success { color: #8bd2a7 !important; }
+  .btn-primary,
+  button[type="submit"],
+  .btn-login,
+  .btn-reg {
+    background: var(--cm-ink) !important;
+    color: var(--cm-canvas) !important;
+    border-color: var(--cm-ink) !important;
+  }
 }
 :where(.sr-only) {
   position: absolute;
