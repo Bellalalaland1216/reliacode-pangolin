@@ -11,7 +11,7 @@ The original image stays intact in the user's UI设计样图 folder. No screensh
 
 ## Geometry and motion
 
-All SVG coordinates refer to the original 1586 × 992 canvas. At that viewport the white card is (185, 79), 1216 × 806; account/password inputs start at x = 894 and are 450 pixels wide. Desktop scales the complete composition uniformly to the window width. Short windows scroll naturally. Mobile uses the same artwork above the existing working form.
+All SVG coordinates refer to the original 1586 × 992 canvas. At that viewport the white card is (185, 79), 1216 × 806; account/password inputs start at x = 894 and are 450 pixels wide. At other desktop ratios, the scene and full-viewport backdrop use aligned reference coordinates with explicit image clipping. Form sizing also accounts for available height. Short windows use a compact layout: the login page must fit the viewport without page-level scrolling or hidden controls. Mobile retains the same artwork with a responsive form. Follow the current [UI design protocol](../../../UI设计规则协议.md); the single-screen requirement supersedes the earlier scrolling behavior.
 
 The van is behind the real curved dog silhouette and original foreground grass. It exits through the original organic illustration boundary. There is no rectangular entrance clipping viewport. One 14-second clock drives a 12-second traverse, the route marker and one parcel shake per pass. Maximum shake is 6 pixels sideways, 10 pixels upward and 3.6 degrees. Loose reference leaves fall on staggered 24–33.5 second loops; original botanical layers sway subtly.
 
