@@ -47,3 +47,11 @@ coordinate with the user before overwriting its work.
 - Never commit production data, uploads, logs, backups, environment files, credentials,
   private keys, certificates, authenticated `.npmrc` content, or generated QR codes.
 - Git synchronizes source history only. Production data follows the server backup plan.
+
+## 单屏页面 UI 规范（2026-09-17）
+
+- 登录、注册等单屏页面必须按可用视口宽度和高度共同适配，一屏内完整显示，不出现页面级横向或纵向滚动。
+- 优先使用克制的卡片宽度、字号、控件高度和留白；矮窗口可采用紧凑或多列排版，不能只按宽度放大整张设计图。
+- 禁止仅隐藏 overflow 来掩盖内容溢出；输入框、错误反馈、主要操作及返回入口均须可见、可点击，保留键盘操作和可读性。
+- 验收覆盖桌面、笔记本、系统缩放对应的小视口、手机竖屏及横屏，并检查默认、报错和条件展开状态。
+- UI 调整保留既有业务逻辑及已确认的视觉素材；注册界面当前先本地验收，部署按用户后续指示执行。
