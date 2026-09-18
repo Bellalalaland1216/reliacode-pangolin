@@ -10,9 +10,7 @@
   <link rel="stylesheet" href="/css/style.css?v=20260901c">
   <style nonce="<%= cspNonce %>">
     .member-hero { padding: 32px; border: 1px solid #dfe3e8; border-radius: 16px; background: #fff; }
-    .member-eyebrow { color: #666; font-size: 12px; font-weight: 600; letter-spacing: 1px; }
     .member-hero h1 { margin: 8px 0 10px; font-size: 30px; line-height: 1.35; }
-    .member-hero p { max-width: 640px; color: #666; font-size: 14px; line-height: 1.8; }
     .trace-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; margin-top: 24px; }
     .trace-form input { width: 100%; min-height: 48px; padding: 11px 14px; border: 1px solid #dfe3e8; border-radius: 10px; font-size: 15px; }
     .trace-form button { min-height: 48px; padding: 0 22px; }
@@ -21,7 +19,6 @@
     .member-card:hover { border-color: #1f1f1f; }
     .member-card .ui-icon { width: 22px; height: 22px; margin-bottom: 28px; }
     .member-card strong { display: block; margin-bottom: 6px; font-size: 16px; }
-    .member-card span { color: #666; font-size: 13px; line-height: 1.7; }
     @media (max-width: 720px) {
       .member-hero { padding: 24px 20px; }
       .member-hero h1 { font-size: 24px; }
@@ -38,9 +35,7 @@
 
   <main class="container">
     <section class="member-hero">
-      <div class="member-eyebrow">个人溯源工作台</div>
       <h1><%= user.display_name || user.username %>，欢迎回来</h1>
-      <p>输入商品上的溯源码，查看产品信息、流转记录和验证结果。你也可以直接使用手机扫描商品二维码。</p>
       <form id="memberTraceForm" class="trace-form">
         <label for="memberTraceCode" class="sr-only">商品溯源码</label>
         <input id="memberTraceCode" type="text" autocomplete="off" placeholder="请输入商品溯源码" aria-label="商品溯源码">
@@ -52,17 +47,14 @@
       <a class="member-card" href="/v">
         <%- icon('camera') %>
         <strong>扫码验证</strong>
-        <span>打开消费者查询页，扫描商品二维码或手动输入溯源码。</span>
       </a>
       <a class="member-card" href="/profile">
         <%- icon('user') %>
         <strong>个人设置</strong>
-        <span>查看账号资料、确认账号角色并更新你的登录密码。</span>
       </a>
       <a class="member-card" href="/v">
         <%- icon('check') %>
         <strong>验证说明</strong>
-        <span>商品验证结果来自品牌发布的批次和流转数据。</span>
       </a>
     </section>
   </main>

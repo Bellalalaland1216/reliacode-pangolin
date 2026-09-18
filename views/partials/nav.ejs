@@ -6,6 +6,7 @@
   const roleText = { AUDIT_VIEWER: '只读体验账号', member: '普通用户', admin: '平台管理员', brand: '品牌管理员', brand_staff: '品牌工作账号', factory: '工厂', warehouse: '品牌方', distributor: '代理商' };
 %>
 <link rel="stylesheet" href="/css/workflow-layout.css?v=20260917-hardening-v2">
+<link rel="stylesheet" href="/css/woodland-admin.css?v=20260918v1">
 <header class="topbar">
   <div class="topbar-inner">
     <span class="topbar-logo"><img class="brand-mark" src="/icons/pangolin-photo.png?v=20260905" alt="穿山甲真实动物图标"><span class="brand-name"><strong>ClawMaster</strong><small>/ 穿山甲溯源大师</small></span><% if (u && ['brand','brand_staff'].includes(u.role) && u.brand_name) { %><span class="topbar-brand-context">· <%= u.brand_name %></span><% } %></span>
