@@ -603,3 +603,146 @@ dialog {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Visual hierarchy v2: a measured type scale and tighter content proportions. */
+.brand-name strong { font-size: 15px !important; }
+.brand-name small { font-size: 11px !important; }
+.topnav a { font-size: 15px !important; font-weight: 600 !important; }
+.tb-name,
+.topbar-brand-context { font-size: 13px !important; }
+
+.page-header h1,
+.page-heading h1 {
+  font-size: clamp(29px, 2.25vw, 35px) !important;
+  line-height: 1.18 !important;
+}
+.page-header p,
+.page-heading p {
+  max-width: 680px;
+  font-size: 12.5px !important;
+  line-height: 1.6 !important;
+}
+.section-title {
+  margin: 30px 0 12px !important;
+  font-size: 19px !important;
+  line-height: 1.3 !important;
+}
+.card-title {
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+}
+.container > .card:first-child > .card-title:first-child { font-size: 21px !important; }
+
+.overview-strip { padding: 12px 0 22px !important; }
+.ov-item { padding: 12px 22px !important; }
+.ov-item .ov-num { font-size: clamp(28px, 2.15vw, 34px) !important; }
+.ov-item .ov-label,
+.cu-label,
+.stat-card .label { font-size: 13px !important; line-height: 1.45 !important; }
+.cu-num { font-size: 25px !important; line-height: 1.2 !important; }
+.cu-unit { font-size: 12px !important; }
+
+.app-tile { min-height: 78px; padding: 18px 20px !important; }
+.app-tile .app-label { font-size: 15px !important; line-height: 1.35 !important; }
+.menu-item { min-height: 62px; }
+.mi-title,
+.me-name,
+.qr-entry-title { font-size: 15px !important; font-weight: 680 !important; }
+
+.table { font-size: 14px !important; }
+.table th {
+  padding: 13px 14px !important;
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+.table td { padding: 13px 14px !important; line-height: 1.55 !important; }
+
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea,
+.form-control {
+  min-height: 44px;
+  font-size: 14px !important;
+}
+.btn,
+button {
+  min-height: 40px;
+  font-size: 13px !important;
+}
+.btn-sm { min-height: 34px !important; font-size: 12px !important; }
+.form-group > label,
+.field-label { font-size: 13px !important; line-height: 1.45 !important; }
+.form-help,
+.muted-supporting-text,
+.help-text,
+.section-help,
+.empty-hint { font-size: 12px !important; line-height: 1.55 !important; }
+
+/* The two dashboard analyses belong together and should read as one visual row. */
+.dashboard-insights {
+  display: grid;
+  grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr);
+  grid-template-rows: auto 1fr;
+  column-gap: 28px;
+  align-items: stretch;
+}
+.dashboard-insights > .section-title:nth-child(1) { grid-column: 1; grid-row: 1; }
+.dashboard-insights > .group-card:nth-child(2) { grid-column: 1; grid-row: 2; }
+.dashboard-insights > .section-title:nth-child(3) { grid-column: 2; grid-row: 1; }
+.dashboard-insights > .group-card:nth-child(4) { grid-column: 2; grid-row: 2; }
+.dashboard-insights > .group-card {
+  min-height: 176px;
+  margin-top: 0 !important;
+  padding: 20px 22px !important;
+}
+.dashboard-insights .code-usage-row { min-height: 76px; align-items: center; }
+
+/* Six business destinations balance naturally as a three-by-two group. */
+.page-header + .section-title + .app-grid {
+  width: min(100%, 1080px);
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+}
+.page-header + .section-title + .app-grid .app-tile { border-right: 0 !important; }
+.page-header + .section-title + .app-grid .app-tile:not(:nth-child(3n)) { border-right: 1px solid var(--wood-line) !important; }
+.page-header + .section-title + .app-grid .app-tile:nth-child(n+4) { border-top: 1px solid var(--wood-line) !important; }
+
+/* The account form uses its available width instead of becoming a tall narrow column. */
+.profile-card {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px 20px;
+  width: min(100%, 680px) !important;
+  max-width: 680px !important;
+  padding: 28px 32px !important;
+}
+.profile-card > .card-title,
+.profile-card > .section-divider,
+.profile-card > .full-width { grid-column: 1 / -1; }
+.profile-card > .form-group { margin: 0 !important; }
+.profile-card > .section-divider { margin: 4px 0 0 !important; }
+.profile-card > .profile-section-title { margin-top: 0 !important; }
+
+@media (max-width: 900px) {
+  .dashboard-insights { grid-template-columns: 1fr; grid-template-rows: auto; }
+  .dashboard-insights > .section-title:nth-child(1),
+  .dashboard-insights > .group-card:nth-child(2),
+  .dashboard-insights > .section-title:nth-child(3),
+  .dashboard-insights > .group-card:nth-child(4) { grid-column: 1; grid-row: auto; }
+  .dashboard-insights > .group-card { min-height: 0; }
+}
+
+@media (max-width: 768px) {
+  .page-header h1,
+  .page-heading h1 { font-size: 26px !important; }
+  .section-title { margin-top: 24px !important; font-size: 18px !important; }
+  .card-title { font-size: 17px !important; }
+  .container > .card:first-child > .card-title:first-child { font-size: 19px !important; }
+  .app-tile .app-label { font-size: 14px !important; }
+  .profile-card {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 22px 20px !important;
+  }
+  .profile-card > * { grid-column: 1 !important; }
+}
