@@ -1,15 +1,17 @@
+<% const safeContactPhone = String(settings.contact_phone || "").replace(/[^0-9+() -]/g, "").trim().slice(0, 32); %>
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#e3f6ef">
   <title>商品溯源码查询 · 穿山甲溯源大师</title>
   <link rel="icon" href="/icons/pangolin-photo.png?v=20260905">
   <link rel="preload" as="image" href="/images/trace-background.webp?v=20260917">
   <link rel="stylesheet" href="/css/style.css">
   <link rel="stylesheet" href="/css/register-glass.css?v=20260917fit2">
-  <link rel="stylesheet" href="/css/verify-glass.css?v=20260917">
+  <link rel="stylesheet" href="/css/verify-glass.css?v=20260918release">
 </head>
 <body class="verify-page">
   <main class="query-page">
@@ -33,31 +35,129 @@
         <button id="verifyButton" type="submit" class="glass-button btn-register">立即验证</button>
       </form>
       <div class="back"><a href="/login"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg><span>返回登录</span></a></div>
-      <% if (settings.contact_phone) { %><a class="query-contact" href="tel:<%= settings.contact_phone %>">客服热线：<%= settings.contact_phone %></a><% } %>
+      <% if (safeContactPhone) { %><a class="query-contact" href="tel:<%= safeContactPhone %>">客服热线：<%= safeContactPhone %></a><% } %>
     </section>
-    <% const imgList = (settings.product_images || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean); %>
-    <% if (imgList.length || settings.promo_video) { %>
-    <section class="query-media" aria-label="商品介绍">
-      <% if (imgList.length) { %>
-      <div class="carousel" id="carousel">
-        <% imgList.forEach((u, idx) => { %><img src="<%= u %>" alt="产品图 <%= idx + 1 %>" <%= idx ? 'hidden' : '' %>><% }); %>
-        <% if (imgList.length > 1) { %><button type="button" class="car-btn car-prev" data-carousel-step="-1" aria-label="上一张商品图">‹</button><button type="button" class="car-btn car-next" data-carousel-step="1" aria-label="下一张商品图">›</button><% } %>
-      </div>
-      <% if (imgList.length > 1) { %><div class="car-dots" id="carDots"><% imgList.forEach((u, idx) => { %><button type="button" class="<%= idx === 0 ? 'active' : '' %>" data-carousel-index="<%= idx %>" aria-label="第 <%= idx + 1 %> 张商品图"></button><% }); %></div><% } %>
-      <% } %>
-      <% if (settings.promo_video) { %><video src="<%= settings.promo_video %>" controls playsinline preload="metadata"></video><% } %>
-    </section>
-    <% } %>
   </main>
   <dialog id="traceResult" class="trace-dialog" aria-labelledby="resultTitle">
     <div class="trace-dialog-header"><h2 id="resultTitle">溯源结果</h2><button id="closeResult" type="button" aria-label="关闭溯源结果"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
     <div id="resultArea" role="status" aria-live="polite"></div>
   </dialog>
-  <script src="/js/html5-qrcode.min.js"></script>
-  <script src="/js/scanner.js"></script>
   <script nonce="<%= cspNonce %>">
-    // 摄像头扫码：识别后自动填入并验证
-    function scanCode() {
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[ch]);
+    }
+    function safeLocalImageUrl(value) {
+      const candidate = String(value == null ? '' : value).trim();
+      return /^\/uploads\/[A-Za-z0-9._-]+$/.test(candidate) ? candidate : '';
+    }
+    function safeHttpsUrl(value) {
+      try {
+        const parsed = new URL(String(value == null ? '' : value));
+        if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return '';
+        return parsed.href;
+      } catch (_) { return ''; }
+    }
+    function productMedia(data) {
+      if (!Array.isArray(data.product_media)) return [];
+      return data.product_media.map((media, index) => ({
+        url: safeLocalImageUrl(media && (media.url || media.image_url || media.path)),
+        alt: String(media && (media.alt_text || media.alt) || `产品图片 ${index + 1}`),
+        cover: Boolean(media && (media.is_cover === true || media.is_cover === 1))
+      })).filter(media => media.url);
+    }
+    function renderEmpty(message) {
+      return `<div class="empty-state">${escapeHtml(message)}</div>`;
+    }
+    function renderProductSection(data, media) {
+      const cover = media.find(item => item.cover) || media[0];
+      return `
+        <section class="h5-card" data-result-section="product">
+          <div class="section-kicker">产品信息</div>
+          <h2 class="section-heading">${escapeHtml(data.product_name || '产品信息待完善')}</h2>
+          ${cover ? `<img class="product-cover" src="${escapeHtml(cover.url)}" alt="${escapeHtml(cover.alt)}">` : renderEmpty('该产品暂未上传封面图片')}
+          <div class="info-row"><span class="label">产品名称</span><span class="value">${escapeHtml(data.product_name || ('本码未装箱 · 品牌：' + (data.brand_name || '已绑定品牌')))}</span></div>
+          ${data.product_spec ? `<div class="info-row"><span class="label">产品规格</span><span class="value">${escapeHtml(data.product_spec)}</span></div>` : ''}
+          <div class="info-row"><span class="label">批次号</span><span class="value">${escapeHtml(data.batch_no || '-')}</span></div>
+          <div class="info-row"><span class="label">生产时间</span><span class="value">${escapeHtml(data.created_at || '-')}</span></div>
+        </section>`;
+    }
+    function renderTraceSection(data) {
+      const timeline = Array.isArray(data.trace_timeline) ? data.trace_timeline : [];
+      const rows = timeline.map(event => {
+        const title = event && (event.title || event.stage_name || event.stage || event.event_type);
+        const occurredAt = event && (event.occurred_at || event.event_time || event.created_at);
+        const location = event && (event.public_location || event.location);
+        const description = event && (event.description || event.summary);
+        if (!title && !occurredAt && !location && !description) return '';
+        const meta = [occurredAt, location].filter(Boolean).map(escapeHtml).join(' · ');
+        return `<li class="trace-item"><div class="trace-title">${escapeHtml(title || '溯源节点')}</div>${meta ? `<div class="trace-meta">${meta}</div>` : ''}${description ? `<div class="trace-description">${escapeHtml(description)}</div>` : ''}</li>`;
+      }).filter(Boolean).join('');
+      return `<section class="h5-card" data-result-section="trace"><div class="section-kicker">批次履历</div><h2 class="section-heading">从来源到流通</h2>${rows ? `<ol class="trace-list">${rows}</ol>` : renderEmpty('该批次暂未发布公开溯源履历')}</section>`;
+    }
+    function renderDistributionSection(data) {
+      return `<section class="h5-card" data-result-section="distribution"><div class="section-kicker">流通状态</div><h2 class="section-heading">当前流通信息</h2>
+        <div class="info-row"><span class="label">发货状态</span><span class="value">${escapeHtml(data.status_text || '-')}</span></div>
+        <div class="info-row"><span class="label">流通区域</span><span class="value">${escapeHtml(data.assigned_region || '未发货')}</span></div>
+        ${data.scan_region ? `<div class="info-row"><span class="label">本次查询区域</span><span class="value">${escapeHtml(data.scan_region)}</span></div>` : ''}
+        ${data.shipped_at ? `<div class="info-row"><span class="label">发货时间</span><span class="value">${escapeHtml(data.shipped_at)}</span></div>` : ''}
+        ${data.type === 'box' ? `<div class="info-row"><span class="label">箱内数量</span><span class="value">${Number(data.item_count) || 0}</span></div><div class="info-row"><span class="label">已验证数量</span><span class="value">${Number(data.verified_count) || 0}</span></div>` : ''}
+      </section>`;
+    }
+    function renderGallerySection(media) {
+      const images = media.map((item, index) => `<img src="${escapeHtml(item.url)}" alt="${escapeHtml(item.alt)}" loading="lazy" class="carousel-image ${index === 0 ? '' : 'is-hidden'}" data-product-carousel-image>`).join('');
+      const controls = media.length > 1 ? `<button class="car-btn car-prev" type="button" data-product-carousel-step="-1" aria-label="上一张">${iconSvg('chevron-left')}</button><button class="car-btn car-next" type="button" data-product-carousel-step="1" aria-label="下一张">${iconSvg('chevron-right')}</button>` : '';
+      const dots = media.length > 1 ? `<div class="car-dots">${media.map((_, index) => `<button class="car-dot ${index === 0 ? 'active' : ''}" type="button" data-product-carousel-index="${index}" aria-label="查看第 ${index + 1} 张产品图片"></button>`).join('')}</div>` : '';
+      const gallery = images ? `<div class="carousel" data-product-carousel data-active-index="0">${images}${controls}</div>${dots}` : '';
+      return `<section class="h5-card" data-result-section="gallery"><div class="section-kicker">产品相册</div><h2 class="section-heading">产品图片</h2>${gallery || renderEmpty('该产品暂未发布相册图片')}</section>`;
+    }
+    function renderPromotionSection(data) {
+      const source = Array.isArray(data.promotion) ? data.promotion : (data.promotion ? [data.promotion] : []);
+      const cards = source.map(item => {
+        if (!item || typeof item !== 'object') return '';
+        const image = safeLocalImageUrl(item.image_url || item.image || item.media_url);
+        const link = safeHttpsUrl(item.link_url || item.url || item.target_url);
+        const title = item.title || item.name;
+        const description = item.description || item.summary || item.content;
+        if (!image && !link && !title && !description) return '';
+        return `<article class="promotion-card">${image ? `<img src="${escapeHtml(image)}" alt="${escapeHtml(title || '品牌活动图片')}" loading="lazy">` : ''}<div class="promotion-title">${escapeHtml(title || '品牌活动')}</div>${description ? `<div class="promotion-description">${escapeHtml(description)}</div>` : ''}${link ? `<a class="promotion-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.cta_text || '了解品牌活动')}</a>` : ''}</article>`;
+      }).filter(Boolean).join('');
+      return `<section class="h5-card" data-result-section="promotion"><div class="section-kicker">品牌活动</div><h2 class="section-heading">品牌提供的活动信息</h2>${cards || renderEmpty('该产品当前没有品牌活动')}</section>`;
+    }
+    function renderCustomerServiceSection() {
+      const phone = <%- JSON.stringify(safeContactPhone) %>;
+      const content = phone
+        ? `<div class="info-row"><span class="label">客服电话</span><span class="value"><a class="contact-link" href="tel:${escapeHtml(phone)}">${escapeHtml(phone)}</a></span></div>`
+        : renderEmpty('如需协助，请通过产品包装上的官方渠道联系品牌方');
+      return `<section class="h5-card" data-result-section="customer-service"><div class="section-kicker">客服信息</div><h2 class="section-heading">需要帮助</h2>${content}</section>`;
+    }
+    function iconSvg(name) {
+      const allowed = new Set(['alert', 'check', 'box', 'search', 'gift', 'ticket', 'chevron-left', 'chevron-right']);
+      const safe = allowed.has(name) ? name : 'alert';
+      return `<svg class="ui-icon ui-icon-lg" aria-hidden="true"><use href="/icons/ui.svg#${safe}"></use></svg>`;
+    }
+    function loadScanner() {
+      if (window._scannerLoaded) return window._scannerLoaded;
+      const loadScript = src => new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+      window._scannerLoaded = loadScript('/js/html5-qrcode.min.js').then(() => loadScript('/js/scanner.js')).catch(error => { window._scannerLoaded = null; throw error; });
+      return window._scannerLoaded;
+    }
+    async function scanCode() {
+      // PC 端无摄像头时降级：弹输入框引导手动输码，避免被 getUserMedia 阻塞
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const code = prompt('当前设备未检测到摄像头，请直接输入溯源码：');
+        if (code && code.trim()) {
+          document.getElementById('codeInput').value = code.trim();
+          doVerify(code.trim(), document.getElementById('locationInput').value.trim());
+        }
+        return;
+      }
+      try { await loadScanner(); } catch (e) { const message = document.getElementById('queryMessage'); message.textContent = '扫码组件加载失败，请重试'; message.hidden = false; return; }
       openScanner({
         title: '扫描产品上的溯源二维码',
         onScanned: (code) => {
@@ -67,40 +167,15 @@
       });
     }
 
-    // 图片轮播
-    let carIdx = 0;
-    function carRender() {
-      const imgs = document.querySelectorAll('#carousel img');
-      const dots = document.querySelectorAll('#carDots button');
-      imgs.forEach((im, i) => { im.hidden = i !== carIdx; });
-      dots.forEach((d, i) => d.className = i === carIdx ? 'active' : '');
-    }
-    function carMove(step) {
-      const imgs = document.querySelectorAll('#carousel img');
-      if (!imgs.length) return;
-      carIdx = (carIdx + step + imgs.length) % imgs.length;
-      carRender();
-    }
-    function carGo(i) { carIdx = i; carRender(); }
-
-    function verify() {
-      const code = document.getElementById('codeInput').value.trim();
-      const location = document.getElementById('locationInput').value.trim();
-      if (!code) { document.getElementById('queryMessage').hidden = false; document.getElementById('codeInput').focus(); return; }
-      document.getElementById('queryMessage').hidden = true;
-      doVerify(code, location);
-    }
-
-    const supportPhone = <%- JSON.stringify(settings.contact_phone || '').replace(/</g, '\u003c') %>;
-    const brandName = <%- JSON.stringify(settings.brand_name || '本品牌').replace(/</g, '\u003c') %>;
     const resultDialog = document.getElementById('traceResult');
     const verifyButton = document.getElementById('verifyButton');
-    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-    function escapeViewData(value) {
-      if (typeof value === 'string') return escapeHtml(value);
-      if (Array.isArray(value)) return value.map(escapeViewData);
-      if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key,item]) => [key,escapeViewData(item)]));
-      return value;
+    const brandName = <%- JSON.stringify(String(settings.brand_name || '本品牌')).replace(/</g, '\u003c') %>;
+    function verify() {
+      const code = document.getElementById('codeInput').value.trim();
+      const message = document.getElementById('queryMessage');
+      if (!code) { message.textContent = '请输入溯源码'; message.hidden = false; document.getElementById('codeInput').focus(); return; }
+      message.hidden = true;
+      doVerify(code, document.getElementById('locationInput').value.trim());
     }
     document.getElementById('verifyForm').addEventListener('submit', event => { event.preventDefault(); verify(); });
     document.getElementById('scanButton').addEventListener('click', scanCode);
@@ -108,8 +183,31 @@
     document.getElementById('closeResult').addEventListener('click', () => resultDialog.close());
     resultDialog.addEventListener('close', () => verifyButton.focus());
     document.querySelector('.query-heading a').addEventListener('click', event => { event.preventDefault(); document.getElementById('codeInput').focus(); });
-    document.querySelectorAll('[data-carousel-step]').forEach(button => button.addEventListener('click', () => carMove(Number(button.dataset.carouselStep))));
-    document.querySelectorAll('[data-carousel-index]').forEach(button => button.addEventListener('click', () => carGo(Number(button.dataset.carouselIndex))));
+    document.getElementById('resultArea').addEventListener('click', event => {
+      const stepButton = event.target.closest('[data-product-carousel-step]');
+      const indexButton = event.target.closest('[data-product-carousel-index]');
+      const section = event.target.closest('[data-result-section="gallery"]');
+      const carousel = section && section.querySelector('[data-product-carousel]');
+      if (!carousel || (!stepButton && !indexButton)) return;
+      const images = [...carousel.querySelectorAll('[data-product-carousel-image]')];
+      if (!images.length) return;
+      let nextIndex = indexButton ? Number(indexButton.dataset.productCarouselIndex) : Number(carousel.dataset.activeIndex || 0) + Number(stepButton.dataset.productCarouselStep);
+      nextIndex = ((nextIndex % images.length) + images.length) % images.length;
+      carousel.dataset.activeIndex = String(nextIndex);
+      images.forEach((image, index) => image.classList.toggle('is-hidden', index !== nextIndex));
+      section.querySelectorAll('[data-product-carousel-index]').forEach((dot, index) => dot.classList.toggle('active', index === nextIndex));
+    });
+
+    // 检测报告：拉取产品公开检测报告图片
+    async function renderReportsSection(code) {
+      try {
+        const res = await fetch(`/api/public/reports/${encodeURIComponent(code)}`);
+        const data = await res.json();
+        if (!data || !data.success || !Array.isArray(data.reports) || !data.reports.length) return '';
+        const imgs = data.reports.filter(r => r && safeLocalImageUrl(r.url)).map(r => `<div class="pub-report" data-report-id="${escapeHtml(r.id)}"><img src="${escapeHtml(r.url)}" alt="检测报告" loading="lazy"></div>`).join('');
+        return `<section class="h5-card" data-result-section="reports"><div class="section-kicker">检测报告</div><h2 class="section-heading">${escapeHtml(data.product_name || '产品')} · 质量检测</h2><div class="public-reports">${imgs}</div></section>`;
+      } catch (_e) { return ''; }
+    }
 
     async function doVerify(code, location) {
       if (verifyButton.disabled) return;
@@ -118,23 +216,24 @@
       if (!resultDialog.open) resultDialog.showModal();
       try {
       const area = document.getElementById('resultArea');
-      area.innerHTML = '<div class="h5-card"><div class="loading">⏳ 正在验证...</div></div>';
+      area.innerHTML = '<div class="h5-card"><div class="loading">正在验证...</div></div>';
 
       let url = `/api/verify/${encodeURIComponent(code)}`;
       const q = [];
       if (location) q.push('location=' + encodeURIComponent(location));
       if (q.length) url += '?' + q.join('&');
       const res = await fetch(url);
-      const data = escapeViewData(await res.json());
+      if (!res.ok) throw new Error('Verification request failed');
+      const data = await res.json();
 
       if (!data.success) {
         area.innerHTML = `
           <div class="h5-card">
             <div class="verify-status err">
-              <div class="icon">⚠️</div>
-              <div class="text">${data.msg}</div>
+              <div class="icon">${iconSvg('alert')}</div>
+              <div class="text">${escapeHtml(data.msg)}</div>
             </div>
-            <div class="info-row"><span class="label">查询码</span><span class="value code-text">${escapeHtml(code)}</span></div>
+            <div class="info-row"><span class="label">查询码</span><span class="value code-value">${escapeHtml(code)}</span></div>
             <div class="info-row"><span class="label">查询时间</span><span class="value">${new Date().toLocaleString('zh-CN')}</span></div>
           </div>
         `;
@@ -142,91 +241,28 @@
       }
 
       let statusIcon, statusClass, statusText;
-      if (data.is_diversion > 0) {
-        statusIcon = '⚠️'; statusClass = 'warn';
-        statusText = data.is_diversion >= 2 ? '疑似串货（跨省）' : '疑似串货';
-      } else if (data.type === 'item') {
-        statusIcon = '✅'; statusClass = 'ok'; statusText = '正品验证通过';
+      if (data.type === 'item') {
+        statusIcon = iconSvg('check'); statusClass = 'ok'; statusText = '正品验证通过';
       } else {
-        statusIcon = '📦'; statusClass = 'ok'; statusText = '箱码验证通过';
+        statusIcon = iconSvg('box'); statusClass = 'ok'; statusText = '箱码验证通过';
       }
 
       let html = `
-        <div class="h5-card">
+        <div class="h5-card" data-result-section="verification">
           <div class="verify-status ${statusClass}">
             <div class="icon">${statusIcon}</div>
             <div class="text">${statusText}</div>
           </div>
       `;
 
-      // 多次扫码提醒
-      const scanCount = data.scan_count || 1;
-      if (scanCount === 1) {
-        html += `<div class="info-row"><span class="label">查询次数</span><span class="value">首次查询</span></div>`;
-      } else if (scanCount === 2) {
-        html += `<div class="scan-times">🔎 该码此前已被查询过 1 次，请确认产品来源渠道。</div>`;
-      } else {
-        html += `<div class="scan-times warn">⚠️ 该码已被查询 ${scanCount} 次，谨防假冒！如非本人操作请立即联系厂家核实。</div>`;
-      }
-      if (scanCount > 1 && data.first_scanned_at) {
-        html += `<div class="info-row"><span class="label">首次查询</span><span class="value small-text">${data.first_scanned_at} ${data.first_scan_location || ''}</span></div>`;
-      }
+      html += `<div class="info-row"><span class="label">验证时间</span><span class="value">${new Date().toLocaleString('zh-CN')}</span></div></div>`;
 
-      // 串货警示
-      if (data.is_diversion > 0) {
-        const scanLoc = escapeHtml(location) || data.resolved_location || '未知';
-        const levelText = data.is_diversion >= 2 ? '该产品跨省流通，疑似恶意串货' : '该产品与指定销售区域不符，存在串货嫌疑';
-        html += `
-          <div class="alert-box danger">
-            ⚠️ ${levelText}。指定区域「${data.region || '未知'}」，当前扫码「${scanLoc}」。已记录并通知厂家。
-          </div>
-        `;
-      }
-
-      html += `
-          <div class="info-row"><span class="label">产品名称</span><span class="value">${data.product_name || '（待装箱绑定产品）'}</span></div>
-      `;
-
-      if (data.product_spec) {
-        html += `<div class="info-row"><span class="label">产品规格</span><span class="value">${data.product_spec}</span></div>`;
-      }
-      html += `<div class="info-row"><span class="label">批次号</span><span class="value">${data.batch_no || '-'}</span></div>`;
-
-      if (data.type === 'item') {
-        html += `<div class="info-row"><span class="label">所属箱码</span><span class="value code-text">${data.box_code || '-'}</span></div>`;
-      }
-
-      html += `
-          <div class="info-row"><span class="label">发货状态</span><span class="value">${data.status_text}</span></div>
-          <div class="info-row"><span class="label">代理区域</span><span class="value">${data.region || '未发货'}</span></div>
-      `;
-
-      if (data.resolved_location) {
-        html += `<div class="info-row"><span class="label">扫码位置</span><span class="value">${data.resolved_location}</span></div>`;
-      }
-
-      if (data.type === 'box' && data.items) {
-        html += `
-          <div class="code-list-title">箱内产品码（${data.items.length}个）</div>
-          <div class="code-list">
-            ${data.items.map(i => `<div class="code-list-row">${i.item_code} ${i.status==='scanned' ? '<span class="tag tag-green" >已验</span>' : '<span class="tag tag-gray" >未验</span>'}</div>`).join('')}
-          </div>
-        `;
-      }
-
-      html += `
-          <div class="info-row"><span class="label">生产时间</span><span class="value">${data.created_at || '-'}</span></div>
-      `;
-      if (data.shipped_at) {
-        html += `<div class="info-row"><span class="label">发货时间</span><span class="value">${data.shipped_at}</span></div>`;
-      }
-      html += `<div class="info-row"><span class="label">验证时间</span><span class="value">${new Date().toLocaleString('zh-CN')}</span></div>`;
-
-      <% if (settings.contact_phone) { %>
-      html += `<div class="info-row"><span class="label">客服电话</span><span class="value"><a href="tel:${escapeHtml(supportPhone.replace(/[^\d+]/g, ''))}" class="contact-link">${escapeHtml(supportPhone)}</a></span></div>`;
-      <% } %>
-
-      html += `</div>`;
+      const media = productMedia(data);
+      html += renderProductSection(data, media);
+      html += renderTraceSection(data);
+      html += renderGallerySection(media);
+      html += await renderReportsSection(code);
+      html += renderPromotionSection(data);
 
       // 抽奖结果
       if (data.prize) {
@@ -235,37 +271,37 @@
         if (p.prize_type === 'red_packet') {
           prizeHtml = `
             <div class="prize-card">
-              <div class="p-icon">💰</div>
+              <div class="p-icon">${iconSvg('gift')}</div>
               <div class="p-title">恭喜中奖！</div>
-              <div class="p-money">¥ ${p.prize_value}</div>
-              <div class="p-sub">${p.prize_name || '现金红包'} · 联系客服领取</div>
+              <div class="p-money">¥ ${escapeHtml(p.prize_value)}</div>
+              <div class="p-sub">${escapeHtml(p.prize_name || '现金红包')} · 联系客服领取</div>
             </div>`;
         } else if (p.prize_type === 'coupon') {
           prizeHtml = `
             <div class="prize-card">
-              <div class="p-icon">🎟️</div>
+              <div class="p-icon">${iconSvg('ticket')}</div>
               <div class="p-title">恭喜获得优惠券</div>
-              <div class="p-money">¥ ${p.prize_value || p.prize_name}</div>
-              <div class="p-sub">${p.prize_name || '优惠券'} · 下单时使用</div>
+              <div class="p-money">¥ ${escapeHtml(p.prize_value || p.prize_name)}</div>
+              <div class="p-sub">${escapeHtml(p.prize_name || '优惠券')} · 下单时使用</div>
             </div>`;
         } else if (p.prize_type === 'goods') {
           prizeHtml = `
             <div class="prize-card">
-              <div class="p-icon">🎁</div>
+              <div class="p-icon">${iconSvg('gift')}</div>
               <div class="p-title">恭喜获得实物奖品</div>
-              <div class="p-sub">${p.prize_name || '神秘好礼'} · 联系客服领取</div>
+              <div class="p-sub">${escapeHtml(p.prize_name || '神秘好礼')} · 联系客服领取</div>
             </div>`;
         } else {
           prizeHtml = `
             <div class="prize-card thanks">
-              <div class="p-icon">👋</div>
+              <div class="p-icon">${iconSvg('check')}</div>
               <div class="p-title">谢谢参与</div>
               <div class="p-sub">感谢支持${escapeHtml(brandName)}，下次好运！</div>
             </div>`;
         }
-        area.innerHTML = prizeHtml + html;
+        area.innerHTML = html + prizeHtml + renderCustomerServiceSection();
       } else {
-        area.innerHTML = html;
+        area.innerHTML = html + renderCustomerServiceSection();
       }
       } catch {
         document.getElementById('resultArea').textContent = '查询暂时不可用，请稍后重试';

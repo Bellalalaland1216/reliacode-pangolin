@@ -14,11 +14,15 @@ const { CHINA_REGIONS, normalizeRegionSelection } = require('./region-catalog');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const IMAGE_ARCHIVE_MAX_CODES = Math.min(2000, Math.max(1, Number(process.env.IMAGE_ARCHIVE_MAX_CODES) || 500));
+const IMAGE_ARCHIVE_MAX_CONCURRENT = Math.min(2, Math.max(1, Number(process.env.IMAGE_ARCHIVE_MAX_CONCURRENT) || 1));
 let httpServer;
 let shutdownStarted = false;
+let imageArchiveJobs = 0;
 
 // 初始化数据库
 initDatabase();
+const receiptIntegrity = require('./receipt-integrity.cjs')(db);
 
 // 中间件
 app.set('trust proxy', 1); // Nginx 反代：仅用于限流和不可逆来源标识。
@@ -44,7 +48,7 @@ app.use((req, res, next) => {
 });
 
 const allowedHosts = new Set(
-  String(process.env.ALLOWED_HOSTS || '127.0.0.1,localhost')
+  String(process.env.ALLOWED_HOSTS || '8.140.52.117,127.0.0.1,localhost')
     .split(',').map(value => value.trim().toLowerCase()).filter(Boolean)
 );
 const normalizedRequestHost = req => {
@@ -310,6 +314,46 @@ function requireAgentIdempotency(req, res, next) {
   };
   res.on('finish', () => {
     if (!persisted) db.prepare('DELETE FROM agent_idempotency WHERE user_id=? AND route=? AND idempotency_key=?').run(req.agentUser.id, route, key);
+  });
+  next();
+}
+
+// 浏览器端即时生码同样必须可安全重试。复用持久化幂等表，避免慢网、双击或
+// 响应丢失后再次提交时分配第二批码。与 Agent 路由按 path 隔离。
+function requireBrowserIdempotency(req, res, next) {
+  const key = String(req.get('idempotency-key') || '').trim();
+  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(key)) {
+    return res.status(400).json({ success: false, code: 'IDEMPOTENCY_KEY_REQUIRED', msg: '生成码需要有效的请求标识，请刷新页面后重试', requestId: req.requestId });
+  }
+  const user = currentUser(req);
+  if (!user?.id) return res.status(401).json({ success: false, code: 'AUTH_REQUIRED', msg: '登录状态已失效，请重新登录', requestId: req.requestId });
+  const now = Date.now();
+  db.prepare('DELETE FROM agent_idempotency WHERE expires_at<=?').run(now);
+  const route = req.path;
+  const requestHash = agentRequestHash(req);
+  const existing = db.prepare('SELECT request_hash, response_json, status_code FROM agent_idempotency WHERE user_id=? AND route=? AND idempotency_key=?')
+    .get(user.id, route, key);
+  if (existing) {
+    if (existing.request_hash !== requestHash) return res.status(409).json({ success: false, code: 'IDEMPOTENCY_CONFLICT', msg: '同一请求标识不能用于不同生码参数', requestId: req.requestId });
+    if (existing.response_json) {
+      res.setHeader('Idempotency-Replayed', 'true');
+      return res.status(existing.status_code || 200).json(JSON.parse(existing.response_json));
+    }
+    return res.status(409).json({ success: false, code: 'IDEMPOTENCY_IN_PROGRESS', msg: '相同生码请求正在处理，请稍后重试，不要重复点击', requestId: req.requestId });
+  }
+  db.prepare(`INSERT INTO agent_idempotency (user_id, route, idempotency_key, request_hash, created_at, expires_at)
+    VALUES (?,?,?,?,?,?)`).run(user.id, route, key, requestHash, now, now + AGENT_IDEMPOTENCY_TTL_MS);
+  const originalJson = res.json.bind(res);
+  let persisted = false;
+  res.json = body => {
+    const statusCode = res.statusCode || 200;
+    db.prepare(`UPDATE agent_idempotency SET response_json=?, status_code=?
+      WHERE user_id=? AND route=? AND idempotency_key=?`).run(JSON.stringify(body), statusCode, user.id, route, key);
+    persisted = true;
+    return originalJson(body);
+  };
+  res.on('finish', () => {
+    if (!persisted) db.prepare('DELETE FROM agent_idempotency WHERE user_id=? AND route=? AND idempotency_key=?').run(user.id, route, key);
   });
   next();
 }
@@ -935,7 +979,7 @@ app.get('/', requireLogin, (req, res) => {
     items: db.prepare(`SELECT COUNT(*) as c FROM items i JOIN products p ON i.product_id=p.id WHERE 1=1 ${bp}`).get(...pparam).c,
     distributors: db.prepare(`SELECT COUNT(*) as c FROM distributors WHERE 1=1 ${scope === null ? '' : ' AND brand_id=?'}`).get(...bparam).c,
     shipped: db.prepare(`SELECT COUNT(*) as c FROM boxes b JOIN products p ON b.product_id=p.id WHERE b.status='shipped' ${bp}`).get(...pparam).c,
-    scanned: db.prepare(`SELECT COUNT(*) as c FROM items i JOIN products p ON i.product_id=p.id WHERE i.status='scanned' ${bp}`).get(...pparam).c,
+    scanned: db.prepare(`SELECT COUNT(*) as c FROM items i JOIN products p ON i.product_id=p.id WHERE i.scanned_at IS NOT NULL ${bp}`).get(...pparam).c,
     inStockBoxes: db.prepare(`SELECT COUNT(*) as c FROM boxes b JOIN products p ON b.product_id=p.id WHERE b.status='in_stock' ${bp}`).get(...pparam).c,
     inStockItems: db.prepare(`SELECT COUNT(*) as c FROM items i JOIN products p ON i.product_id=p.id WHERE i.status='in_stock' ${bp}`).get(...pparam).c,
     diversions: db.prepare(`SELECT COUNT(*) as c FROM scan_logs WHERE is_diversion>0 ${scope === null ? '' : ' AND brand_id=?'}`).get(...bparam).c,
@@ -975,7 +1019,7 @@ app.get('/admin/me', requireRole('admin', 'brand', 'brand_staff'), (req, res) =>
 // 码生成页面（brand 只看自己品牌的产品和工厂）
 app.get('/generate', requireRole('admin', 'brand', 'brand_staff'), (req, res) => {
   const scope = brandScope(req);
-  const products = scope === null
+  const productRows = scope === null
     ? db.prepare(`
         SELECT p.*, f.name as factory_name, b.name as brand_name FROM products p
         LEFT JOIN factories f ON p.factory_id = f.id
@@ -989,6 +1033,7 @@ app.get('/generate', requireRole('admin', 'brand', 'brand_staff'), (req, res) =>
         WHERE p.brand_id = ?
         ORDER BY p.id DESC
       `).all(scope);
+  const products = productRows.map(withProductFactories);
   const factories = scope === null
     ? db.prepare('SELECT id, name, brand_id FROM factories ORDER BY id DESC').all()
     : db.prepare('SELECT id, name, brand_id FROM factories WHERE brand_id=? ORDER BY id DESC').all(scope);
@@ -1013,9 +1058,12 @@ app.get('/factory', requireRole('admin', 'factory', 'brand', 'brand_staff'), (re
   const params = [];
   const role = req.session.user.role;
   if (role === 'factory' && req.session.user.factory_id) {
-    sql += ' AND factory_id=?';
-    params.push(req.session.user.factory_id);
-  } else if (role === 'brand' && req.session.user.brand_id) {
+    sql += ` AND brand_id=? AND (
+      EXISTS (SELECT 1 FROM product_factories pf WHERE pf.product_id=products.id AND pf.factory_id=?)
+      OR (NOT EXISTS (SELECT 1 FROM product_factories pf0 WHERE pf0.product_id=products.id) AND factory_id=?)
+    )`;
+    params.push(req.session.user.brand_id, req.session.user.factory_id, req.session.user.factory_id);
+  } else if (['brand', 'brand_staff'].includes(role) && req.session.user.brand_id) {
     sql += ' AND brand_id=?';
     params.push(req.session.user.brand_id);
   }
@@ -1142,7 +1190,7 @@ app.get('/downloads', requireRole('admin', 'brand', 'brand_staff'), (req, res) =
         LEFT JOIN products p ON p.id=cp.product_id
         LEFT JOIN brands b ON b.id=cp.brand_id
         WHERE cp.brand_id=? ORDER BY cp.id DESC LIMIT 100`).all(scope);
-  res.render('downloads', { products, packages, brands });
+  res.render('downloads', { products, packages, brands, imageArchiveMaxCodes: IMAGE_ARCHIVE_MAX_CODES });
 });
 
 // 品牌方扫码查串货页面
@@ -1156,7 +1204,7 @@ app.get(['/v', '/v/:code'], (req, res) => {
   const settings = readOnlyAccess.publicSettings(db.prepare('SELECT key, value FROM settings').all());
   const brandStats = {
     total_scans: db.prepare('SELECT COUNT(*) as c FROM scan_logs').get().c,
-    verified_items: db.prepare("SELECT COUNT(*) as c FROM items WHERE status='scanned'").get().c
+    verified_items: db.prepare('SELECT COUNT(*) as c FROM items WHERE scanned_at IS NOT NULL').get().c
   };
   res.render('verify', { code, settings, brandStats });
 });
@@ -1186,9 +1234,62 @@ const safeHttpsUrl = value => {
     return url.toString();
   } catch { return null; }
 };
+function normalizedFactoryIds(body = {}) {
+  const values = Array.isArray(body.factory_ids)
+    ? body.factory_ids
+    : (body.factory_id == null || body.factory_id === '' ? [] : [body.factory_id]);
+  return [...new Set(values.map(asId).filter(Boolean))];
+}
+function productFactoryRows(productId) {
+  return db.prepare(`SELECT f.id, f.name, f.brand_id
+    FROM product_factories pf JOIN factories f ON f.id=pf.factory_id
+    WHERE pf.product_id=? ORDER BY pf.created_at, f.id`).all(productId);
+}
+function withProductFactories(product) {
+  if (!product) return null;
+  const rows = productFactoryRows(product.id);
+  if (!rows.length && product.factory_id) {
+    const legacy = db.prepare('SELECT id,name,brand_id FROM factories WHERE id=?').get(product.factory_id);
+    if (legacy) rows.push(legacy);
+  }
+  return {
+    ...product,
+    factory_ids: rows.map(row => row.id),
+    factory_names: rows.map(row => row.name),
+    factory_name: rows.length ? rows.map(row => row.name).join('、') : (product.factory_name || '')
+  };
+}
+function resolveProductFactories(factoryIds, scope, expectedBrandId = null) {
+  if (!factoryIds.length) return { rows: [], brandId: expectedBrandId || (scope === null ? null : scope) };
+  const placeholders = factoryIds.map(() => '?').join(',');
+  const rows = db.prepare(`SELECT id,name,brand_id FROM factories WHERE id IN (${placeholders})`).all(...factoryIds);
+  if (rows.length !== factoryIds.length) return { error: '所选工厂不存在，请刷新后重试' };
+  const brandIds = [...new Set(rows.map(row => Number(row.brand_id) || 0))];
+  if (brandIds.length !== 1 || !brandIds[0]) return { error: '所选工厂必须全部归属同一有效品牌' };
+  if (!brandAllowed(scope, brandIds[0])) return { error: '所选工厂不属于你的品牌' };
+  if (expectedBrandId && Number(expectedBrandId) !== brandIds[0]) return { error: '产品只能关联同一品牌下的工厂' };
+  return { rows, brandId: brandIds[0] };
+}
+function replaceProductFactories(productId, factoryIds) {
+  db.prepare('DELETE FROM product_factories WHERE product_id=?').run(productId);
+  const insert = db.prepare('INSERT INTO product_factories (product_id,factory_id) VALUES (?,?)');
+  factoryIds.forEach(factoryId => insert.run(productId, factoryId));
+}
+function factoryAssignedToProduct(factoryId, productId) {
+  if (!factoryId || !productId) return false;
+  return !!db.prepare(`SELECT 1 FROM product_factories WHERE product_id=? AND factory_id=?
+    UNION ALL SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM product_factories WHERE product_id=?)
+    AND (SELECT factory_id FROM products WHERE id=?)=? LIMIT 1`)
+    .get(productId, factoryId, productId, productId, factoryId);
+}
 function scopedProduct(req, id) {
   const product = db.prepare('SELECT * FROM products WHERE id=?').get(asId(id));
-  return product && brandAllowed(brandScope(req), product.brand_id) ? product : null;
+  if (!product || !brandAllowed(brandScope(req), product.brand_id)) return null;
+  const user = currentUser(req);
+  if (user?.role === 'factory') {
+    if (!factoryAssignedToProduct(user.factory_id, product.id)) return null;
+  }
+  return withProductFactories(product);
 }
 function productContent(productId, brandId, batchNo, includeDraft = false) {
   const media = db.prepare(`SELECT id, url, alt_text, sort_order, is_cover FROM product_media
@@ -1220,15 +1321,13 @@ app.post('/api/products', requireRole('admin', 'brand', 'brand_staff'), (req, re
   const { name, spec, batch_no } = req.body;
   const box_size = parseInt(req.body.box_size) || 0;
   const scope = brandScope(req);
-  let factory_id = parseInt(req.body.factory_id) || null;
+  const factoryIds = normalizedFactoryIds(req.body);
+  let factory_id = factoryIds[0] || null;
   let brand_id = null;
   if (!name) return res.json({ success: false, msg: '产品名称不能为空' });
-  if (factory_id) {
-    const factory = db.prepare('SELECT * FROM factories WHERE id=?').get(factory_id);
-    if (!factory) return res.json({ success: false, msg: '所选工厂不存在' });
-    if (!brandAllowed(scope, factory.brand_id)) return res.json({ success: false, msg: '所选工厂不属于你的品牌' });
-    brand_id = factory.brand_id;
-  }
+  const resolvedFactories = resolveProductFactories(factoryIds, scope);
+  if (resolvedFactories.error) return res.status(400).json({ success: false, code: 'PRODUCT_FACTORY_INVALID', msg: resolvedFactories.error });
+  brand_id = resolvedFactories.brandId;
   if (scope !== null) brand_id = scope;
   // 平台管理员可显式指定品牌（未指定工厂，或工厂本身未归属品牌时生效）
   if (scope === null && (!factory_id || !brand_id) && req.body.brand_id) brand_id = parseInt(req.body.brand_id) || null;
@@ -1238,10 +1337,17 @@ app.post('/api/products', requireRole('admin', 'brand', 'brand_staff'), (req, re
   }
   const description = cleanText(req.body.description, 2000);
   const ena13 = cleanText(req.body.ena13, 32);
-  const result = db.prepare('INSERT INTO products (name, spec, batch_no, box_size, factory_id, brand_id, description, ena13) VALUES (?,?,?,?,?,?,?,?)')
-    .run(name, spec || '', batch_no || '', box_size, factory_id, brand_id, description, ena13);
+  if (factoryIds.length && Number(brand_id) !== Number(resolvedFactories.brandId)) {
+    return res.status(409).json({ success: false, code: 'PRODUCT_FACTORY_BRAND_CONFLICT', msg: '归属品牌与所选工厂不一致' });
+  }
+  const result = db.transaction(() => {
+    const created = db.prepare('INSERT INTO products (name, spec, batch_no, box_size, factory_id, brand_id, description, ena13) VALUES (?,?,?,?,?,?,?,?)')
+      .run(name, spec || '', batch_no || '', box_size, factory_id, brand_id, description, ena13);
+    replaceProductFactories(created.lastInsertRowid, factoryIds);
+    return created;
+  })();
   logOperation(req, 'create_product', 'product', result.lastInsertRowid, `创建产品「${cleanText(name, 120)}」`);
-  res.json({ success: true, id: result.lastInsertRowid, version: 1 });
+  res.json({ success: true, id: result.lastInsertRowid, version: 1, factory_ids: factoryIds });
 });
 
 // 修改产品（含箱规）
@@ -1252,12 +1358,25 @@ app.put('/api/products/:id', requireRole('admin', 'brand', 'brand_staff'), (req,
   if (!name) return res.json({ success: false, msg: '产品名称不能为空' });
   const product = db.prepare('SELECT * FROM products WHERE id=?').get(id);
   if (!product || !brandAllowed(brandScope(req), product.brand_id)) return res.status(404).json({ success: false, msg: '产品不存在' });
+  const scope = brandScope(req);
+  const requestedBrandId = parseInt(req.body.brand_id) || product.brand_id;
+  if (requestedBrandId !== product.brand_id) {
+    return res.status(409).json({ success: false, code: 'PRODUCT_BRAND_IMMUTABLE', msg: '已有产品不能直接更换归属品牌；请新建正确品牌的产品，避免已有溯源码失去归属' });
+  }
+  const factoryIds = normalizedFactoryIds(req.body);
+  const factoryId = factoryIds[0] || null;
+  const resolvedFactories = resolveProductFactories(factoryIds, scope, product.brand_id);
+  if (resolvedFactories.error) return res.status(400).json({ success: false, code: 'PRODUCT_FACTORY_INVALID', msg: resolvedFactories.error });
   const expectedVersion = req.body.version == null ? product.version : Number(req.body.version);
-  const result = db.prepare(`UPDATE products SET name=?, spec=?, batch_no=?, box_size=?, description=?, ena13=?, version=version+1
-    WHERE id=? AND version=?`).run(name, spec || '', batch_no || '', box_size, cleanText(req.body.description, 2000), cleanText(req.body.ena13, 32), id, expectedVersion);
+  const result = db.transaction(() => {
+    const updated = db.prepare(`UPDATE products SET name=?, spec=?, batch_no=?, box_size=?, factory_id=?, description=?, ena13=?, version=version+1
+      WHERE id=? AND version=?`).run(name, spec || '', batch_no || '', box_size, factoryId, cleanText(req.body.description, 2000), cleanText(req.body.ena13, 32), id, expectedVersion);
+    if (updated.changes) replaceProductFactories(product.id, factoryIds);
+    return updated;
+  })();
   if (!result.changes) return res.status(409).json({ success: false, code: 'VERSION_CONFLICT', msg: '产品已被其他用户修改，请刷新后重试' });
   logOperation(req, 'update_product', 'product', id, `更新产品「${cleanText(name, 120)}」`);
-  res.json({ success: true, version: expectedVersion + 1 });
+  res.json({ success: true, version: expectedVersion + 1, factory_ids: factoryIds });
 });
 
 // 删除产品（admin/brand；该产品下没有任何未删除的箱码/子码时才能删除）
@@ -1286,15 +1405,18 @@ app.get('/api/products', requireRole('admin', 'factory', 'brand', 'brand_staff')
   if (role === 'factory') {
     if (!user.factory_id || !user.brand_id) sql += ' AND 1=0';
     else {
-      sql += ' AND factory_id=? AND brand_id=?';
-      params.push(user.factory_id, user.brand_id);
+      sql += ` AND brand_id=? AND (
+        EXISTS (SELECT 1 FROM product_factories pf WHERE pf.product_id=products.id AND pf.factory_id=?)
+        OR (NOT EXISTS (SELECT 1 FROM product_factories pf0 WHERE pf0.product_id=products.id) AND factory_id=?)
+      )`;
+      params.push(user.brand_id, user.factory_id, user.factory_id);
     }
   } else if (['brand', 'brand_staff'].includes(role) && user.brand_id) {
     sql += ' AND brand_id=?';
     params.push(user.brand_id);
   }
   sql += ' ORDER BY id DESC';
-  const products = db.prepare(sql).all(...params);
+  const products = db.prepare(sql).all(...params).map(withProductFactories);
   res.json({ success: true, products });
 });
 
@@ -1524,7 +1646,7 @@ const generateBoxes = wrap(async (req, res) => {
   logOperation(req, 'generate_boxes', 'box', generated[0]?.box_code || '', `生成箱码 ${generated.length} 个${req.agentUser ? '（Agent API）' : ''}`);
   res.json({ success: true, generated, count: generated.length, requestId: req.requestId });
 });
-app.post('/api/codes/generate/boxes', requireRole('admin', 'brand_staff'), generateBoxes);
+app.post('/api/codes/generate/boxes', requireRole('admin', 'brand_staff'), requireBrowserIdempotency, generateBoxes);
 app.post('/api/agent/codes/boxes', requireAgentToken, requireAgentRole('admin', 'brand_staff'), requireAgentIdempotency, generateBoxes);
 
 // 单独生成子码（未绑定箱码）
@@ -1572,12 +1694,31 @@ const generateItems = wrap(async (req, res) => {
   logOperation(req, 'generate_items', 'item', generated[0]?.item_code || '', `生成子码 ${generated.length} 个${req.agentUser ? '（Agent API）' : ''}`);
   res.json({ success: true, generated, count: generated.length, requestId: req.requestId });
 });
-app.post('/api/codes/generate/items', requireRole('admin', 'brand_staff'), generateItems);
+app.post('/api/codes/generate/items', requireRole('admin', 'brand_staff'), requireBrowserIdempotency, generateItems);
 app.post('/api/agent/codes/items', requireAgentToken, requireAgentRole('admin', 'brand_staff'), requireAgentIdempotency, generateItems);
 
 // 生产码包：一次生成 1～50,000 个码并绑定到唯一任务，供工厂精确导出 TXT。
 // 与页面即时生码不同，此流程不预生成数万张 PNG，避免阻塞服务和占满磁盘。
+// 网页生码的请求标识永久保留；即使连接中断或服务重启，重试也只能指向原任务。
+db.exec(`
+  CREATE TABLE IF NOT EXISTS code_package_idempotency (
+    user_id INTEGER NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    request_hash TEXT NOT NULL,
+    package_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, idempotency_key)
+  );
+`);
+const readCodePackageRequest = db.prepare(`
+  SELECT request_hash, package_id FROM code_package_idempotency
+  WHERE user_id=? AND idempotency_key=?
+`);
 app.post('/api/code-packages', requireRole('admin', 'brand_staff'), wrap(async (req, res) => {
+  const idempotencyKey = String(req.get('idempotency-key') || '').trim();
+  if (!/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
+    return res.status(400).json({ success: false, code: 'IDEMPOTENCY_KEY_REQUIRED', msg: '生成码包需要 8～128 位请求标识，请刷新页面后重试' });
+  }
   const codeType = req.body.code_type === 'box' ? 'box' : req.body.code_type === 'item' ? 'item' : '';
   const quantity = Number(req.body.quantity);
   const productId = Number(req.body.product_id);
@@ -1606,6 +1747,7 @@ app.post('/api/code-packages', requireRole('admin', 'brand_staff'), wrap(async (
     if (!product || !brandAllowed(scope, product.brand_id)) {
       return res.status(404).json({ success: false, code: 'PRODUCT_NOT_FOUND', msg: '产品不存在或无权访问' });
     }
+    if (product.brand_id !== brandId) return res.status(409).json({success:false,code:'PACKAGE_BRAND_CONFLICT',msg:'码包品牌必须与产品品牌一致，请重新选择'});
   }
 
   const now = new Date();
@@ -1639,11 +1781,48 @@ app.post('/api/code-packages', requireRole('admin', 'brand_staff'), wrap(async (
     }
   }
 
-  const packageResult = db.prepare(`INSERT INTO code_packages
-    (package_no,code_type,brand_id,product_id,batch_no,quantity,base_url,status,created_by,created_by_name)
-    VALUES (?,?,?,?,?,?,?,'generating',?,?)`)
-    .run(packageNo, codeType, brandId, effectiveProductId, effectiveBatchNo, quantity, getBaseUrl(req), user.id || null, user.username || '');
-  const packageId = Number(packageResult.lastInsertRowid);
+  const requestHash = crypto.createHash('sha256').update(JSON.stringify({
+    brandId, productId: effectiveProductId, batchNo: effectiveBatchNo,
+    quantity, codeType, originTitle, originLocation, occurredAtInput
+  })).digest('hex');
+  const reserveCodePackage = db.transaction(() => {
+    const existing = readCodePackageRequest.get(user.id, idempotencyKey);
+    if (existing) return { existing };
+    const packageResult = db.prepare(`INSERT INTO code_packages
+      (package_no,code_type,brand_id,product_id,batch_no,quantity,base_url,status,created_by,created_by_name)
+      VALUES (?,?,?,?,?,?,?,'generating',?,?)`)
+      .run(packageNo, codeType, brandId, effectiveProductId, effectiveBatchNo, quantity, getBaseUrl(req), user.id, user.username || '');
+    const id = Number(packageResult.lastInsertRowid);
+    db.prepare(`INSERT INTO code_package_idempotency
+      (user_id,idempotency_key,request_hash,package_id,created_at) VALUES (?,?,?,?,?)`)
+      .run(user.id, idempotencyKey, requestHash, id, Date.now());
+    return { packageId: id };
+  });
+  const reservation = reserveCodePackage();
+  if (reservation.existing) {
+    if (reservation.existing.request_hash !== requestHash) {
+      return res.status(409).json({ success: false, code: 'IDEMPOTENCY_CONFLICT', msg: '同一请求标识不能用于不同码包参数' });
+    }
+    const previous = db.prepare('SELECT * FROM code_packages WHERE id=? AND created_by=?').get(reservation.existing.package_id, user.id);
+    if (!previous || previous.brand_id !== brandId) {
+      return res.status(409).json({ success: false, code: 'PACKAGE_REQUEST_UNAVAILABLE', msg: '原码包记录不可用，请联系平台管理员' });
+    }
+    if (previous.status === 'generating') {
+      res.setHeader('Retry-After', '2');
+      return res.status(409).json({ success: false, code: 'IDEMPOTENCY_IN_PROGRESS', msg: '原码包仍在生成或等待核查，请稍后用同一请求标识重试，不要开启新任务' });
+    }
+    if (previous.status !== 'ready') {
+      return res.status(500).json({ success: false, code: 'PACKAGE_GENERATION_FAILED', msg: '原码包生成失败，未产生完整码数据；请核查记录后开始新任务' });
+    }
+    res.setHeader('Idempotency-Replayed', 'true');
+    return res.status(201).json({
+      success: true,
+      package: { id: previous.id, package_no: previous.package_no, code_type: previous.code_type,
+        quantity: previous.quantity, generic: !previous.product_id, status: 'ready' },
+      download_url: `/api/code-packages/${previous.id}/download?mode=url`
+    });
+  }
+  const packageId = reservation.packageId;
 
   let firstCode = '';
   let lastCode = '';
@@ -1760,7 +1939,7 @@ app.get('/api/codes/box/:code', requireRole('admin', 'brand', 'brand_staff'), (r
 });
 
 // 绑定子码到箱码（可绑定任意数量；brand 只能操作自己品牌的码）
-app.post('/api/codes/bind', requireRole('admin', 'brand', 'brand_staff'), (req, res) => {
+app.post('/api/codes/bind', requireRole('admin', 'brand', 'brand_staff'), receiptIntegrity.atomic((req, res) => {
   const { item_codes } = req.body;
   const box_code = extractCode(req.body.box_code);
   const scope = brandScope(req);
@@ -1774,7 +1953,8 @@ app.post('/api/codes/bind', requireRole('admin', 'brand', 'brand_staff'), (req, 
   `).get(box_code);
   if (!box) return res.json({ success: false, msg: '箱码不存在' });
   if (!brandAllowed(scope, box.eff_brand_id)) return res.json({ success: false, msg: '该箱码不属于你的品牌' });
-  if (box.status === 'shipped') return res.json({ success: false, msg: '该箱已发货，不能继续绑定' });
+  if (box.status === 'shipped' || box.distributor_id != null || box.status === 'invalid') return res.json({ success: false, msg: '该箱已发货或作废，不能继续绑定' });
+  if (!box.product_id) return res.json({ success: false, msg: '请先为箱码选择产品再绑定子码' });
 
   const readBindableItem = db.prepare(`
     SELECT i.*, COALESCE(i.brand_id, p.brand_id) as eff_brand_id
@@ -1784,14 +1964,30 @@ app.post('/api/codes/bind', requireRole('admin', 'brand', 'brand_staff'), (req, 
   if (requestedItems.some(item => !item || !brandAllowed(scope, item.eff_brand_id))) {
     return res.status(404).json({ success: false, code: 'ITEM_NOT_FOUND', msg: '部分子码不存在或无权访问' });
   }
+  if (requestedItems.some(item => item.box_id && item.box_id !== box.id)) return res.status(409).json({success:false,msg:'部分子码已在其他箱，本次未绑定'});
+  const currentCount = db.prepare('SELECT COUNT(*) c FROM items WHERE box_id=?').get(box.id).c;
+  if (box.box_size > 0 && currentCount + requestedItems.filter(item => !item.box_id).length > box.box_size) return res.status(409).json({success:false,msg:'子码数量超过箱规，请先核对箱规'});
+  if (receiptIntegrity.boxConflict(box.id)) return res.status(409).json({success:false,msg:'该箱已有商品、品牌或批次冲突，请先核对历史资料'});
+  if (requestedItems.some(item => item.status === 'invalid' || itemHasShipment(item) ||
+      (item.eff_brand_id && box.eff_brand_id && item.eff_brand_id !== box.eff_brand_id) ||
+      (item.product_id && item.product_id !== box.product_id) ||
+      (item.batch_no && item.batch_no !== box.batch_no) ||
+      (!item.box_id && item.boxed_at))) {
+    return res.json({ success: false, msg: '子码已发货、作废、已无箱码入库或商品/品牌不一致，请先处理后绑定' });
+  }
 
   const tx = db.transaction(() => {
+    const product = db.prepare('SELECT * FROM products WHERE id=?').get(box.product_id);
+    const factory = receiptIntegrity.owner(req, product, box);
+    db.prepare('UPDATE boxes SET receipt_factory_id=? WHERE id=?').run(factory, box.id);
     for (const item of requestedItems) {
       if (item.box_id) continue; // 已绑定的跳过
       if (item.status === 'shipped') continue;
       // 箱码有产品则子码跟随箱码产品；箱码为空白码时保留子码自身产品；装箱后状态置为 scanned
-      db.prepare("UPDATE items SET box_id=?, product_id=COALESCE(?, product_id), brand_id=COALESCE(?, brand_id), status='scanned' WHERE id=?")
-        .run(box.id, box.product_id, box.eff_brand_id, item.id);
+      db.prepare("UPDATE items SET box_id=?, product_id=?, brand_id=COALESCE(brand_id, ?), batch_no=?, status='scanned', boxed_at=datetime('now','localtime') WHERE id=?")
+        .run(box.id, box.product_id, box.eff_brand_id, box.batch_no || '', item.id);
+      db.prepare('UPDATE items SET receipt_factory_id=? WHERE id=?').run(factory, item.id);
+      logPackRecord(req, 'bind', box.box_code, item.item_code, product.name, '批量绑定子码', product.spec, box.box_size, 1);
     }
     const count = db.prepare('SELECT COUNT(*) as c FROM items WHERE box_id=?').get(box.id).c;
     db.prepare('UPDATE boxes SET item_count=? WHERE id=?').run(count, box.id);
@@ -1800,10 +1996,10 @@ app.post('/api/codes/bind', requireRole('admin', 'brand', 'brand_staff'), (req, 
 
   const count = db.prepare('SELECT COUNT(*) as c FROM items WHERE box_id=?').get(box.id).c;
   res.json({ success: true, msg: `绑定成功，该箱现有 ${count} 个子码`, count });
-});
+}));
 
 // 解绑子码（从箱码中移出；brand 只能操作自己品牌）
-app.post('/api/codes/unbind', requireRole('admin', 'brand', 'brand_staff'), (req, res) => {
+app.post('/api/codes/unbind', requireRole('admin', 'brand', 'brand_staff'), receiptIntegrity.atomic((req, res) => {
   const item_code = extractCode(req.body.item_code);
   if (!item_code) return res.json({ success: false, msg: '请输入子码' });
 
@@ -1813,20 +2009,21 @@ app.post('/api/codes/unbind', requireRole('admin', 'brand', 'brand_staff'), (req
   if (!item) return res.json({ success: false, msg: '子码不存在' });
   if (!brandAllowed(brandScope(req), item.eff_brand_id)) return res.json({ success: false, msg: '该子码不属于你的品牌' });
   if (!item.box_id) return res.json({ success: false, msg: '该子码未绑定任何箱码' });
-  if (item.status === 'shipped' || item.status === 'scanned') {
-    return res.json({ success: false, msg: '该子码已发货/已扫码，不能解绑' });
+  if (itemHasShipment(item) || item.status === 'invalid') {
+    return res.json({ success: false, msg: '该子码已发货或作废，不能解绑' });
   }
 
   const boxId = item.box_id;
   const tx = db.transaction(() => {
-    db.prepare('UPDATE items SET box_id=NULL WHERE id=?').run(item.id);
+    clearItemReceipt(req, item);
     const count = db.prepare('SELECT COUNT(*) as c FROM items WHERE box_id=?').get(boxId).c;
     db.prepare('UPDATE boxes SET item_count=? WHERE id=?').run(count, boxId);
+    if (count === 0) clearBoxReceipt(req, db.prepare('SELECT * FROM boxes WHERE id=?').get(boxId));
   });
   tx();
 
   res.json({ success: true, msg: '解绑成功' });
-});
+}));
 
 // 获取码列表（brand 只看自己品牌的码）
 app.get('/api/codes', requireRole('admin', 'brand', 'brand_staff'), (req, res) => {
@@ -1849,7 +2046,7 @@ app.get('/api/codes', requireRole('admin', 'brand', 'brand_staff'), (req, res) =
     const total = db.prepare(`SELECT COUNT(*) as c FROM boxes b LEFT JOIN products p ON b.product_id=p.id ${where}`).get(...params).c;
     const boxes = db.prepare(`
       SELECT b.*, p.name as product_name, br.name as brand_name,
-        (SELECT COUNT(*) FROM items i WHERE i.box_id=b.id AND i.status='scanned') as scanned_count
+        (SELECT COUNT(*) FROM items i WHERE i.box_id=b.id AND i.scanned_at IS NOT NULL) as scanned_count
       FROM boxes b
       LEFT JOIN products p ON b.product_id = p.id
       LEFT JOIN brands br ON br.id = COALESCE(b.brand_id, p.brand_id)
@@ -1895,18 +2092,20 @@ function logOperation(req, action, targetType, targetId, detail) {
     db.prepare(`INSERT INTO operation_logs (user_id, username, role, action, target_type, target_id, detail, ip, brand_id)
       VALUES (?,?,?,?,?,?,?,?,?)`)
       .run(u.id || null, u.username || null, u.role || null, action, targetType || null, String(targetId || ''), detail || null, req.ip || null, u.brand_id || null);
-  } catch (e) { console.error('[logOperation]', e.message); }
+  } catch (e) { if (db.inTransaction) throw e; console.error('[logOperation]', e.message); }
 }
 
 // 工厂装箱记录：持久化装箱成功/扫错事件，供「扫码记录」统计
 function logPackRecord(req, action, box_code, item_code, product_name, detail, spec, box_size, item_count) {
-  try {
     const u = req.agentUser || req.session.user || {};
-    db.prepare(`INSERT INTO pack_records (user_id, username, factory_id, brand_id, box_code, item_code, product_name, spec, box_size, item_count, action, detail)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(u.id || null, u.username || null, u.factory_id || null, u.brand_id || null,
-        box_code || null, item_code || null, product_name || null, spec || null, box_size || null, item_count || null, action, detail || null);
-  } catch (e) { console.error('[logPackRecord]', e.message); }
+    const target = (item_code && db.prepare('SELECT * FROM items WHERE item_code=?').get(item_code)) ||
+      (box_code && db.prepare('SELECT * FROM boxes WHERE box_code=?').get(box_code));
+    const product = target?.product_id && db.prepare('SELECT * FROM products WHERE id=?').get(target.product_id);
+    db.prepare(`INSERT INTO pack_records (user_id, username, factory_id, brand_id, box_code, item_code, product_name, spec, box_size, item_count, action, detail, receipt_factory_id, product_id, batch_no)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(u.id || null, u.username || null, u.factory_id || null, target?.brand_id || product?.brand_id || u.brand_id || null,
+        box_code || null, item_code || null, product?.name || product_name || null, product?.spec || spec || null, box_size || null, item_count ?? null, action, detail || null,
+        target?.receipt_factory_id || receiptIntegrity.owner(req, product), target?.product_id || null, target?.batch_no || '');
 }
 
 function removeGeneratedQr(code) {
@@ -1917,6 +2116,18 @@ function removeGeneratedQr(code) {
   } catch (error) {
     if (error.code !== 'ENOENT') console.error(JSON.stringify({ level: 'error', event: 'qr_cleanup_failed', code: safeCode, message: error.message }));
   }
+}
+
+function boxHasLifecycleHistory(box) {
+  return box.status === 'invalid' || box.status === 'shipped' || box.distributor_id != null || !!box.shipped_at ||
+    !!db.prepare('SELECT 1 FROM shipments WHERE box_id=? LIMIT 1').get(box.id) ||
+    !!db.prepare('SELECT 1 FROM pack_records WHERE box_code=? LIMIT 1').get(box.box_code);
+}
+function itemHasLifecycleHistory(item) {
+  return item.status === 'invalid' || item.status === 'shipped' || item.distributor_id != null || !!item.shipped_at ||
+    !!item.boxed_at || !!item.scanned_at ||
+    !!db.prepare('SELECT 1 FROM shipments WHERE item_code=? LIMIT 1').get(item.item_code) ||
+    !!db.prepare('SELECT 1 FROM pack_records WHERE item_code=? LIMIT 1').get(item.item_code);
 }
 
 // 删除码（admin/brand；未发货/未扫码的码可物理删除）
@@ -1931,7 +2142,7 @@ app.delete('/api/codes/:type/:id', requireRole('admin', 'brand'), (req, res) => 
     `).get(codeId);
     if (!box) return res.json({ success: false, msg: '箱码不存在' });
     if (!brandAllowed(scope, box.brand_id)) return res.json({ success: false, msg: '没有权限操作该箱码' });
-    if (box.status === 'shipped') return res.json({ success: false, msg: '已发货的箱码不能删除（如需作废请用「标记作废」）' });
+    if (boxHasLifecycleHistory(box)) return res.json({ success: false, msg: '该箱码已有入库、作废或发货历史，不能物理删除；溯源记录必须保留' });
     const childCount = db.prepare('SELECT COUNT(*) c FROM items WHERE box_id=?').get(codeId).c;
     if (childCount > 0) return res.json({ success: false, msg: `该箱下还有 ${childCount} 个子码，请先删除子码` });
     db.prepare('DELETE FROM boxes WHERE id=?').run(codeId);
@@ -1944,8 +2155,7 @@ app.delete('/api/codes/:type/:id', requireRole('admin', 'brand'), (req, res) => 
     `).get(codeId);
     if (!item) return res.json({ success: false, msg: '子码不存在' });
     if (!brandAllowed(scope, item.brand_id)) return res.json({ success: false, msg: '没有权限操作该子码' });
-    if (item.status === 'shipped') return res.json({ success: false, msg: '已发货的子码不能删除' });
-    if (item.status === 'scanned') return res.json({ success: false, msg: '已扫码的子码不能删除（溯源数据需要保留）' });
+    if (itemHasLifecycleHistory(item)) return res.json({ success: false, msg: '该子码已有入库、查验、作废或发货历史，不能物理删除；溯源记录必须保留' });
     db.prepare('DELETE FROM items WHERE id=?').run(codeId);
     removeGeneratedQr(item.item_code);
     logOperation(req, 'delete_item', 'item', item.item_code, `子码「${item.item_code}」已物理删除`);
@@ -1975,7 +2185,7 @@ app.post('/api/codes/batch-delete', requireRole('admin', 'brand'), (req, res) =>
         `).get(codeId);
         if (!box) { skipped.push({ code: String(rawId), msg: '不存在' }); continue; }
         if (!brandAllowed(scope, box.brand_id)) { skipped.push({ code: box.box_code, msg: '无权限' }); continue; }
-        if (box.status === 'shipped') { skipped.push({ code: box.box_code, msg: '已发货' }); continue; }
+        if (boxHasLifecycleHistory(box)) { skipped.push({ code: box.box_code, msg: '已有业务历史' }); continue; }
         const childCount = db.prepare('SELECT COUNT(*) c FROM items WHERE box_id=?').get(codeId).c;
         if (childCount > 0) { skipped.push({ code: box.box_code, msg: `箱下还有 ${childCount} 个子码` }); continue; }
         db.prepare('DELETE FROM boxes WHERE id=?').run(codeId);
@@ -1987,8 +2197,7 @@ app.post('/api/codes/batch-delete', requireRole('admin', 'brand'), (req, res) =>
         `).get(codeId);
         if (!item) { skipped.push({ code: String(rawId), msg: '不存在' }); continue; }
         if (!brandAllowed(scope, item.brand_id)) { skipped.push({ code: item.item_code, msg: '无权限' }); continue; }
-        if (item.status === 'shipped') { skipped.push({ code: item.item_code, msg: '已发货' }); continue; }
-        if (item.status === 'scanned') { skipped.push({ code: item.item_code, msg: '已扫码' }); continue; }
+        if (itemHasLifecycleHistory(item)) { skipped.push({ code: item.item_code, msg: '已有业务历史' }); continue; }
         db.prepare('DELETE FROM items WHERE id=?').run(codeId);
         logOperation(req, 'delete_item', 'item', item.item_code, `子码「${item.item_code}」批量删除`);
         deleted.push(item.item_code);
@@ -1999,7 +2208,7 @@ app.post('/api/codes/batch-delete', requireRole('admin', 'brand'), (req, res) =>
   for (const code of deleted) removeGeneratedQr(code);
 
   let msg = `已删除 ${deleted.length} 个${type === 'box' ? '箱码' : '子码'}`;
-  if (skipped.length) msg += `，跳过 ${skipped.length} 个（已发货/已扫码/箱下有子码的不可删除）`;
+  if (skipped.length) msg += `，跳过 ${skipped.length} 个（已有业务历史或箱下有子码的不可删除）`;
   res.json({ success: true, deleted: deleted.length, skipped, msg });
 });
 
@@ -2156,6 +2365,10 @@ app.post('/api/factory/pack/start', requireRole('admin', 'factory', 'brand', 'br
   if (!brandAllowed(scope, box.eff_brand_id)) {
     return res.json({ success: false, msg: '该箱码不属于你的品牌，无法装箱' });
   }
+  const operator = currentUser(req);
+  if (operator?.role === 'factory' && box.product_id && !factoryAssignedToProduct(operator.factory_id, box.product_id)) {
+    return res.status(403).json({ success: false, code: 'PRODUCT_FACTORY_FORBIDDEN', msg: '该产品未授权给当前工厂装箱' });
+  }
 
   const items = db.prepare(`
     SELECT i.item_code, COALESCE(i.boxed_at, i.created_at) AS bound_at FROM items i WHERE i.box_id = ? ORDER BY i.id
@@ -2172,7 +2385,7 @@ app.post('/api/factory/pack/start', requireRole('admin', 'factory', 'brand', 'br
 });
 
 // 为箱码选择产品+箱规（空白箱码装箱第一步；也可中途换产品）
-app.post('/api/factory/pack/set-product', requireRole('admin', 'factory', 'brand', 'brand_staff'), (req, res) => {
+app.post('/api/factory/pack/set-product', requireRole('admin', 'factory', 'brand', 'brand_staff'), receiptIntegrity.atomic((req, res) => {
   const box_code = extractCode(req.body.box_code);
   const product_id = parseInt(req.body.product_id);
   const box_size = parseInt(req.body.box_size) || 0;
@@ -2185,12 +2398,14 @@ app.post('/api/factory/pack/set-product', requireRole('admin', 'factory', 'brand
   if (box.status === 'shipped') return res.json({ success: false, msg: '该箱已发货，不能修改' });
   if (box.status === 'invalid') return res.json({ success: false, msg: '该箱码已作废' });
 
-  const product = db.prepare('SELECT * FROM products WHERE id=?').get(product_id);
-  if (!product) return res.json({ success: false, msg: '产品不存在' });
+  const product = scopedProduct(req, product_id);
+  if (!product) return res.status(404).json({ success: false, msg: '产品不存在或未授权给当前工厂' });
 
   const scope = brandScope(req);
   if (!brandAllowed(scope, box.brand_id)) return res.json({ success: false, msg: '该箱码不属于你的品牌' });
   if (!brandAllowed(scope, product.brand_id)) return res.json({ success: false, msg: '该产品不属于你的品牌' });
+
+  if (box.brand_id && product.brand_id && box.brand_id !== product.brand_id) return res.json({ success: false, msg: '箱码与产品的品牌不一致' });
 
   // 该箱已绑定的子码若属于其他产品，禁止切换（防止混装数据错乱）
   const conflict = db.prepare('SELECT COUNT(*) as c FROM items WHERE box_id=? AND product_id IS NOT NULL AND product_id != ?')
@@ -2200,15 +2415,18 @@ app.post('/api/factory/pack/set-product', requireRole('admin', 'factory', 'brand
   }
 
   const effectiveSize = box_size || product.box_size || 0;
+  const boundCount = db.prepare('SELECT COUNT(*) c FROM items WHERE box_id=?').get(box.id).c;
+  if (!batch_no && !box.batch_no) return res.status(400).json({success:false,msg:'请输入批次号'});
+  if (!Number.isSafeInteger(effectiveSize) || effectiveSize < 1 || effectiveSize < boundCount) return res.status(400).json({success:false,msg:'箱规必须为正整数且不能小于已绑子码数量'});
   db.prepare('UPDATE boxes SET product_id=?, brand_id=COALESCE(?, ?), batch_no=?, box_size=? WHERE id=?')
     .run(product_id, product.brand_id, box.brand_id, batch_no || box.batch_no, effectiveSize, box.id);
   logOperation(req, 'pack_set_product', 'box', box.box_code, `箱码「${box.box_code}」设置产品：${product.name}${box_size ? `，箱规 ${box_size}` : ''}`);
 
   res.json({ success: true, msg: `已选择产品：${product.name}`, box_size: box_size || product.box_size || 0 });
-});
+}));
 
 // 扫子码绑定到当前箱（带防错）
-app.post('/api/factory/pack/scan', requireRole('admin', 'factory', 'brand', 'brand_staff'), (req, res) => {
+app.post('/api/factory/pack/scan', requireRole('admin', 'factory', 'brand', 'brand_staff'), receiptIntegrity.atomic((req, res) => {
   const box_code = extractCode(req.body.box_code);
   const item_code = extractCode(req.body.item_code);
   if (!box_code) return res.json({ success: false, msg: '请先扫箱码' });
@@ -2228,14 +2446,20 @@ app.post('/api/factory/pack/scan', requireRole('admin', 'factory', 'brand', 'bra
   if (!brandAllowed(scope, box.eff_brand_id)) {
     return res.json({ success: false, msg: '该箱码不属于你的品牌，无法装箱' });
   }
+  const operator = currentUser(req);
+  if (operator?.role === 'factory' && box.product_id && !factoryAssignedToProduct(operator.factory_id, box.product_id)) {
+    return res.status(403).json({ success: false, code: 'PRODUCT_FACTORY_FORBIDDEN', msg: '该产品未授权给当前工厂装箱' });
+  }
 
   // 空白箱码必须先选产品再扫子码
   if (!box.product_id) {
     return res.json({ success: false, msg: '该箱还未选择产品，请先在上方选择产品并确认箱规' });
   }
+  if (receiptIntegrity.boxConflict(box.id)) return res.status(409).json({success:false,msg:'该箱已有商品、品牌或批次冲突，请先核对历史资料'});
 
   // 箱规：优先用前端传的（工人可临时改），否则用产品默认箱规
-  const boxSize = parseInt(req.body.box_size) || box.product_box_size || 0;
+  const boxSize = parseInt(req.body.box_size) || box.box_size || box.product_box_size || 0;
+  if (!Number.isSafeInteger(boxSize) || boxSize < 1 || !box.batch_no) return res.status(400).json({success:false,msg:'请先确认有效箱规和批次'});
 
   const item = db.prepare(`
     SELECT i.*, p.name as product_name, p.spec as product_spec, COALESCE(i.brand_id, p.brand_id) as eff_brand_id FROM items i
@@ -2264,21 +2488,28 @@ app.post('/api/factory/pack/scan', requireRole('admin', 'factory', 'brand', 'bra
     return res.json({ success: false, msg: `该子码已绑定箱码 ${otherBox?.box_code || ''}，不能重复装箱`, bound_count: curBound });
   }
   // 防错3：已发货
-  if (item.status === 'shipped') {
+  if (itemHasShipment(item)) {
     logPackRecord(req, 'error', box.box_code, item_code, item.product_name, '已发货', item.product_spec || box.product_spec, boxSize, curBound);
     return res.json({ success: false, msg: `该子码已发货，不能装箱`, bound_count: curBound });
   }
   // 防错4：产品不符（空白子码 product_id 为空，绑定时自动跟随箱码产品，不算不符）
+  if (item.status === 'invalid') return res.json({ success: false, msg: '该子码已作废，不能装箱' });
+  if (item.boxed_at) return res.json({ success: false, msg: '该子码已无箱码入库，请先取消无箱码入库再装箱' });
+  if (item.batch_no && item.batch_no !== box.batch_no) return res.status(409).json({success:false,msg:'子码与箱码的批次不一致，不能混装'});
+  if (item.eff_brand_id && box.eff_brand_id && item.eff_brand_id !== box.eff_brand_id) return res.json({ success: false, msg: '子码与箱码的品牌不一致' });
   if (box.product_id && item.product_id && box.product_id !== item.product_id) {
     logPackRecord(req, 'error', box.box_code, item_code, item.product_name, '产品不符', item.product_spec || box.product_spec, boxSize, curBound);
     return res.json({ success: false, msg: `产品不符！箱码产品与子码产品不一致`, bound_count: curBound });
   }
 
   // 绑定：空白子码自动跟随箱码产品/品牌；装箱后子码状态置为「已装箱 scanned」；boxed_at 记录本次装箱时间
-  db.prepare("UPDATE items SET box_id=?, product_id=COALESCE(?, product_id), brand_id=COALESCE(?, brand_id), status='scanned', boxed_at=datetime('now','localtime') WHERE id=?")
-    .run(box.id, box.product_id, box.eff_brand_id, item.id);
+  db.prepare("UPDATE items SET box_id=?, product_id=COALESCE(?, product_id), brand_id=COALESCE(brand_id, ?), batch_no=?, status='scanned', boxed_at=datetime('now','localtime') WHERE id=?")
+    .run(box.id, box.product_id, box.eff_brand_id, box.batch_no || '', item.id);
   const count = curBound + 1;
-  db.prepare('UPDATE boxes SET item_count=? WHERE id=?').run(count, box.id);
+  const product = db.prepare('SELECT * FROM products WHERE id=?').get(box.product_id);
+  const factory = receiptIntegrity.owner(req, product, box);
+  db.prepare('UPDATE items SET receipt_factory_id=? WHERE id=?').run(factory, item.id);
+  db.prepare('UPDATE boxes SET item_count=?,box_size=?,receipt_factory_id=? WHERE id=?').run(count, boxSize, factory, box.id);
 
   const items = db.prepare("SELECT item_code, COALESCE(boxed_at, created_at) AS bound_at FROM items WHERE box_id=? ORDER BY id").all(box.id);
 
@@ -2290,25 +2521,25 @@ app.post('/api/factory/pack/scan', requireRole('admin', 'factory', 'brand', 'bra
     success: true,
     msg: `绑定成功`,
     item_code: item_code,
-    item_product_name: item.product_name,
+    item_product_name: product.name,
     bound_count: count,
     box_size: boxSize,
     full: boxSize > 0 && count >= boxSize,   // 扫满标记，前端自动提示完成
     items: items
   });
-});
+}));
 
 // 无箱码直接扫子码入库：不扫箱码，直接把子码关联到产品+批次号，状态置为已入库（scanned）
 // 适用于大包粮等无需装箱的单品（如 10kg 大包），直接扫子码完成产品绑定入库
-app.post('/api/factory/pack/scan-nobox', requireRole('admin', 'factory', 'brand', 'brand_staff'), (req, res) => {
+app.post('/api/factory/pack/scan-nobox', requireRole('admin', 'factory', 'brand', 'brand_staff'), receiptIntegrity.atomic((req, res) => {
   const item_code = extractCode(req.body.item_code);
   const product_id = parseInt(req.body.product_id);
   const batch_no = (req.body.batch_no || '').trim();
   if (!item_code) return res.json({ success: false, msg: '请输入子码' });
   if (!product_id) return res.json({ success: false, msg: '请先选择产品' });
 
-  const product = db.prepare('SELECT * FROM products WHERE id=?').get(product_id);
-  if (!product) return res.json({ success: false, msg: '产品不存在' });
+  const product = scopedProduct(req, product_id);
+  if (!product) return res.status(404).json({ success: false, msg: '产品不存在或未授权给当前工厂' });
 
   const scope = brandScope(req);
   if (!brandAllowed(scope, product.brand_id)) return res.json({ success: false, msg: '该产品不属于你的品牌' });
@@ -2320,7 +2551,9 @@ app.post('/api/factory/pack/scan-nobox', requireRole('admin', 'factory', 'brand'
   `).get(item_code);
   if (!item) return res.status(404).json({ success: false, code: 'ITEM_NOT_FOUND', msg: '子码不存在或无权访问' });
   if (!brandAllowed(scope, item.eff_brand_id)) return res.status(404).json({ success: false, code: 'ITEM_NOT_FOUND', msg: '子码不存在或无权访问' });
-  if (item.status === 'shipped') return res.json({ success: false, msg: '该子码已发货，不能入库' });
+  if (itemHasShipment(item)) return res.json({ success: false, msg: '该子码已发货，不能入库' });
+  if (item.status === 'invalid') return res.json({ success: false, msg: '该子码已作废，不能入库' });
+  if (item.eff_brand_id && product.brand_id && item.eff_brand_id !== product.brand_id) return res.json({ success: false, msg: '子码与产品的品牌不一致，不能更改码的品牌归属' });
 
   // 防错1：已绑定箱码，走正常装箱流程，不能无箱码入库
   if (item.box_id) {
@@ -2334,8 +2567,12 @@ app.post('/api/factory/pack/scan-nobox', requireRole('admin', 'factory', 'brand'
 
   // 无箱码入库：关联产品 + 品牌 + 批次号，状态置为已入库 scanned；boxed_at 记录本次入库时间
   const effectiveBatch = batch_no || product.batch_no || item.batch_no || '';
+  if (item.product_id && item.product_id !== product.id) return res.status(409).json({success:false,msg:'子码已指定其他产品，不能覆盖'});
+  if (item.batch_no && item.batch_no !== effectiveBatch) return res.status(409).json({success:false,msg:'子码已指定其他批次，不能覆盖'});
+  if (!effectiveBatch) return res.status(400).json({success:false,msg:'请输入批次号'});
   db.prepare("UPDATE items SET product_id=?, brand_id=COALESCE(?, brand_id), batch_no=?, status='scanned', boxed_at=datetime('now','localtime') WHERE id=?")
     .run(product.id, product.brand_id, effectiveBatch, item.id);
+  db.prepare('UPDATE items SET receipt_factory_id=? WHERE id=?').run(receiptIntegrity.owner(req, product), item.id);
 
   logPackRecord(req, 'nobox', null, item_code, product.name, `无箱码入库：${product.name}${product.spec ? '（'+product.spec+'）' : ''}${effectiveBatch ? ' · 批次 '+effectiveBatch : ''}`, product.spec, 0, 1);
 
@@ -2347,7 +2584,7 @@ app.post('/api/factory/pack/scan-nobox', requireRole('admin', 'factory', 'brand'
     product_spec: product.spec || '',
     batch_no: effectiveBatch
   });
-});
+}));
 
 // 工厂装箱 · 扫码记录查询（工厂账号可查自己的装箱统计/明细）
 app.get('/api/factory/pack/records', requireRole('admin', 'factory', 'brand', 'brand_staff'), (req, res) => {
@@ -2360,13 +2597,13 @@ app.get('/api/factory/pack/records', requireRole('admin', 'factory', 'brand', 'b
   let where = '1=1';
   const params = [];
   if (u.role === 'factory') {
-    where = 'factory_id = ?';
+    where = 'COALESCE(receipt_factory_id,factory_id) = ?';
     params.push(factoryId);
   } else if (scope !== null) {
     where = 'brand_id = ?';
     params.push(scope);
   } else if (factoryId > 0) {
-    where = 'factory_id = ?';
+    where = 'COALESCE(receipt_factory_id,factory_id) = ?';
     params.push(factoryId);
   }
 
@@ -2404,16 +2641,16 @@ app.get('/api/factory/pack/summary', requireRole('admin', 'factory', 'brand', 'b
   // 组装 boxes 上的筛选：品牌 + 工厂（工厂通过 products.factory_id 关联）
   // 业务日期口径：以「箱内子码的最后装箱时间（boxed_at）」为准，空箱回退箱码创建时间；
   // 取消绑定后重新装箱，会按重新装箱的时间归到业务日期，实现“当日入库实时联动”。
-  const boxConds = [];
+  const boxConds = ['EXISTS (SELECT 1 FROM items current_item WHERE current_item.box_id=b.id)'];
   const boxParams = [];
   if (u.role === 'factory') {
-    boxConds.push('p.factory_id = ?');
+    boxConds.push('b.receipt_factory_id = ?');
     boxParams.push(factoryId);
   } else if (scope !== null && scope > 0) {
     boxConds.push('COALESCE(b.brand_id, p.brand_id) = ?');
     boxParams.push(scope);
   } else if (factoryId > 0) {
-    boxConds.push('p.factory_id = ?');
+    boxConds.push('b.receipt_factory_id = ?');
     boxParams.push(factoryId);
   }
   const bizDateExpr = `COALESCE(
@@ -2428,16 +2665,39 @@ app.get('/api/factory/pack/summary', requireRole('admin', 'factory', 'brand', 'b
   // 可选日期列表（有装箱记录的日期，按业务日期倒序）
   const dateConds = [];
   const dateParams = [];
-  if (u.role === 'factory') { dateConds.push('p.factory_id = ?'); dateParams.push(factoryId); }
+  if (u.role === 'factory') { dateConds.push('b.receipt_factory_id = ?'); dateParams.push(factoryId); }
   else if (scope !== null && scope > 0) { dateConds.push('COALESCE(b.brand_id, p.brand_id) = ?'); dateParams.push(scope); }
+  else if (factoryId > 0) { dateConds.push('b.receipt_factory_id = ?'); dateParams.push(factoryId); }
   const dateWhere = dateConds.length ? 'AND ' + dateConds.join(' AND ') : '';
   const dateRows = db.prepare(
     `SELECT DISTINCT ${bizDateExpr} d
      FROM boxes b LEFT JOIN products p ON b.product_id = p.id
-     WHERE b.product_id IS NOT NULL ${dateWhere}
+     WHERE b.product_id IS NOT NULL AND EXISTS (SELECT 1 FROM items current_item WHERE current_item.box_id=b.id) ${dateWhere}
      ORDER BY d DESC LIMIT 60`
   ).all(...dateParams);
-  const dates = dateRows.map(r => r.d);
+
+  // 无箱码入库没有 boxes 记录，必须直接从当前已入库且未装箱的子码补入日期与汇总。
+  // 这里读取 items 当前状态，取消入库后会实时从汇总消失；历史操作仍保留在 pack_records 明细中。
+  const noBoxConds = ["i.box_id IS NULL", "i.status IN ('scanned','shipped')", 'i.boxed_at IS NOT NULL', 'i.product_id IS NOT NULL'];
+  const noBoxParams = [];
+  if (u.role === 'factory') {
+    noBoxConds.push('i.receipt_factory_id = ?');
+    noBoxParams.push(factoryId);
+  } else if (scope !== null && scope > 0) {
+    noBoxConds.push('COALESCE(i.brand_id, p.brand_id) = ?');
+    noBoxParams.push(scope);
+  } else if (factoryId > 0) {
+    noBoxConds.push('i.receipt_factory_id = ?');
+    noBoxParams.push(factoryId);
+  }
+  const noBoxDateRows = db.prepare(
+    `SELECT DISTINCT date(i.boxed_at) d
+     FROM items i JOIN products p ON p.id=i.product_id
+     WHERE ${noBoxConds.join(' AND ')}
+     ORDER BY d DESC LIMIT 60`
+  ).all(...noBoxParams);
+  const dates = Array.from(new Set([...dateRows, ...noBoxDateRows].map(r => r.d).filter(Boolean)))
+    .sort((a, b) => b.localeCompare(a)).slice(0, 60);
 
   // 装箱明细：所有已绑定产品的箱及其子码（附业务日期）
   const boxRows = db.prepare(
@@ -2449,6 +2709,20 @@ app.get('/api/factory/pack/summary', requireRole('admin', 'factory', 'brand', 'b
      WHERE b.product_id IS NOT NULL AND ${boxWhere}
      ORDER BY ${bizDateExpr} ASC, b.id ASC`
   ).all(...boxParams);
+
+  const filteredNoBoxConds = noBoxConds.slice();
+  const filteredNoBoxParams = noBoxParams.slice();
+  if (date) {
+    filteredNoBoxConds.push('date(i.boxed_at) = ?');
+    filteredNoBoxParams.push(date);
+  }
+  const noBoxRows = db.prepare(
+    `SELECT i.id, i.item_code, i.product_id, i.batch_no, i.boxed_at,
+            date(i.boxed_at) AS biz_date, p.name AS product_name, p.spec AS spec
+     FROM items i JOIN products p ON p.id=i.product_id
+     WHERE ${filteredNoBoxConds.join(' AND ')}
+     ORDER BY i.boxed_at ASC, i.id ASC`
+  ).all(...filteredNoBoxParams);
 
   // 子码明细：按箱收集
   const boxIds = boxRows.map(b => b.id);
@@ -2474,8 +2748,10 @@ app.get('/api/factory/pack/summary', requireRole('admin', 'factory', 'brand', 'b
         spec: b.spec || '',
         box_size: b.box_size || 0,
         box_count: 0,
+        no_box_count: 0,
         item_count: 0,
-        boxes: []
+        boxes: [],
+        loose_items: []
       });
     }
     const entry = byProduct.get(key);
@@ -2492,17 +2768,44 @@ app.get('/api/factory/pack/summary', requireRole('admin', 'factory', 'brand', 'b
     });
   });
 
+  noBoxRows.forEach(item => {
+    const key = `${item.product_id}`;
+    if (!byProduct.has(key)) {
+      byProduct.set(key, {
+        product_id: item.product_id,
+        product_name: item.product_name || '未命名',
+        spec: item.spec || '',
+        box_size: 0,
+        box_count: 0,
+        no_box_count: 0,
+        item_count: 0,
+        boxes: [],
+        loose_items: []
+      });
+    }
+    const entry = byProduct.get(key);
+    entry.no_box_count += 1;
+    entry.item_count += 1;
+    entry.loose_items.push({
+      item_code: item.item_code,
+      batch_no: item.batch_no || '',
+      biz_date: item.biz_date || item.boxed_at,
+      boxed_at: item.boxed_at
+    });
+  });
+
   const summary = Array.from(byProduct.values())
     .sort((a, b) => b.item_count - a.item_count || a.product_name.localeCompare(b.product_name, 'zh'));
 
   const totalBoxes = summary.reduce((s, p) => s + p.box_count, 0);
+  const totalNoBox = summary.reduce((s, p) => s + p.no_box_count, 0);
   const totalItems = summary.reduce((s, p) => s + p.item_count, 0);
 
   res.json({
     success: true,
     date: date || null,
     dates,
-    total: { box_count: totalBoxes, item_count: totalItems, product_count: summary.length },
+    total: { box_count: totalBoxes, no_box_count: totalNoBox, item_count: totalItems, product_count: summary.length },
     summary
   });
 });
@@ -2523,9 +2826,16 @@ function shipOneCode(code, distributor_id, operator, scope, distributor, order_n
   `).get(code);
   if (box) {
     if (!brandAllowed(scope, box.eff_brand_id)) return { ok: false, msg: '箱码不存在或无权访问', code };
+    if (!box.eff_brand_id || !distributor?.brand_id || Number(box.eff_brand_id) !== Number(distributor.brand_id)) {
+      return { ok: false, msg: '货物品牌与代理商品牌不一致，已阻止发货', code };
+    }
     if (box.status === 'shipped') return { ok: false, msg: '该箱已发货，请勿重复发货', code };
     if (box.status === 'invalid') return { ok: false, msg: '该箱已作废，不能发货', code };
     const itemCount = db.prepare('SELECT COUNT(*) as c FROM items WHERE box_id=?').get(box.id).c;
+    if (!box.product_id || itemCount === 0) return { ok: false, msg: '该箱尚未入库，不能发货', code };
+    if (box.distributor_id != null || box.shipped_at || db.prepare('SELECT 1 FROM shipments WHERE box_id=? LIMIT 1').get(box.id)) return { ok: false, msg: '该箱或箱内子码已有发货记录，请先取消发货', code };
+    const children = db.prepare('SELECT * FROM items WHERE box_id=?').all(box.id);
+    if (children.some(child => child.status === 'invalid' || itemHasShipment(child))) return { ok: false, msg: '箱内有已发货或作废子码，不能整箱发货', code };
     const boxSize = Number(box.box_size) || 0;
     if (boxSize > 0 && itemCount < boxSize) {
       return { ok: false, msg: `该箱未装满，缺 ${boxSize - itemCount} 个子码（已扫 ${itemCount}/${boxSize}）`, code };
@@ -2533,7 +2843,7 @@ function shipOneCode(code, distributor_id, operator, scope, distributor, order_n
     try {
       const tx = db.transaction(() => {
         db.prepare(`UPDATE boxes SET status=?, distributor_id=?, shipped_at=datetime('now','localtime') WHERE id=?`).run('shipped', distributor_id, box.id);
-        db.prepare('UPDATE items SET status=?, distributor_id=? WHERE box_id=?').run('shipped', distributor_id, box.id);
+        db.prepare("UPDATE items SET status=?, distributor_id=?, shipped_at=datetime('now','localtime') WHERE box_id=?").run('shipped', distributor_id, box.id);
         db.prepare('INSERT INTO shipments (box_id, distributor_id, operator, order_no, remark) VALUES (?,?,?,?,?)').run(box.id, distributor_id, operator || '', order_no, remark);
       });
       tx();
@@ -2543,12 +2853,26 @@ function shipOneCode(code, distributor_id, operator, scope, distributor, order_n
 
   // 再查子码 → 散件发货
   const item = db.prepare(`
-    SELECT i.*, COALESCE(i.brand_id, p.brand_id) as eff_brand_id, p.name as product_name FROM items i LEFT JOIN products p ON i.product_id=p.id WHERE i.item_code=?
+    SELECT i.*, COALESCE(i.brand_id, p.brand_id) as eff_brand_id, p.name as product_name,
+      parent.status as parent_status, COALESCE(parent.brand_id, parent_product.brand_id) as parent_brand_id
+    FROM items i
+    LEFT JOIN products p ON i.product_id=p.id
+    LEFT JOIN boxes parent ON parent.id=i.box_id
+    LEFT JOIN products parent_product ON parent_product.id=parent.product_id
+    WHERE i.item_code=?
   `).get(code);
   if (item) {
     if (!brandAllowed(scope, item.eff_brand_id)) return { ok: false, msg: '子码不存在或无权访问', code };
-    if (item.status === 'shipped') return { ok: false, msg: '该子码已发货，请勿重复发货', code };
+    if (!item.eff_brand_id || !distributor?.brand_id || Number(item.eff_brand_id) !== Number(distributor.brand_id)) {
+      return { ok: false, msg: '货物品牌与代理商品牌不一致，已阻止发货', code };
+    }
+    if (item.parent_status === 'invalid') return { ok: false, msg: '所属箱码已作废，箱内子码不能发货', code };
+    if (item.parent_brand_id && Number(item.parent_brand_id) !== Number(item.eff_brand_id)) {
+      return { ok: false, msg: '子码与所属箱码品牌不一致，已阻止发货', code };
+    }
+    if (itemHasShipment(item)) return { ok: false, msg: '该子码已发货，请勿重复发货', code };
     if (item.status === 'invalid') return { ok: false, msg: '该子码已作废，不能发货', code };
+    if (!item.product_id || (!item.box_id && !item.boxed_at)) return { ok: false, msg: '该子码尚未入库，不能发货', code };
     if (item.status === 'scanned' && item.box_id) {
       // 已扫码装箱的子码：散件发货同时要处理箱内扣除？这里保持原逻辑，仅按子码发货
     }
@@ -2631,10 +2955,11 @@ app.post('/api/shipments/cancel', requireRole('admin', 'warehouse', 'brand'), (r
   const box = db.prepare(`SELECT b.*, COALESCE(b.brand_id, p.brand_id) as eff_brand_id FROM boxes b LEFT JOIN products p ON b.product_id=p.id WHERE b.box_code=?`).get(code);
   if (box) {
     if (!brandAllowed(scope, box.eff_brand_id)) return res.json({ success: false, msg: '该箱码不存在或无权访问' });
-    if (box.status !== 'shipped') return res.json({ success: false, msg: '该箱码未发货，无需取消' });
+    if (box.status === 'invalid') return res.json({ success: false, msg: '该箱码已作废，不能取消发货' });
+    if (box.status !== 'shipped' && box.distributor_id == null && !db.prepare('SELECT 1 FROM shipments WHERE box_id=? LIMIT 1').get(box.id)) return res.json({ success: false, msg: '该箱码未发货，无需取消' });
     const tx = db.transaction(() => {
       db.prepare("UPDATE boxes SET status='in_stock', distributor_id=NULL, shipped_at=NULL WHERE id=?").run(box.id);
-      db.prepare("UPDATE items SET status='scanned', distributor_id=NULL, shipped_at=NULL WHERE box_id=? AND status='shipped'").run(box.id);
+      db.prepare("UPDATE items SET status=CASE WHEN status='invalid' THEN 'invalid' ELSE 'scanned' END, distributor_id=NULL, shipped_at=NULL WHERE box_id=?").run(box.id);
       db.prepare('DELETE FROM shipments WHERE box_id=?').run(box.id);
     });
     tx();
@@ -2645,9 +2970,11 @@ app.post('/api/shipments/cancel', requireRole('admin', 'warehouse', 'brand'), (r
   const item = db.prepare(`SELECT i.*, COALESCE(i.brand_id, p.brand_id) as eff_brand_id FROM items i LEFT JOIN products p ON i.product_id=p.id WHERE i.item_code=?`).get(code);
   if (!item) return res.json({ success: false, msg: '码不存在，请核实是箱码还是子码' });
   if (!brandAllowed(scope, item.eff_brand_id)) return res.json({ success: false, msg: '该子码不存在或无权访问' });
-  if (item.status !== 'shipped') return res.json({ success: false, msg: '该子码未发货，无需取消' });
+  if (item.status === 'invalid') return res.json({ success: false, msg: '该子码已作废，不能取消发货' });
+  if (!itemHasShipment(item)) return res.json({ success: false, msg: '该子码未发货，无需取消' });
+  if (item.box_id && db.prepare("SELECT 1 FROM shipments WHERE box_id=? AND (item_code IS NULL OR item_code='') LIMIT 1").get(item.box_id)) return res.json({ success: false, msg: '该子码随整箱发货，请扫描箱码取消整箱发货' });
   const tx = db.transaction(() => {
-    db.prepare("UPDATE items SET status=?, distributor_id=NULL, shipped_at=NULL WHERE id=?").run(item.box_id ? 'scanned' : 'in_stock', item.id);
+    db.prepare("UPDATE items SET status=?, distributor_id=NULL, shipped_at=NULL WHERE id=?").run(item.box_id || item.boxed_at ? 'scanned' : 'in_stock', item.id);
     db.prepare('DELETE FROM shipments WHERE item_code=?').run(item.item_code);
   });
   tx();
@@ -2655,21 +2982,57 @@ app.post('/api/shipments/cancel', requireRole('admin', 'warehouse', 'brand'), (r
   return res.json({ success: true, msg: `已取消发货：子码 ${item.item_code}` });
 });
 
-// 取消入库：将已装箱绑定的子码从箱中解绑，回到在库状态（可打包成其他箱）
-app.post('/api/codes/cancel-stock', requireRole('admin', 'factory', 'brand', 'brand_staff'), (req, res) => {
+// 所有撤销入口共用：保留品牌所有权，商品/批次等本次入库关联写入历史后清空。
+function itemHasShipment(item) {
+  return item.status === 'shipped' || item.distributor_id != null || !!item.shipped_at ||
+    !!db.prepare('SELECT 1 FROM shipments WHERE item_code=? LIMIT 1').get(item.item_code) ||
+    !!(item.box_id && db.prepare("SELECT 1 FROM boxes WHERE id=? AND (status='shipped' OR distributor_id IS NOT NULL OR shipped_at IS NOT NULL)").get(item.box_id));
+}
+function receiptAudit(req, targetType, targetId, snapshot) {
+  const u = req.session.user;
+  db.prepare(`INSERT INTO operation_logs (user_id,username,role,action,target_type,target_id,detail,brand_id)
+    VALUES (?,?,?,'receipt_binding_cleared',?,?,?,?)`).run(u.id, u.username, u.role, targetType, targetId,
+      JSON.stringify(snapshot), snapshot.brand_id || u.brand_id || null);
+}
+function clearItemReceipt(req, item) {
+  logPackRecord(req, item.box_id ? 'unbind' : 'nobox_cancel',
+    item.box_id ? db.prepare('SELECT box_code FROM boxes WHERE id=?').get(item.box_id)?.box_code : null,
+    item.item_code, null, '取消入库，历史商品和批次已保留', null, 0, 0);
+  receiptAudit(req, 'item', item.item_code, { product_id: item.product_id, batch_no: item.batch_no,
+    box_id: item.box_id, brand_id: item.eff_brand_id || item.brand_id, boxed_at: item.boxed_at });
+  db.prepare(`UPDATE items SET brand_id=COALESCE(brand_id,(SELECT brand_id FROM products WHERE id=items.product_id)),
+    box_id=NULL, product_id=NULL, batch_no='', status='in_stock', boxed_at=NULL, receipt_factory_id=NULL,
+    distributor_id=NULL, shipped_at=NULL WHERE id=?`).run(item.id);
+}
+function clearBoxReceipt(req, box) {
+  receiptAudit(req, 'box', box.box_code, { product_id: box.product_id, batch_no: box.batch_no,
+    box_size: box.box_size, brand_id: box.eff_brand_id || box.brand_id });
+  db.prepare(`UPDATE boxes SET brand_id=COALESCE(brand_id,(SELECT brand_id FROM products WHERE id=boxes.product_id)),
+    product_id=NULL, batch_no='', box_size=0, item_count=0, status='in_stock', receipt_factory_id=NULL,
+    distributor_id=NULL, shipped_at=NULL WHERE id=?`).run(box.id);
+}
+
+// 取消入库：撤销当前商品关联；历史仍在操作日志、扫码记录中保留。
+app.post('/api/codes/cancel-stock', requireRole('admin', 'factory', 'brand', 'brand_staff'), receiptIntegrity.atomic((req, res) => {
   const code = extractCode(req.body.code || req.body.item_code || '');
+  const expectedMode = req.body.expected_mode === 'nobox' ? 'nobox' : req.body.expected_mode === 'boxed' ? 'boxed' : '';
   const scope = brandScope(req);
   if (!code) return res.json({ success: false, msg: '请输入要取消入库的箱码或子码' });
 
   // 箱码：整箱取消入库（箱内子码全部解绑）
   const box = db.prepare(`SELECT b.*, COALESCE(b.brand_id, p.brand_id) as eff_brand_id FROM boxes b LEFT JOIN products p ON b.product_id=p.id WHERE b.box_code=?`).get(code);
   if (box) {
+    if (expectedMode === 'nobox') return res.json({ success: false, msg: '这是箱码，请使用「箱码/装箱子码取消入库」入口' });
     if (!brandAllowed(scope, box.eff_brand_id)) return res.json({ success: false, msg: '该箱码不存在或无权访问' });
-    if (box.status === 'shipped') return res.json({ success: false, msg: '该箱已发货，请先「取消发货」再取消入库' });
+    if (box.status === 'invalid') return res.json({ success: false, msg: '该箱码已作废，不能取消入库' });
+    if (box.status === 'shipped' || box.distributor_id != null || box.shipped_at || db.prepare('SELECT 1 FROM shipments WHERE box_id=? LIMIT 1').get(box.id)) return res.json({ success: false, msg: '该箱已发货，请先「取消发货」再取消入库' });
+    const children = db.prepare('SELECT * FROM items WHERE box_id=?').all(box.id);
+    if (children.some(itemHasShipment)) return res.json({ success: false, msg: '箱内子码已发货，请先取消发货' });
+    if (children.some(item => item.status === 'invalid')) return res.json({ success: false, msg: '箱内包含作废子码，不能取消入库' });
+    if (!box.product_id && children.length === 0) return res.json({ success: false, msg: '该箱码尚未入库，无需取消' });
     const tx = db.transaction(() => {
-      // 解绑箱内所有子码（不分状态，只要绑定在本箱且未发货的都解绑回在库状态；清空 boxed_at，下次重新绑定刷新时间）
-      db.prepare("UPDATE items SET box_id=NULL, status='in_stock', boxed_at=NULL WHERE box_id=? AND status!='shipped'").run(box.id);
-      db.prepare('UPDATE boxes SET item_count=0 WHERE id=?').run(box.id);
+      for (const child of children) clearItemReceipt(req, child);
+      clearBoxReceipt(req, box);
     });
     tx();
     logOperation(req, 'cancel_stock', 'box', box.box_code, `取消入库：箱码「${box.box_code}」整箱子码解绑`);
@@ -2677,24 +3040,38 @@ app.post('/api/codes/cancel-stock', requireRole('admin', 'factory', 'brand', 'br
   }
 
   // 子码：单个取消入库（解绑）
-  const item = db.prepare(`SELECT i.*, COALESCE(i.brand_id, p.brand_id) as eff_brand_id FROM items i LEFT JOIN products p ON i.product_id=p.id WHERE i.item_code=?`).get(code);
+  const item = db.prepare(`SELECT i.*, COALESCE(i.brand_id, p.brand_id) as eff_brand_id,
+    p.name as product_name, p.spec as product_spec
+    FROM items i LEFT JOIN products p ON i.product_id=p.id WHERE i.item_code=?`).get(code);
   if (!item) return res.json({ success: false, msg: '码不存在，请核实是箱码还是子码' });
   if (!brandAllowed(scope, item.eff_brand_id)) return res.json({ success: false, msg: '该子码不存在或无权访问' });
-  if (item.status === 'shipped') return res.json({ success: false, msg: '该子码已发货，请先「取消发货」再取消入库' });
-  if (!item.box_id && item.status !== 'scanned') return res.json({ success: false, msg: '该子码未绑定箱码，无需取消入库' });
+  if (item.status === 'invalid') return res.json({ success: false, msg: '该子码已作废，不能取消入库' });
+  if (itemHasShipment(item)) return res.json({ success: false, msg: '该子码已发货，请先「取消发货」再取消入库' });
+  const isNoBoxReceipt = !item.box_id && item.status === 'scanned' && !!item.boxed_at && !!item.product_id;
+  if (expectedMode === 'nobox' && !isNoBoxReceipt) {
+    return res.json({ success: false, msg: item.box_id ? '该子码已装箱，请使用「箱码/装箱子码取消入库」入口' : '该子码不是无箱码已入库状态，无需取消' });
+  }
+  if (expectedMode === 'boxed' && isNoBoxReceipt) {
+    return res.json({ success: false, msg: '这是无箱码已入库子码，请使用「无箱码子码取消入库」入口' });
+  }
+  if (!item.box_id && !isNoBoxReceipt) return res.json({ success: false, msg: '该子码尚未入库，无需取消入库' });
 
   const boxId = item.box_id;
   const tx = db.transaction(() => {
-    db.prepare("UPDATE items SET box_id=NULL, status='in_stock', boxed_at=NULL WHERE id=?").run(item.id);
+    clearItemReceipt(req, item);
     if (boxId) {
       const count = db.prepare('SELECT COUNT(*) as c FROM items WHERE box_id=?').get(boxId).c;
       db.prepare('UPDATE boxes SET item_count=? WHERE id=?').run(count, boxId);
+      if (count === 0) clearBoxReceipt(req, db.prepare('SELECT * FROM boxes WHERE id=?').get(boxId));
     }
   });
   tx();
   logOperation(req, 'cancel_stock', 'item', item.item_code, `取消入库：子码「${item.item_code}」解绑`);
-  return res.json({ success: true, msg: `已取消入库：子码 ${item.item_code} 已解绑` });
-});
+  if (isNoBoxReceipt) {
+    return res.json({ success: true, mode: 'nobox', msg: `已取消无箱码入库：子码 ${item.item_code} 已回到在库状态` });
+  }
+  return res.json({ success: true, mode: 'boxed', msg: `已取消入库：子码 ${item.item_code} 已解绑` });
+}));
 
 // 获取发货记录（brand 只看自己品牌）
 app.get('/api/shipments', requireRole('admin', 'warehouse', 'brand'), (req, res) => {
@@ -2893,9 +3270,10 @@ app.get('/api/verify/:code', verificationRateLimit, wrap(async (req, res) => {
   // 先查箱码
   const brandName = db.prepare("SELECT value FROM settings WHERE key='brand_name'").get()?.value || '';
   let box = db.prepare(`
-    SELECT b.*, p.name as product_name, p.spec as product_spec,
+    SELECT b.*, p.name as product_name, p.spec as product_spec, p.brand_id as product_brand_id,
       COALESCE(b.brand_id, p.brand_id) as eff_brand_id, br.name as tenant_brand_name,
-      d.name as distributor_name, d.region as distributor_region, d.covered_regions as distributor_covered_regions
+      d.name as distributor_name, d.region as distributor_region, d.covered_regions as distributor_covered_regions,
+      d.brand_id as distributor_brand_id
     FROM boxes b
     LEFT JOIN products p ON b.product_id = p.id
     LEFT JOIN brands br ON br.id = COALESCE(b.brand_id, p.brand_id)
@@ -2904,9 +3282,17 @@ app.get('/api/verify/:code', verificationRateLimit, wrap(async (req, res) => {
   `).get(code);
 
   if (box) {
+    const boxBrandConflict = (box.product_id && (!box.product_brand_id || (box.brand_id && Number(box.brand_id) !== Number(box.product_brand_id)))) ||
+      (box.distributor_id && (!box.distributor_brand_id || Number(box.distributor_brand_id) !== Number(box.eff_brand_id)));
+    const childConflict = db.prepare(`SELECT COUNT(*) c FROM items i LEFT JOIN products ip ON ip.id=i.product_id
+      WHERE i.box_id=? AND (i.product_id IS NOT ? OR COALESCE(i.brand_id,ip.brand_id) IS NOT ? OR COALESCE(i.batch_no,'')<>COALESCE(?,'') )`)
+      .get(box.id, box.product_id, box.eff_brand_id, box.batch_no).c;
+    if (boxBrandConflict || childConflict > 0) {
+      return res.status(409).json({ success: false, code: 'CODE_DATA_CONFLICT', msg: '该码的品牌、产品或批次资料存在历史冲突，已暂停公开展示，请联系品牌方核对原始生产资料' });
+    }
     const publicContent = box.product_id && box.eff_brand_id ? productContent(box.product_id, box.eff_brand_id, box.batch_no, false) : { media: [], batch: null, trace: [], marketing: null };
     const itemSummary = db.prepare(`SELECT COUNT(*) as item_count,
-      SUM(CASE WHEN status='scanned' THEN 1 ELSE 0 END) as verified_count FROM items WHERE box_id=?`).get(box.id);
+      SUM(CASE WHEN scanned_at IS NOT NULL THEN 1 ELSE 0 END) as verified_count FROM items WHERE box_id=?`).get(box.id);
     const isShipped = box.status === 'shipped';
     // 记录扫码日志（含分级 + 品牌归属）
     let isDiversion = 0;
@@ -2929,7 +3315,7 @@ app.get('/api/verify/:code', verificationRateLimit, wrap(async (req, res) => {
       product_spec: box.product_spec,
       batch_no: box.batch_no,
       status: box.status,
-      status_text: isShipped ? '已发货' : '在库',
+      status_text: box.status === 'invalid' ? '该码已作废' : !box.product_id ? '未绑定商品，尚未入库' : (isShipped ? '已发货' : '在库'),
       assigned_region: publicRegion(box.distributor_region),
       is_diversion: isDiversion,
       scan_count: historyCount + 1,
@@ -2947,11 +3333,15 @@ app.get('/api/verify/:code', verificationRateLimit, wrap(async (req, res) => {
 
   // 再查子码
   let item = db.prepare(`
-    SELECT i.*, b.box_code, p.name as product_name, p.spec as product_spec,
+    SELECT i.*, b.box_code, b.status as parent_status, b.product_id as parent_product_id,
+      COALESCE(b.brand_id,bp.brand_id) as parent_brand_id, b.batch_no as parent_batch_no,
+      p.name as product_name, p.spec as product_spec, p.brand_id as product_brand_id,
       COALESCE(i.brand_id, p.brand_id) as eff_brand_id, br.name as tenant_brand_name,
-      d.name as distributor_name, d.region as distributor_region, d.covered_regions as distributor_covered_regions
+      d.name as distributor_name, d.region as distributor_region, d.covered_regions as distributor_covered_regions,
+      d.brand_id as distributor_brand_id
     FROM items i
     LEFT JOIN boxes b ON i.box_id = b.id
+    LEFT JOIN products bp ON b.product_id = bp.id
     LEFT JOIN products p ON i.product_id = p.id
     LEFT JOIN brands br ON br.id = COALESCE(i.brand_id, p.brand_id)
     LEFT JOIN distributors d ON i.distributor_id = d.id
@@ -2959,10 +3349,17 @@ app.get('/api/verify/:code', verificationRateLimit, wrap(async (req, res) => {
   `).get(code);
 
   if (item) {
+    const itemBrandConflict = (item.product_id && (!item.product_brand_id || (item.brand_id && Number(item.brand_id) !== Number(item.product_brand_id)))) ||
+      (item.distributor_id && (!item.distributor_brand_id || Number(item.distributor_brand_id) !== Number(item.eff_brand_id)));
+    const boxConflict = item.box_id && (Number(item.parent_product_id) !== Number(item.product_id) ||
+      Number(item.parent_brand_id) !== Number(item.eff_brand_id) || String(item.parent_batch_no || '') !== String(item.batch_no || ''));
+    if (itemBrandConflict || boxConflict) {
+      return res.status(409).json({ success: false, code: 'CODE_DATA_CONFLICT', msg: '该码的品牌、产品或批次资料存在历史冲突，已暂停公开展示，请联系品牌方核对原始生产资料' });
+    }
     const publicContent = item.product_id && item.eff_brand_id ? productContent(item.product_id, item.eff_brand_id, item.batch_no, false) : { media: [], batch: null, trace: [], marketing: null };
-    // 更新子码扫码状态
-    db.prepare(`UPDATE items SET status=?, scanned_at=datetime('now','localtime'), scan_location=?, scan_ip=? WHERE id=?`)
-      .run('scanned', scanLocation, sourceId, item.id);
+    // 查验只更新查验信息，不能改变入库、发货或作废状态。
+    db.prepare(`UPDATE items SET scanned_at=datetime('now','localtime'), scan_location=?, scan_ip=? WHERE id=?`)
+      .run(scanLocation, sourceId, item.id);
 
     // 是否发货：只要绑定过代理商即视为已发货（避免被扫后状态变scanned导致串货检测失效）
     const isShipped = item.distributor_id != null;
@@ -2986,7 +3383,7 @@ app.get('/api/verify/:code', verificationRateLimit, wrap(async (req, res) => {
 
     // 扫码抽奖（仅已发货正品首次扫码参与）
     let prize = null;
-    if (isBound && isShipped && historyCount === 0) {
+    if (isBound && isShipped && item.parent_status !== 'invalid' && item.status !== 'invalid' && historyCount === 0) {
       prize = drawPrize(code, scanLocation);
     }
 
@@ -2997,8 +3394,8 @@ app.get('/api/verify/:code', verificationRateLimit, wrap(async (req, res) => {
       product_name: item.product_name,
       product_spec: item.product_spec,
       batch_no: item.batch_no,
-      status: 'scanned',
-      status_text: !isBound ? '产品尚未出库，请联系厂家核实' : (isShipped ? '正品已验证' : '产品未发货，请联系厂家'),
+      status: item.status,
+      status_text: item.status === 'invalid' ? '该码已作废' : item.parent_status === 'invalid' ? '所属箱码已作废，该码已停止流转' : !item.product_id ? '未绑定商品，尚未入库' : (isShipped ? '正品已验证' : '产品未发货，请联系厂家'),
       assigned_region: publicRegion(item.distributor_region),
       is_diversion: isDiversion,
       scan_count: historyCount + 1,
@@ -3184,6 +3581,7 @@ async function sendWorkbook(res, wb, filename) {
   res.send(Buffer.from(buf));
 }
 const diversionText = (v) => v >= 2 ? '重度串货(跨省)' : v === 1 ? '轻度串货' : '正常';
+const hasCodeBrandConflict = row => !!(row.product_id && (!row.product_brand_id || (row.brand_id && Number(row.brand_id) !== Number(row.product_brand_id))));
 
 // 导出码表（箱码/子码，支持关键词；brand 只导自己品牌）
 app.get('/api/export/codes', requireRole('admin', 'brand', 'brand_staff'), wrap(async (req, res) => {
@@ -3200,13 +3598,14 @@ app.get('/api/export/codes', requireRole('admin', 'brand', 'brand_staff'), wrap(
     if (keyword) { conds.push('(b.box_code LIKE ? OR p.name LIKE ?)'); params.push(`%${keyword}%`, `%${keyword}%`); }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const rows = db.prepare(`
-      SELECT b.*, p.name as product_name, d.name as distributor_name, d.region as distributor_region,
-        (SELECT COUNT(*) FROM items i WHERE i.box_id=b.id AND i.status='scanned') as scanned_count
+      SELECT b.*, p.name as product_name, p.brand_id as product_brand_id, d.name as distributor_name, d.region as distributor_region,
+        (SELECT COUNT(*) FROM items i WHERE i.box_id=b.id AND i.scanned_at IS NOT NULL) as scanned_count
       FROM boxes b
       LEFT JOIN products p ON b.product_id = p.id
       LEFT JOIN distributors d ON b.distributor_id = d.id
       ${where} ORDER BY b.id DESC
     `).all(...params);
+    if (rows.some(hasCodeBrandConflict)) return res.status(409).json({ success: false, code: 'CODE_BRAND_CONFLICT', msg: '筛选结果包含品牌与产品冲突的历史码，已阻止导出，请先核对原始生产资料' });
     const ws = wb.addWorksheet('箱码表');
     ws.columns = [
       { header: '箱码', key: 'c1', width: 24 }, { header: '产品', key: 'c2', width: 20 },
@@ -3216,7 +3615,7 @@ app.get('/api/export/codes', requireRole('admin', 'brand', 'brand_staff'), wrap(
       { header: '发货时间', key: 'c9', width: 20 }, { header: '创建时间', key: 'c10', width: 20 }
     ];
     rows.forEach(r => ws.addRow([r.box_code, r.product_name || '', r.batch_no || '', r.item_count, r.scanned_count || 0,
-      r.status === 'shipped' ? '已发货' : '在库', r.distributor_name || '', r.distributor_region || '', r.shipped_at || '', r.created_at]));
+      r.status === 'invalid' ? '已作废' : r.status === 'shipped' ? '已发货' : '在库', r.distributor_name || '', r.distributor_region || '', r.shipped_at || '', r.created_at]));
     await sendWorkbook(res, wb, `箱码表-${today}.xlsx`);
   } else {
     const conds = [];
@@ -3225,13 +3624,14 @@ app.get('/api/export/codes', requireRole('admin', 'brand', 'brand_staff'), wrap(
     if (keyword) { conds.push('(i.item_code LIKE ? OR p.name LIKE ?)'); params.push(`%${keyword}%`, `%${keyword}%`); }
     const where = conds.length ? 'WHERE ' + conds.join(' AND ') : '';
     const rows = db.prepare(`
-      SELECT i.*, p.name as product_name, b.box_code, d.name as distributor_name, d.region as distributor_region
+      SELECT i.*, p.name as product_name, p.brand_id as product_brand_id, b.box_code, d.name as distributor_name, d.region as distributor_region
       FROM items i
       LEFT JOIN products p ON i.product_id = p.id
       LEFT JOIN boxes b ON i.box_id = b.id
       LEFT JOIN distributors d ON i.distributor_id = d.id
       ${where} ORDER BY i.id DESC
     `).all(...params);
+    if (rows.some(hasCodeBrandConflict)) return res.status(409).json({ success: false, code: 'CODE_BRAND_CONFLICT', msg: '筛选结果包含品牌与产品冲突的历史码，已阻止导出，请先核对原始生产资料' });
     const ws = wb.addWorksheet('子码表');
     ws.columns = [
       { header: '子码', key: 'c1', width: 24 }, { header: '所属箱码', key: 'c2', width: 24 },
@@ -3241,7 +3641,7 @@ app.get('/api/export/codes', requireRole('admin', 'brand', 'brand_staff'), wrap(
       { header: '扫码时间', key: 'c9', width: 20 }, { header: '创建时间', key: 'c10', width: 20 }
     ];
     rows.forEach(r => ws.addRow([r.item_code, r.box_code || '未绑定', r.product_name || '', r.batch_no || '',
-      r.status === 'scanned' ? '已扫码' : r.status === 'shipped' ? '已发货' : '在库',
+      r.status === 'invalid' ? '已作废' : r.status === 'shipped' ? '已发货' : r.status === 'scanned' ? '已入库' : '在库',
       r.distributor_name || '', r.distributor_region || '', r.shipped_at || '', r.scanned_at || '', r.created_at]));
     await sendWorkbook(res, wb, `子码表-${today}.xlsx`);
   }
@@ -3300,6 +3700,32 @@ function buildZip(entries) { // entries: [{name, data:Buffer}]
   end.writeUInt16LE(central.length, 8); end.writeUInt16LE(central.length, 10);
   end.writeUInt32LE(centralSize, 12); end.writeUInt32LE(offset, 16);
   return Buffer.concat([...parts, ...centralParts, end]);
+}
+
+// 图片归档会同时持有二维码和最终 ZIP 缓冲区。限制数量与并发，避免大码包
+// 阻塞单进程或触发 OOM；大批量生产始终使用下面的流式 TXT 导出。
+function reserveImageArchive(res) {
+  if (imageArchiveJobs >= IMAGE_ARCHIVE_MAX_CONCURRENT) return null;
+  imageArchiveJobs += 1;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    imageArchiveJobs = Math.max(0, imageArchiveJobs - 1);
+  };
+  res.once('finish', release);
+  res.once('close', release);
+  return release;
+}
+
+function rejectOversizeImageArchive(res, count) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Image-Archive-Limit', String(IMAGE_ARCHIVE_MAX_CODES));
+  return res.status(413).json({
+    success: false,
+    code: 'IMAGE_ARCHIVE_TOO_LARGE',
+    msg: `图片包单次最多 ${IMAGE_ARCHIVE_MAX_CODES.toLocaleString('zh-CN')} 个码；当前 ${Number(count).toLocaleString('zh-CN')} 个。请使用链接 TXT/纯码 TXT，或缩小筛选范围后分批导出。`
+  });
 }
 
 // 构造箱/子码查询条件（码列表/码包/打印共用）
@@ -3378,6 +3804,9 @@ app.get('/api/code-packages/:id/download', requireRole('admin', 'brand', 'brand_
   }
   const pkg = scopedCodePackage(req, packageId);
   if (!pkg) return res.status(404).json({ success: false, code: 'PACKAGE_NOT_FOUND', msg: '码包不存在或无权访问' });
+  if (pkg.product_id && !db.prepare('SELECT 1 FROM products WHERE id=? AND brand_id=?').get(pkg.product_id,pkg.brand_id)) {
+    return res.status(409).json({success:false,code:'PACKAGE_BRAND_CONFLICT',msg:'历史码包的产品与品牌不一致，已阻止导出，请核对原始生产资料'});
+  }
   if (pkg.status !== 'ready') {
     return res.status(409).json({ success: false, code: 'PACKAGE_NOT_READY', msg: '码包尚未生成完成' });
   }
@@ -3388,6 +3817,9 @@ app.get('/api/code-packages/:id/download', requireRole('admin', 'brand', 'brand_
   if (actual !== pkg.quantity) {
     console.error(JSON.stringify({ level: 'error', event: 'code_package_count_mismatch', requestId: req.requestId, packageId, expected: pkg.quantity, actual }));
     return res.status(409).json({ success: false, code: 'PACKAGE_COUNT_MISMATCH', msg: '码包完整性校验失败，请联系平台管理员' });
+  }
+  if (mode === 'zip' && actual > IMAGE_ARCHIVE_MAX_CODES) {
+    return rejectOversizeImageArchive(res, actual);
   }
 
   const rows = db.prepare(`SELECT ${column} AS code FROM ${table} WHERE package_id=? ORDER BY id ASC`).all(packageId);
@@ -3404,38 +3836,49 @@ app.get('/api/code-packages/:id/download', requireRole('admin', 'brand', 'brand_
 
   // ZIP 模式：每码一张二维码 PNG + 码数据 TXT（链接清单 + 纯码清单）
   if (mode === 'zip') {
+    const releaseArchive = reserveImageArchive(res);
+    if (!releaseArchive) {
+      res.setHeader('Retry-After', '30');
+      return res.status(429).json({ success: false, code: 'IMAGE_ARCHIVE_BUSY', msg: '已有图片包正在生成，请稍后重试；TXT 码包可立即下载。' });
+    }
     const baseUrl = getBaseUrl(req);
     const typeLabel = pkg.code_type === 'box' ? '箱码' : '子码';
     const width = pkg.code_type === 'box' ? 300 : 200;
-    const entries = [];
-    const urlLines = [];
-    const codeLines = [];
-    for (const row of rows) {
-      const code = row.code;
-      const png = await getQrBuffer(code, width, baseUrl);
-      entries.push({ name: `${typeLabel}/${code}.png`, data: png });
-      urlLines.push(`${baseUrl}/v/${code}`);
-      codeLines.push(code);
+    try {
+      const entries = [];
+      const urlLines = [];
+      const codeLines = [];
+      for (const row of rows) {
+        const code = row.code;
+        const png = await getQrBuffer(code, width, baseUrl);
+        entries.push({ name: `${typeLabel}/${code}.png`, data: png });
+        urlLines.push(`${baseUrl}/v/${code}`);
+        codeLines.push(code);
+      }
+      entries.push({ name: '扫码链接清单.txt', data: Buffer.from(urlLines.join('\r\n') + '\r\n', 'utf8') });
+      entries.push({ name: '纯码清单.txt', data: Buffer.from(codeLines.join('\r\n') + '\r\n', 'utf8') });
+      entries.push({ name: '使用说明.txt', data: Buffer.from(
+        `${typeLabel}码包（二维码图片 + 码数据）\r\n` +
+        `码包编号：${pkg.package_no}\r\n` +
+        `共 ${rows.length} 个码。\r\n\r\n` +
+        `【${typeLabel}/】纯二维码 PNG 图（${width}x${width}px），以码值命名。\r\n` +
+        `【扫码链接清单.txt】每行一个完整扫码链接。\r\n` +
+        `【纯码清单.txt】每行一个纯码值。\r\n` +
+        `生成时间：${new Date().toLocaleString('zh-CN')}\r\n`, 'utf8') });
+      const zip = buildZip(entries);
+      const fname = `${typeLabel}码包-${pkg.package_no}-${pkg.quantity}-图片包.zip`;
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`);
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('X-Code-Package-No', pkg.package_no);
+      res.setHeader('X-Code-Package-Count', String(pkg.quantity));
+      res.setHeader('X-Image-Archive-Limit', String(IMAGE_ARCHIVE_MAX_CODES));
+      audit('图片包 ZIP');
+      return res.send(zip);
+    } catch (error) {
+      releaseArchive();
+      throw error;
     }
-    entries.push({ name: '扫码链接清单.txt', data: Buffer.from(urlLines.join('\r\n') + '\r\n', 'utf8') });
-    entries.push({ name: '纯码清单.txt', data: Buffer.from(codeLines.join('\r\n') + '\r\n', 'utf8') });
-    entries.push({ name: '使用说明.txt', data: Buffer.from(
-      `${typeLabel}码包（二维码图片 + 码数据）\r\n` +
-      `码包编号：${pkg.package_no}\r\n` +
-      `共 ${rows.length} 个码。\r\n\r\n` +
-      `【${typeLabel}/】纯二维码 PNG 图（${width}x${width}px），以码值命名。\r\n` +
-      `【扫码链接清单.txt】每行一个完整扫码链接。\r\n` +
-      `【纯码清单.txt】每行一个纯码值。\r\n` +
-      `生成时间：${new Date().toLocaleString('zh-CN')}\r\n`, 'utf8') });
-    const zip = buildZip(entries);
-    const fname = `${typeLabel}码包-${pkg.package_no}-${pkg.quantity}-图片包.zip`;
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`);
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('X-Code-Package-No', pkg.package_no);
-    res.setHeader('X-Code-Package-Count', String(pkg.quantity));
-    audit('图片包 ZIP');
-    return res.send(zip);
   }
 
   const suffix = mode === 'code' ? '纯码值' : '扫码链接';
@@ -3465,11 +3908,19 @@ app.get('/api/codes/package', requireRole('admin', 'brand', 'brand_staff'), wrap
   const { where, params } = buildCodeConds(type, scope, { keyword, status, ids });
 
   const rows = type === 'box'
-    ? db.prepare(`SELECT b.*, p.name as product_name, br.name as brand_name FROM boxes b LEFT JOIN products p ON b.product_id=p.id LEFT JOIN brands br ON br.id=COALESCE(b.brand_id,p.brand_id) ${where} ORDER BY b.id ASC LIMIT 5000`).all(...params)
-    : db.prepare(`SELECT i.*, p.name as product_name, br.name as brand_name FROM items i LEFT JOIN products p ON i.product_id=p.id LEFT JOIN brands br ON br.id=COALESCE(i.brand_id,p.brand_id) ${where} ORDER BY i.id ASC LIMIT 5000`).all(...params);
+    ? db.prepare(`SELECT b.*, p.name as product_name, p.brand_id as product_brand_id, br.name as brand_name FROM boxes b LEFT JOIN products p ON b.product_id=p.id LEFT JOIN brands br ON br.id=COALESCE(b.brand_id,p.brand_id) ${where} ORDER BY b.id ASC LIMIT ${IMAGE_ARCHIVE_MAX_CODES + 1}`).all(...params)
+    : db.prepare(`SELECT i.*, p.name as product_name, p.brand_id as product_brand_id, br.name as brand_name FROM items i LEFT JOIN products p ON i.product_id=p.id LEFT JOIN brands br ON br.id=COALESCE(i.brand_id,p.brand_id) ${where} ORDER BY i.id ASC LIMIT ${IMAGE_ARCHIVE_MAX_CODES + 1}`).all(...params);
 
   if (!rows.length) return res.json({ success: false, msg: '没有符合条件的码' });
+  if (rows.length > IMAGE_ARCHIVE_MAX_CODES) return rejectOversizeImageArchive(res, rows.length);
+  if (rows.some(hasCodeBrandConflict)) return res.status(409).json({ success: false, code: 'CODE_BRAND_CONFLICT', msg: '筛选结果包含品牌与产品冲突的历史码，已阻止打包，请先核对原始生产资料' });
 
+  const releaseArchive = reserveImageArchive(res);
+  if (!releaseArchive) {
+    res.setHeader('Retry-After', '30');
+    return res.status(429).json({ success: false, code: 'IMAGE_ARCHIVE_BUSY', msg: '已有图片包正在生成，请稍后重试。' });
+  }
+  try {
   const entries = [];
   const csvLines = [type === 'box' ? '\uFEFF箱码,品牌,产品,批次号,数量,状态,创建时间' : '\uFEFF子码,品牌,产品,批次号,所属箱码,状态,创建时间'];
   for (const r of rows) {
@@ -3479,7 +3930,7 @@ app.get('/api/codes/package', requireRole('admin', 'brand', 'brand_staff'), wrap
     // 带品牌名+码值的矢量标签（印刷制版推荐）
     const svg = await buildLabelSvg(code, r.brand_name || '', type === 'box', baseUrl);
     entries.push({ name: `带品牌标签/${code}.svg`, data: Buffer.from(svg, 'utf8') });
-    const st = r.status === 'shipped' ? '已发货' : r.status === 'scanned' ? '已扫码' : r.status === 'invalid' ? '已作废' : '在库';
+    const st = r.status === 'invalid' ? '已作废' : r.status === 'shipped' ? '已发货' : r.status === 'scanned' ? '已入库' : '在库';
     if (type === 'box') {
       csvLines.push([code, r.brand_name || '', r.product_name || '未绑定', r.batch_no || '', r.item_count || 0, st, r.created_at].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
     } else {
@@ -3510,7 +3961,13 @@ app.get('/api/codes/package', requireRole('admin', 'brand', 'brand_staff'), wrap
   const fname = `${type === 'box' ? '箱码' : '子码'}码包-${today}.zip`;
   res.setHeader('Content-Type', 'application/zip');
   res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fname)}`);
-  res.send(zip);
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Image-Archive-Limit', String(IMAGE_ARCHIVE_MAX_CODES));
+  return res.send(zip);
+  } catch (error) {
+    releaseArchive();
+    throw error;
+  }
 }));
 
 // 导出扫码日志（brand 只导自己品牌）
@@ -3852,6 +4309,8 @@ app.get('/api/brand/check-code/:code', requireRole('admin', 'brand', 'brand_staf
     item_code: codeType === 'item' ? target.item_code : '',
     product_name: target.product_name || '',
     product_spec: target.product_spec || '',
+    status: target.status,
+    status_text: target.status === 'invalid' ? '已作废' : !target.product_id ? '未绑定商品，尚未入库' : (target.status === 'shipped' || target.distributor_id != null ? '已发货' : '已绑定商品'),
     batch_no: target.batch_no || '',
     distributor_name: target.distributor_name || '',
     assigned_region: publicRegion(target.distributor_region),
@@ -4063,7 +4522,7 @@ app.post('/api/factories', requireRole('admin', 'brand'), (req, res) => {
 });
 
 // 删除工厂（admin/brand/brand_staff）：
-//   有账号绑定的工厂必须先解绑；箱码和子码通过产品关联工厂，不直接保存 factory_id。
+//   有账号绑定的工厂必须先解绑；产品的其他工厂关联和历史收货工厂不受影响。
 app.delete('/api/factories/:id', requireRole('admin', 'brand'), (req, res) => {
   const id = parseInt(req.params.id);
   if (!id) return res.json({ success: false, msg: '工厂不存在' });
@@ -4074,15 +4533,25 @@ app.delete('/api/factories/:id', requireRole('admin', 'brand'), (req, res) => {
   if (userCount > 0) {
     return res.json({ success: false, msg: `该工厂下还有 ${userCount} 个账号，请先到账号管理中解除绑定后再删除` });
   }
-  const productCount = db.prepare('SELECT COUNT(*) as c FROM products WHERE factory_id=?').get(id).c;
-  const boxCount = db.prepare('SELECT COUNT(*) as c FROM boxes b JOIN products p ON p.id=b.product_id WHERE p.factory_id=?').get(id).c;
-  const itemCount = db.prepare('SELECT COUNT(*) as c FROM items i JOIN products p ON p.id=i.product_id WHERE p.factory_id=?').get(id).c;
+  const productCount = db.prepare(`SELECT COUNT(DISTINCT p.id) as c FROM products p
+    LEFT JOIN product_factories pf ON pf.product_id=p.id
+    WHERE pf.factory_id=? OR (pf.product_id IS NULL AND p.factory_id=?)`).get(id, id).c;
+  const boxCount = db.prepare(`SELECT COUNT(DISTINCT b.id) as c FROM boxes b JOIN products p ON p.id=b.product_id
+    LEFT JOIN product_factories pf ON pf.product_id=p.id
+    WHERE pf.factory_id=? OR (pf.product_id IS NULL AND p.factory_id=?)`).get(id, id).c;
+  const itemCount = db.prepare(`SELECT COUNT(DISTINCT i.id) as c FROM items i JOIN products p ON p.id=i.product_id
+    LEFT JOIN product_factories pf ON pf.product_id=p.id
+    WHERE pf.factory_id=? OR (pf.product_id IS NULL AND p.factory_id=?)`).get(id, id).c;
   const tx = db.transaction(() => {
-    if (productCount > 0) db.prepare('UPDATE products SET factory_id=NULL WHERE factory_id=?').run(id);
+    const primaryProducts = db.prepare('SELECT id FROM products WHERE factory_id=?').all(id);
+    db.prepare('DELETE FROM product_factories WHERE factory_id=?').run(id);
+    const nextFactory = db.prepare('SELECT factory_id FROM product_factories WHERE product_id=? ORDER BY created_at,factory_id LIMIT 1');
+    const updatePrimary = db.prepare('UPDATE products SET factory_id=? WHERE id=?');
+    primaryProducts.forEach(product => updatePrimary.run(nextFactory.get(product.id)?.factory_id || null, product.id));
     db.prepare('DELETE FROM factories WHERE id=?').run(id);
   });
   tx();
-  logOperation(req, 'delete_factory', 'factory', id, `工厂「${f.name}」已删除（清理 ${productCount} 产品/${boxCount} 箱码/${itemCount} 子码的归属）`);
+  logOperation(req, 'delete_factory', 'factory', id, `工厂「${f.name}」已删除（解除 ${productCount} 个产品关联；涉及 ${boxCount} 箱码/${itemCount} 子码，历史收货归属保留）`);
   res.json({ success: true, msg: `工厂「${f.name}」已删除` });
 });
 
@@ -4094,63 +4563,55 @@ app.put('/api/users/:id', requireRole('admin', 'brand'), (req, res) => {
   const scope = brandScope(req);
   if (!brandAllowed(scope, user.brand_id)) return res.json({ success: false, msg: '没有权限操作该账号' });
   const { password, display_name, role, distributor_id, factory_id, enabled, brand_id } = req.body;
-  const phone = String(req.body.phone || '').trim();
-  if (password !== undefined && String(password).length > 0) {
-    if (!passwordMeetsPolicy(password)) return res.json({ success: false, msg: PASSWORD_POLICY_MESSAGE });
-    db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hashPassword(password), id);
+  if (role !== undefined && !ROLE_NAMES[role]) return res.json({ success: false, msg: '账号角色无效' });
+  // 品牌管理员编辑平台/品牌管理员账号时角色保持不变；其余情况使用请求角色。
+  const keepRole = scope !== null && ['admin', 'brand'].includes(user.role);
+  const newRole = keepRole ? user.role : (role || user.role);
+  if (user.username === 'admin' && newRole !== 'admin') return res.json({ success: false, msg: '内置 admin 账号不能降级' });
+  if (scope !== null && !keepRole && !['factory', 'warehouse', 'distributor'].includes(newRole)) {
+    return res.json({ success: false, msg: '品牌管理员不能设置该角色' });
   }
-  if (display_name !== undefined) db.prepare('UPDATE users SET display_name=? WHERE id=?').run(String(display_name).trim(), id);
-  if (req.body.phone !== undefined) {
-    // 工厂账号编辑时手机号同样必填且格式校验
-    const targetRole = role !== undefined && ROLE_NAMES[role] ? role : user.role;
-    if (targetRole === 'factory' && !/^1\d{10}$/.test(phone)) {
-      return res.json({ success: false, msg: '工厂账号必须填写11位手机号' });
+
+  let newBrandId = user.brand_id;
+  let newDistributorId = null;
+  let newFactoryId = null;
+  if (['brand', 'brand_staff', 'warehouse'].includes(newRole)) {
+    if (scope !== null) newBrandId = scope;
+    else if (brand_id !== undefined && brand_id !== null && brand_id !== '') newBrandId = parseInt(brand_id) || null;
+    if (!newBrandId || !db.prepare('SELECT 1 FROM brands WHERE id=? AND enabled=1').get(newBrandId)) {
+      return res.json({ success: false, msg: '品牌方账号必须绑定有效品牌' });
     }
-    db.prepare('UPDATE users SET phone=? WHERE id=?').run(phone, id);
+  } else if (newRole === 'distributor') {
+    newDistributorId = parseInt(distributor_id) || user.distributor_id || null;
+    const distributor = newDistributorId ? db.prepare('SELECT id,brand_id FROM distributors WHERE id=?').get(newDistributorId) : null;
+    if (!distributor) return res.json({ success: false, msg: '代理商账号必须绑定有效代理商' });
+    if (!brandAllowed(scope, distributor.brand_id)) return res.status(403).json({ success: false, code: 'ACCOUNT_TENANT_FORBIDDEN', msg: '不能把账号绑定到其他品牌的代理商' });
+    newBrandId = distributor.brand_id;
+  } else if (newRole === 'factory') {
+    newFactoryId = parseInt(factory_id) || user.factory_id || null;
+    const factory = newFactoryId ? db.prepare('SELECT id,brand_id FROM factories WHERE id=?').get(newFactoryId) : null;
+    if (!factory || !factory.brand_id) return res.json({ success: false, msg: '工厂账号必须绑定已归属品牌的有效工厂' });
+    if (!brandAllowed(scope, factory.brand_id)) return res.status(403).json({ success: false, code: 'ACCOUNT_TENANT_FORBIDDEN', msg: '不能把账号绑定到其他品牌的工厂' });
+    newBrandId = factory.brand_id;
+  } else if (newRole === 'admin') {
+    if (scope !== null) return res.status(403).json({ success: false, msg: '品牌管理员不能设置平台管理员' });
+    newBrandId = null;
   }
-  if (role !== undefined && ROLE_NAMES[role]) {
-    // 品牌管理员编辑平台/品牌管理员账号：角色保持不变（无权修改），仅允许改姓名/密码/启停
-    const keepRole = scope !== null && ['admin', 'brand'].includes(user.role);
-    const newRole = keepRole ? user.role : role;
-    if (user.username === 'admin' && newRole !== 'admin') return res.json({ success: false, msg: '内置 admin 账号不能降级' });
-    if (scope !== null && !['factory', 'warehouse', 'distributor'].includes(newRole)) {
-      return res.json({ success: false, msg: '品牌管理员不能设置该角色' });
-    }
-    if (newRole === 'distributor' && !distributor_id && user.distributor_id === null) {
-      return res.json({ success: false, msg: '代理商账号必须绑定代理商' });
-    }
-    if (newRole === 'factory' && !factory_id && user.factory_id === null) {
-      return res.json({ success: false, msg: '工厂账号必须绑定工厂' });
-    }
-    // 品牌归属：admin 可为品牌管理员改绑品牌；工厂/代理商账号从所绑实体带出
-    let newBrandId = user.brand_id;
-    if (['brand', 'brand_staff', 'warehouse'].includes(newRole)) {
-      if (scope === null && brand_id !== undefined && brand_id !== null) {
-        const b = db.prepare('SELECT id FROM brands WHERE id=?').get(brand_id);
-        if (!b) return res.json({ success: false, msg: '品牌不存在' });
-        newBrandId = b.id;
-      }
-      if (!newBrandId) return res.json({ success: false, msg: '品牌方账号必须绑定品牌' });
-    } else if (newRole === 'distributor' && (distributor_id || user.distributor_id)) {
-      const d = db.prepare('SELECT brand_id FROM distributors WHERE id=?').get(distributor_id || user.distributor_id);
-      if (d && d.brand_id) newBrandId = d.brand_id;
-    } else if (newRole === 'factory' && (factory_id || user.factory_id)) {
-      const f = db.prepare('SELECT brand_id FROM factories WHERE id=?').get(factory_id || user.factory_id);
-      if (f && f.brand_id) newBrandId = f.brand_id;
-    } else if (newRole === 'admin') {
-      newBrandId = null;
-    }
-    db.prepare('UPDATE users SET role=?, distributor_id=?, factory_id=?, brand_id=? WHERE id=?')
-      .run(newRole,
-        newRole === 'distributor' ? (distributor_id || user.distributor_id) : null,
-        newRole === 'factory' ? (factory_id || user.factory_id) : null,
-        newBrandId,
-        id);
+
+  const newPhone = req.body.phone === undefined ? String(user.phone || '') : String(req.body.phone || '').trim();
+  if (newRole === 'factory' && !/^1\d{10}$/.test(newPhone)) return res.json({ success: false, msg: '工厂账号必须填写11位手机号' });
+  if (password !== undefined && String(password).length > 0 && !passwordMeetsPolicy(password)) {
+    return res.json({ success: false, msg: PASSWORD_POLICY_MESSAGE });
   }
-  if (enabled !== undefined) {
-    if (user.username === 'admin' && !enabled) return res.json({ success: false, msg: '内置 admin 账号不能停用' });
-    db.prepare('UPDATE users SET enabled=? WHERE id=?').run(enabled ? 1 : 0, id);
-  }
+  const newEnabled = enabled === undefined ? Number(user.enabled) : (enabled ? 1 : 0);
+  if (user.username === 'admin' && !newEnabled) return res.json({ success: false, msg: '内置 admin 账号不能停用' });
+
+  // 所有校验完成后一次提交，避免后续字段失败时留下“改了一半”的账号。
+  const update = db.transaction(() => db.prepare(`UPDATE users SET password_hash=?,display_name=?,phone=?,role=?,distributor_id=?,factory_id=?,brand_id=?,enabled=? WHERE id=?`)
+    .run(password !== undefined && String(password).length > 0 ? hashPassword(password) : user.password_hash,
+      display_name === undefined ? user.display_name : String(display_name).trim(), newPhone, newRole,
+      newDistributorId, newFactoryId, newBrandId, newEnabled, id));
+  update();
   res.json({ success: true, msg: '账号已更新' });
 });
 
@@ -4197,18 +4658,18 @@ app.get('/portal', requireRole('distributor', 'admin', 'brand'), (req, res) => {
   const stats = {
     boxes: db.prepare('SELECT COUNT(*) as c FROM boxes WHERE distributor_id=?').get(did).c,
     items: db.prepare('SELECT COUNT(*) as c FROM items WHERE distributor_id=?').get(did).c,
-    scanned: db.prepare("SELECT COUNT(*) as c FROM items WHERE distributor_id=? AND status='scanned'").get(did).c,
-    diversions: db.prepare('SELECT COUNT(*) as c FROM scan_logs WHERE is_diversion>0 AND distributor_name=?').get(distributor.name).c
+    scanned: db.prepare('SELECT COUNT(*) as c FROM items WHERE distributor_id=? AND scanned_at IS NOT NULL').get(did).c,
+    diversions: db.prepare('SELECT COUNT(*) as c FROM scan_logs WHERE is_diversion>0 AND distributor_name=? AND brand_id=?').get(distributor.name, distributor.brand_id).c
   };
   const boxes = db.prepare(`
     SELECT b.*, p.name as product_name,
-      (SELECT COUNT(*) FROM items i WHERE i.box_id=b.id AND i.status='scanned') as scanned_count
+      (SELECT COUNT(*) FROM items i WHERE i.box_id=b.id AND i.scanned_at IS NOT NULL) as scanned_count
     FROM boxes b LEFT JOIN products p ON b.product_id=p.id
     WHERE b.distributor_id=? ORDER BY b.shipped_at DESC LIMIT 200
   `).all(did);
   const scans = db.prepare(`
-    SELECT * FROM scan_logs WHERE distributor_name=? ORDER BY id DESC LIMIT 100
-  `).all(distributor.name);
+    SELECT * FROM scan_logs WHERE distributor_name=? AND brand_id=? ORDER BY id DESC LIMIT 100
+  `).all(distributor.name, distributor.brand_id);
   res.render('portal', { distributor, stats, boxes, scans, isSelf: req.session.user.role === 'distributor' });
 });
 
@@ -4366,7 +4827,7 @@ app.get('/api/stats', requireRole('admin', 'brand', 'brand_staff'), (req, res) =
       total_boxes: db.prepare('SELECT COUNT(*) as c FROM boxes').get().c,
       total_items: db.prepare('SELECT COUNT(*) as c FROM items').get().c,
       shipped_boxes: db.prepare("SELECT COUNT(*) as c FROM boxes WHERE status='shipped'").get().c,
-      scanned_items: db.prepare("SELECT COUNT(*) as c FROM items WHERE status='scanned'").get().c,
+      scanned_items: db.prepare('SELECT COUNT(*) as c FROM items WHERE scanned_at IS NOT NULL').get().c,
       diversions: db.prepare('SELECT COUNT(*) as c FROM scan_logs WHERE is_diversion>0').get().c,
       total_scans: db.prepare('SELECT COUNT(*) as c FROM scan_logs').get().c,
     };
@@ -4376,7 +4837,7 @@ app.get('/api/stats', requireRole('admin', 'brand', 'brand_staff'), (req, res) =
     total_boxes: db.prepare('SELECT COUNT(*) as c FROM boxes b JOIN products p ON b.product_id=p.id WHERE p.brand_id=?').get(scope).c,
     total_items: db.prepare('SELECT COUNT(*) as c FROM items i JOIN products p ON i.product_id=p.id WHERE p.brand_id=?').get(scope).c,
     shipped_boxes: db.prepare("SELECT COUNT(*) as c FROM boxes b JOIN products p ON b.product_id=p.id WHERE b.status='shipped' AND p.brand_id=?").get(scope).c,
-    scanned_items: db.prepare("SELECT COUNT(*) as c FROM items i JOIN products p ON i.product_id=p.id WHERE i.status='scanned' AND p.brand_id=?").get(scope).c,
+    scanned_items: db.prepare('SELECT COUNT(*) as c FROM items i JOIN products p ON i.product_id=p.id WHERE i.scanned_at IS NOT NULL AND p.brand_id=?').get(scope).c,
     diversions: db.prepare('SELECT COUNT(*) as c FROM scan_logs WHERE is_diversion>0 AND brand_id=?').get(scope).c,
     total_scans: db.prepare('SELECT COUNT(*) as c FROM scan_logs WHERE brand_id=?').get(scope).c,
   };

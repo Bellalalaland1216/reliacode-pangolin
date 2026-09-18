@@ -149,7 +149,7 @@ function initDatabase() {
   `);
 
   // 系统用户表（登录认证 + 角色权限）
-  // role: member(普通用户) / admin(平台管理员) / brand(品牌管理员) / brand_staff(品牌方工作账号) / factory(工厂装箱) / warehouse(品牌方) / distributor(代理商自助)
+  // role: admin(平台管理员) / brand(品牌管理员) / brand_staff(品牌方工作账号) / factory(工厂装箱) / warehouse(品牌方) / distributor(代理商自助)
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -668,16 +668,13 @@ function initDatabase() {
     const count = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
     if (count === 0) {
       const isProduction = process.env.NODE_ENV === 'production';
-      const configuredInitialPassword = process.env.INITIAL_ADMIN_PASSWORD || '';
-      const initialPassword = configuredInitialPassword || require('crypto').randomBytes(18).toString('base64url');
-      if (isProduction && configuredInitialPassword.length < 12) {
+      const initialPassword = process.env.INITIAL_ADMIN_PASSWORD || (isProduction ? '' : 'admin123');
+      if (isProduction && initialPassword.length < 12) {
         throw new Error('INITIAL_ADMIN_PASSWORD must be at least 12 characters for first production startup');
       }
       const insertUser = db.prepare('INSERT INTO users (username, password_hash, display_name, role, distributor_id) VALUES (?,?,?,?,?)');
       insertUser.run('admin', hashPassword(initialPassword), '总部管理员', 'admin', null);
-      console.log(isProduction
-        ? '[DB] 已创建生产管理员账号'
-        : `[DB] 已创建本地开发管理员账号：admin/${initialPassword}（仅本次启动显示）`);
+      console.log(isProduction ? '[DB] 已创建生产管理员账号' : '[DB] 已创建本地开发管理员账号：admin/admin123');
     }
   }
 
@@ -692,6 +689,23 @@ function initDatabase() {
       console.log('[DB] 已创建默认工厂，存量产品与工厂账号已归入');
     }
   }
+
+  // 产品可由同一品牌下的多个工厂共同生产。保留 products.factory_id 作为
+  // 旧客户端兼容的“主工厂”，实际授权与展示以本关联表为准。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS product_factories (
+      product_id INTEGER NOT NULL,
+      factory_id INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (product_id, factory_id),
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+      FOREIGN KEY (factory_id) REFERENCES factories(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_product_factories_factory ON product_factories(factory_id, product_id);
+  `);
+  // 幂等回填：升级前每个产品的单一归属工厂自动成为第一家授权工厂。
+  db.prepare(`INSERT OR IGNORE INTO product_factories (product_id, factory_id)
+    SELECT id, factory_id FROM products WHERE factory_id IS NOT NULL`).run();
 
   console.log('[DB] 数据库初始化完成');
 }

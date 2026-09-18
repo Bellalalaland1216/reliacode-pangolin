@@ -61,3 +61,44 @@
   .query-heading { font-size:22px; margin-bottom:16px; }
   .query-page .form-grid { gap:12px; }
 }
+
+/* Keep production product details inside the approved mint result dialog. */
+    .section-heading { font-size: 17px; font-weight: 700; margin: 2px 0 14px; letter-spacing: 0; color: var(--ios-text); }
+    .section-kicker { font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 8px; color: var(--ios-blue); }
+    .empty-state { background: #f2f2f7; border-radius: 14px; padding: 18px 14px; text-align: center; font-size: 13px; line-height: 1.65; color: var(--ios-text-2); }
+
+    /* 产品图 */
+    .product-cover { width: 100%; max-height: 340px; object-fit: cover; display: block; border-radius: 16px; margin-bottom: 16px; }
+    .product-gallery { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+    .product-gallery img { width: 100%; aspect-ratio: 1/1; object-fit: cover; border-radius: 14px; }
+
+    /* 时间线：iOS 蓝圆点 */
+    .trace-list { list-style: none; margin: 0; padding: 0; }
+    .trace-item { position: relative; margin-left: 6px; padding: 0 0 22px 26px; border-left: 2px solid var(--ios-sep); }
+    .trace-item:last-child { padding-bottom: 0; border-left-color: transparent; }
+    .trace-item::before {
+      content: ''; position: absolute; width: 12px; height: 12px; left: -7px; top: 4px;
+      border-radius: 50%; background: var(--ios-blue); box-shadow: 0 0 0 3px #17624920;
+    }
+    .trace-title { font-size: 14px; font-weight: 600; color: var(--ios-text); }
+    .trace-meta { margin-top: 4px; font-size: 12px; line-height: 1.55; color: var(--ios-text-2); }
+    .trace-description { margin-top: 6px; font-size: 13px; line-height: 1.65; white-space: pre-wrap; color: var(--ios-text-2); }
+
+    /* 品牌活动 / 检测报告 */
+    .promotion-card { background: #f2f2f7; border-radius: 16px; padding: 16px; }
+    .promotion-card + .promotion-card { margin-top: 12px; }
+    .promotion-card img { width: 100%; max-height: 260px; object-fit: cover; border-radius: 12px; margin-bottom: 12px; }
+    .promotion-title { font-size: 15px; font-weight: 700; color: var(--ios-text); }
+    .promotion-description { font-size: 13px; line-height: 1.65; margin-top: 6px; white-space: pre-wrap; color: var(--ios-text-2); }
+    .promotion-link { display: inline-flex; min-height: 44px; align-items: center; margin-top: 12px; color: var(--ios-blue); font-weight: 600; text-underline-offset: 3px; }
+    .public-reports { display: grid; gap: 12px; }
+    .pub-report img { width: 100%; border-radius: 12px; border: 1px solid var(--ios-sep); }
+
+
+.trace-dialog { --ios-text:#123f31; --ios-text-2:#526e65; --ios-blue:#176249; --ios-sep:#dfece5; }
+.trace-dialog .h5-card + .h5-card { margin-top:14px; }
+.trace-dialog .carousel-image.is-hidden { display:none; }
+.trace-dialog .carousel img { width:100%; max-height:320px; object-fit:cover; }
+.trace-dialog .ui-icon { width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8; }
+.trace-dialog .verify-status .ui-icon, .trace-dialog .p-icon .ui-icon { width:34px; height:34px; }
+.trace-dialog .car-dot { display:inline-block; }

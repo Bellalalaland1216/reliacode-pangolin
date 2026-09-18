@@ -4,12 +4,12 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../views/verify.ejs', import.meta.url), 'utf8');
 
-test('consumer result renders the required product-specific sections in order', () => {
+test('consumer result renders the published product-specific sections and reports in order', () => {
   const sequence = [
     'renderProductSection(data, media)',
     'renderTraceSection(data)',
-    'renderDistributionSection(data)',
     'renderGallerySection(media)',
+    'await renderReportsSection(code)',
     'renderPromotionSection(data)',
     'renderCustomerServiceSection()'
   ];
@@ -23,7 +23,7 @@ test('consumer result renders the required product-specific sections in order', 
   assert.match(source, /data-result-section="verification"/);
   assert.match(source, /data-result-section="product"/);
   assert.match(source, /data-result-section="trace"/);
-  assert.match(source, /data-result-section="distribution"/);
+  assert.match(source, /data-result-section="reports"/);
   assert.match(source, /data-result-section="gallery"/);
   assert.match(source, /data-result-section="promotion"/);
   assert.match(source, /data-result-section="customer-service"/);
@@ -67,4 +67,12 @@ test('product carousel remains button-driven without inline handlers or inline s
   assert.doesNotMatch(source, /\son(?:click|error|load|mouseover)=/i);
   assert.doesNotMatch(source, /\sstyle=/i);
   assert.doesNotMatch(source, /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u);
+});
+
+// Production intentionally keeps internal distribution details out of the public result.
+test('consumer result preserves report media and keeps internal distribution details private', () => {
+  const result = source.slice(source.indexOf('async function doVerify'));
+  assert.doesNotMatch(result, /renderDistributionSection|data\.resolved_location|data\.first_scan_ip/);
+  assert.match(source, /safeLocalImageUrl\(r\.url\)/);
+  assert.match(source, /escapeHtml\(r\.id\)/);
 });
