@@ -27,7 +27,7 @@ ce598a6026d1427b08baf8ef26e49faab52137d57a5c32cf87a4da6240d5d94a  ./views/codes.
 b325f5ae5ead1b610b17bc4798e6bd3168301daadbf8407760b3d0a0d9e3ec87  ./views/distributors.ejs
 6a9660a7d516c86627ec56d8040ffebdb78a79e242bd704a881eb7415b57d57d  ./views/downloads.ejs
 7e0913e5e3d8697540ff3fa1b4022fc6f7656d3bb55904de67dadd7272ba3638  ./views/factory.ejs
-5398a86264cb36ff7bff9c9b71f6c53f90ec63d7db9054734f6eb5004a78a09e  ./views/generate.ejs
+5ff4a13279558b357c191752b1ba023c95d7e2869a25603a68b08705539c634a  ./views/generate.ejs
 da0b085c6b385855889ae66fb7789b2fb78a1b1bbb690a5ecc7c3628225f86dc  ./views/login.ejs
 11f0417c04b8fe2fef51ddb25e5e05c64cb7d5f16f37d7d8caad7d4c5ec5b00d  ./views/logs.ejs
 f452579870b5f90534882a080dffe327d1a5300bdecc0cd293b71886772ee0fa  ./views/partials/bottom-nav.ejs
