@@ -302,6 +302,51 @@ input, select, textarea {
 .page-heading h1 { margin: 6px 0 4px; font-size: clamp(22px, 3vw, 30px); color: var(--cm-ink, #161a17); }
 .page-heading p { margin: 0; color: var(--cm-muted, #66706a); font-size: 13px; }
 
+/* 产品与工厂是多对多关系：用清晰的勾选清单代替难以发现的原生多选框。 */
+.product-factory-fieldset {
+  min-width: 0;
+  margin: 8px 0 12px;
+  padding: 14px;
+  border: 1px solid var(--cm-line, #d9ded8);
+  border-radius: 8px;
+  background: var(--cm-surface, #fff);
+}
+.product-factory-fieldset legend {
+  padding: 0 6px;
+  color: var(--cm-ink, #161a17);
+  font-size: 14px;
+  font-weight: 650;
+}
+.product-factory-fieldset > .form-help { margin: 0 0 10px; }
+.product-factory-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 184px;
+  overflow: auto;
+}
+.product-factory-choice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--cm-line, #d9ded8);
+  border-radius: 6px;
+  background: var(--cm-canvas, #f5f6f3);
+  color: var(--cm-ink, #161a17);
+  cursor: pointer;
+}
+.product-factory-choice:has(input:checked) {
+  border-color: var(--cm-product, #2f6b4f);
+  box-shadow: inset 3px 0 0 var(--cm-product, #2f6b4f);
+}
+.product-factory-choice input { width: 18px; height: 18px; accent-color: var(--cm-product, #2f6b4f); }
+.product-factory-choice.is-disabled { opacity: .46; cursor: not-allowed; }
+@media (max-width: 600px) {
+  .product-factory-choices { grid-template-columns: 1fr; max-height: 228px; }
+}
+
 /* Production code-package summary and guided creation layout. */
 .package-stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
 .package-stat { display: grid; gap: 4px; min-width: 0; padding: 14px 16px; border: 1px solid var(--cm-line); border-radius: 10px; background: var(--cm-surface); }

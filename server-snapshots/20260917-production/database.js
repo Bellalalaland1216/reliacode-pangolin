@@ -690,6 +690,23 @@ function initDatabase() {
     }
   }
 
+  // 产品可由同一品牌下的多个工厂共同生产。保留 products.factory_id 作为
+  // 旧客户端兼容的“主工厂”，实际授权与展示以本关联表为准。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS product_factories (
+      product_id INTEGER NOT NULL,
+      factory_id INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (product_id, factory_id),
+      FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+      FOREIGN KEY (factory_id) REFERENCES factories(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_product_factories_factory ON product_factories(factory_id, product_id);
+  `);
+  // 幂等回填：升级前每个产品的单一归属工厂自动成为第一家授权工厂。
+  db.prepare(`INSERT OR IGNORE INTO product_factories (product_id, factory_id)
+    SELECT id, factory_id FROM products WHERE factory_id IS NOT NULL`).run();
+
   console.log('[DB] 数据库初始化完成');
 }
 

@@ -32,7 +32,7 @@
         </div>
         <button id="addProductBtn" class="btn btn-primary" type="button" aria-haspopup="dialog">新增产品</button>
       </div>
-      <p class="form-help">箱规 = 每箱装几个；归属工厂仅作管理参考。批次在生码时创建或选择，不再固化在产品定义中。</p>
+      <p class="form-help">箱规 = 每箱装几个；同一产品可授权给同品牌下的多个工厂生产。批次在生码时创建或选择，不再固化在产品定义中。</p>
       <div role="search" aria-label="筛选产品档案">
         <div class="product-form-grid">
           <div class="form-group">
@@ -77,7 +77,7 @@
         </thead>
         <tbody>
           <% products.forEach(p => { %>
-          <tr data-product-filter-row data-search="<%= [p.name,p.spec,p.ena13].filter(Boolean).join(' ') %>" data-box="<%= Number(p.box_size) || 0 %>" data-factory="<%= p.factory_id || 0 %>" data-brand="<%= p.brand_id || 0 %>">
+          <tr data-product-filter-row data-search="<%= [p.name,p.spec,p.ena13].filter(Boolean).join(' ') %>" data-box="<%= Number(p.box_size) || 0 %>" data-factories="<%= (p.factory_ids || []).join(',') %>" data-brand="<%= p.brand_id || 0 %>">
             <td><%= p.name %></td>
             <td class="col-sm-hide td-mono"><%= p.ena13 || '-' %></td>
             <td class="col-sm-hide"><%= p.spec || '-' %></td>
@@ -136,15 +136,19 @@
                     <label for="pBoxSize">默认箱规</label>
                     <input type="number" id="pBoxSize" class="form-control" placeholder="例如：8" min="1" max="100000">
                   </div>
-                  <div class="form-group">
-                    <label for="pFactory">归属工厂</label>
-                    <select id="pFactory" class="form-control">
-          <option value="">归属工厂（总部）</option>
+                  <fieldset class="form-group product-grid-wide product-factory-fieldset" id="pFactories">
+                    <legend>归属工厂（可多选）</legend>
+                    <p class="form-help">勾选所有实际生产该产品的工厂；未勾选表示由品牌总部管理。</p>
+                    <div class="product-factory-choices">
           <% factories.forEach(f => { %>
-            <option value="<%= f.id %>" data-brand-id="<%= f.brand_id || '' %>"><%= f.name %></option>
+                      <label class="product-factory-choice">
+                        <input type="checkbox" name="pFactory" value="<%= f.id %>" data-brand-id="<%= f.brand_id || '' %>">
+                        <span><%= f.name %></span>
+                      </label>
           <% }); %>
-                    </select>
-                  </div>
+          <% if (!factories.length) { %><span class="form-help">还没有可选工厂，请先在账号与工厂管理中建档。</span><% } %>
+                    </div>
+                  </fieldset>
         <% if (user && user.role === 'admin') { %>
                   <div class="form-group">
                     <label for="pBrand">归属品牌</label>
@@ -441,9 +445,11 @@
         const terms = normalize(query.value).split(/\s+/).filter(Boolean);
         let count = 0;
         rows.forEach(row => {
+          const factoryIds = String(row.dataset.factories || '').split(',').filter(Boolean);
+          const factoryMatch = !factory.value || (factory.value === '0' ? factoryIds.length === 0 : factoryIds.includes(factory.value));
           const match = terms.every(term => normalize(row.dataset.search).includes(term)) &&
             (!box.value || row.dataset.box === box.value) &&
-            (!factory.value || row.dataset.factory === factory.value) &&
+            factoryMatch &&
             (!brandFilter || !brandFilter.value || row.dataset.brand === brandFilter.value);
           row.hidden = !match;
           if (match) count++;
@@ -489,6 +495,20 @@
     let productFormDirty = false;
     let modalReturnFocus = null;
     const previewMedia = window.matchMedia('(max-width: 900px)');
+    const factoryInputs = () => Array.from(document.querySelectorAll('input[name="pFactory"]'));
+    const selectedFactoryIds = () => factoryInputs().filter(input => input.checked).map(input => Number(input.value));
+    function updateFactoryAvailability(brandId, preserveChecked = false) {
+      factoryInputs().forEach(input => {
+        const mismatch = !!brandId && String(input.dataset.brandId || '') !== String(brandId);
+        input.disabled = mismatch;
+        if (mismatch && !preserveChecked) input.checked = false;
+        input.closest('.product-factory-choice')?.classList.toggle('is-disabled', mismatch);
+      });
+    }
+    function setSelectedFactories(ids) {
+      const selected = new Set((ids || []).map(Number));
+      factoryInputs().forEach(input => { input.checked = selected.has(Number(input.value)); });
+    }
 
     function placeProductPreview() {
       const preview = document.querySelector('.phone-preview');
@@ -533,7 +553,7 @@
       document.getElementById('saveProductBtn').disabled = false;
       const brandSelect = document.getElementById('pBrand');
       if (brandSelect) brandSelect.disabled = false;
-      Array.from(document.getElementById('pFactory').options).forEach(option => { option.disabled = false; });
+      updateFactoryAvailability('', false);
       document.getElementById('productModalTitle').textContent = '新增产品';
       renderProductImages();
       productFormDirty = false;
@@ -546,6 +566,7 @@
       if (brandSel) {
         const valid = Array.from(brandSel.options).filter(o => o.value);
         if (valid.length === 1) brandSel.value = valid[0].value;
+        updateFactoryAvailability(brandSel.value, false);
       }
       modalReturnFocus = document.activeElement;
       productModal.classList.add('is-open');
@@ -575,15 +596,13 @@
       document.getElementById('pSpec').value = data.product.spec || '';
       document.getElementById('pEna13').value = data.product.ena13 || '';
       document.getElementById('pBoxSize').value = data.product.box_size || '';
-      document.getElementById('pFactory').value = data.product.factory_id || '';
+      setSelectedFactories(data.product.factory_ids || (data.product.factory_id ? [data.product.factory_id] : []));
       const brand = document.getElementById('pBrand');
       if (brand) {
         brand.value = data.product.brand_id || '';
         brand.disabled = true;
       }
-      Array.from(document.getElementById('pFactory').options).forEach(option => {
-        option.disabled = !!option.value && String(option.dataset.brandId || '') !== String(data.product.brand_id || '');
-      });
+      updateFactoryAvailability(data.product.brand_id || '', true);
       productImages = (data.media || []).map(row => ({ url: row.url, alt_text: row.alt_text || '', existing: true }));
       const enabled = new Set((data.templates || []).filter(row => row.enabled).map(row => row.stage_key));
       document.querySelectorAll('input[name="traceStage"]').forEach(input => { input.checked = enabled.has(input.value); });
@@ -808,13 +827,13 @@
       const spec = document.getElementById('pSpec').value.trim();
       const ena13 = document.getElementById('pEna13').value.trim();
       const boxSize = parseInt(document.getElementById('pBoxSize').value) || 0;
-      const factory_id = parseInt(document.getElementById('pFactory').value) || null;
+      const factory_ids = selectedFactoryIds();
       const brandSel = document.getElementById('pBrand');
       const brand_id = brandSel ? (parseInt(brandSel.value) || null) : null;
       const campaignUrl = document.getElementById('campaignUrl').value.trim();
       if (!name) { setProductStep('basic'); document.getElementById('pName').focus(); return toast('请输入产品名称', 'error'); }
-      if (!factory_id && !brand_id && brandSel) { setProductStep('basic'); brandSel.focus(); return toast('请选择「归属品牌」或「归属工厂」', 'error'); }
-      if (factory_id && !brand_id && brandSel) { setProductStep('basic'); brandSel.focus(); return toast('所选工厂未归属品牌，请在下拉框选择「归属品牌」', 'error'); }
+      if (!factory_ids.length && !brand_id && brandSel) { setProductStep('basic'); brandSel.focus(); return toast('请选择「归属品牌」或至少一个「归属工厂」', 'error'); }
+      if (factory_ids.length && !brand_id && brandSel) { setProductStep('basic'); brandSel.focus(); return toast('所选工厂未归属品牌，请选择「归属品牌」', 'error'); }
       if (campaignUrl && !/^https:\/\//i.test(campaignUrl)) { setProductStep('campaign'); document.getElementById('campaignUrl').focus(); return toast('活动链接必须使用 HTTPS', 'error'); }
       const saveButton = document.getElementById('saveProductBtn');
       const status = document.getElementById('productFormStatus');
@@ -825,7 +844,7 @@
         const res = await fetch(editingProductId ? `/api/products/${editingProductId}` : '/api/products', {
           method: editingProductId ? 'PUT' : 'POST',
           headers: {'Content-Type':'application/json', 'Idempotency-Key':requestKey('product-create')},
-          body: JSON.stringify({name, spec, ena13, batch_no: '', box_size: boxSize, factory_id, brand_id, version: editingProductVersion})
+          body: JSON.stringify({name, spec, ena13, batch_no: '', box_size: boxSize, factory_ids, brand_id, version: editingProductVersion})
         });
         const raw = await res.text();
         let data;
@@ -1051,22 +1070,27 @@
     }
 
     document.getElementById('addProductBtn').addEventListener('click', openProductModal);
-    // 选工厂时联动品牌：工厂有品牌则自动选中，无品牌则清空并提示
+    // 多工厂必须属于同一品牌；首个勾选会联动品牌并禁用其他品牌工厂。
     (function () {
-      const facSel = document.getElementById('pFactory');
       const brdSel = document.getElementById('pBrand');
-      if (facSel && brdSel) {
-        facSel.addEventListener('change', function () {
-          const opt = facSel.options[facSel.selectedIndex];
-          const bid = opt ? opt.getAttribute('data-brand-id') : '';
-          if (bid) {
+      factoryInputs().forEach(input => {
+        input.addEventListener('change', () => {
+          if (input.checked && brdSel) {
+            const bid = input.dataset.brandId || '';
+            if (!bid) {
+              input.checked = false;
+              return toast('该工厂未归属有效品牌，暂不能关联产品', 'error');
+            }
             brdSel.value = bid;
-          } else if (facSel.value) {
-            brdSel.value = '';
-            toast('该工厂未归属品牌，请手动选择「归属品牌」', 'error');
+            updateFactoryAvailability(bid, false);
+            input.checked = true;
+          } else if (brdSel) {
+            updateFactoryAvailability(brdSel.value, false);
           }
+          productFormDirty = true;
         });
-      }
+      });
+      if (brdSel) brdSel.addEventListener('change', () => updateFactoryAvailability(brdSel.value, false));
     })();
     if (typeof previewMedia.addEventListener === 'function') previewMedia.addEventListener('change', placeProductPreview);
     else if (typeof previewMedia.addListener === 'function') previewMedia.addListener(placeProductPreview);
