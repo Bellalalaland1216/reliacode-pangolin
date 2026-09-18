@@ -106,15 +106,15 @@
         </div>
       </div>
       <p class="section-help">
-        工厂用于组织装箱团队，归属于品牌。<strong>码只归属品牌</strong>，品牌旗下任意工厂账号都能扫码装箱，无需按工厂区分。删除工厂时，相关产品/箱码/子码的工厂引用会自动清空（码本身保留），但若工厂下还有账号则需先解绑。
+        工厂用于组织装箱团队，归属于品牌。产品可授权给多家工厂，但每次实际入库会锁定生产工厂；其他工厂不能继续装箱或取消。存在历史记录的工厂会停用归档，不会物理删除。
       </p>
       <div class="table-wrap">
       <table class="table">
         <thead>
-          <tr><th>ID</th><th>工厂名</th><th>联系人</th><th>归属品牌</th><th>账号数</th><th>创建时间</th><th class="action-column">操作</th></tr>
+          <tr><th>ID</th><th>工厂名</th><th>联系人</th><th>归属品牌</th><th>状态</th><th>账号数</th><th>创建时间</th><th class="action-column">操作</th></tr>
         </thead>
         <tbody id="factoryBody">
-          <tr><td colspan="7" class="text-center muted-text">加载中…</td></tr>
+          <tr><td colspan="8" class="text-center muted-text">加载中…</td></tr>
         </tbody>
       </table>
       </div>
@@ -484,18 +484,19 @@
       try {
         const res = await fetch('/api/factories');
         const d = await res.json();
-        if (!d.success) { body.innerHTML = '<tr><td colspan="7" class="text-center muted-text">加载失败</td></tr>'; return; }
-        if (!d.factories.length) { body.innerHTML = '<tr><td colspan="7" class="text-center muted-text">暂无工厂，点击右上角新建</td></tr>'; return; }
+        if (!d.success) { body.innerHTML = '<tr><td colspan="8" class="text-center muted-text">加载失败</td></tr>'; return; }
+        if (!d.factories.length) { body.innerHTML = '<tr><td colspan="8" class="text-center muted-text">暂无工厂，点击右上角新建</td></tr>'; return; }
         body.innerHTML = d.factories.map(f => `
           <tr>
             <td>${Number(f.id)}</td>
             <td class="font-semibold">${esc(f.name)}</td>
             <td>${esc(f.contact || '-')}</td>
             <td>${esc(f.brand_name || '-')}</td>
+            <td>${f.enabled ? '<span class="status-pill success">启用</span>' : '<span class="status-pill">已归档</span>'}</td>
             <td id="fc-${f.id}">…</td>
             <td class="small-text secondary-text">${esc(f.created_at || '-')}</td>
             <td class="no-wrap">
-              <button class="btn btn-outline btn-sm delete-factory-btn danger-action" type="button" data-factory-id="${Number(f.id)}" data-factory-name="${esc(f.name)}">删除</button>
+              <button class="btn btn-outline btn-sm delete-factory-btn danger-action" type="button" data-factory-id="${Number(f.id)}" data-factory-name="${esc(f.name)}" ${f.enabled ? '' : 'disabled aria-disabled="true"'}>${f.enabled ? '删除/归档' : '已归档'}</button>
             </td>
           </tr>`).join('');
         body.querySelectorAll('.delete-factory-btn').forEach(button => {
@@ -511,7 +512,7 @@
           });
         });
       } catch (e) {
-        body.innerHTML = '<tr><td colspan="7" class="text-center muted-text">加载失败</td></tr>';
+        body.innerHTML = '<tr><td colspan="8" class="text-center muted-text">加载失败</td></tr>';
       }
     }
     function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -531,7 +532,7 @@
       else toast(d.msg || '创建失败', 'error');
     }
     async function deleteFactory(id, name) {
-      if (!confirm('确定要删除工厂「' + name + '」吗？\n\n该工厂下若有账号请先到「账号管理」解绑；删除后相关产品/箱码/子码的工厂引用会自动清空，码本身保留。')) return;
+      if (!confirm('确定处理工厂「' + name + '」吗？\n\n空工厂会删除；已有历史记录的工厂会停用归档并保留审计资料；存在在库实物时系统会阻止操作。')) return;
       const res = await fetch('/api/factories/' + id, { method: 'DELETE' });
       const d = await res.json();
       if (d.success) { toast(d.msg || '已删除'); loadFactories(); }

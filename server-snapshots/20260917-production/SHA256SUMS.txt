@@ -1,6 +1,6 @@
 2755611b405defde6b1e5c46c7560a46820f5f64c34f4a6efd0f336072297abc  ./.gitignore
 955266a5e79fff29e2fdfc0c71dee37c83dbcca05400f7b5404f42783697a369  ./README.md
-4201a774e45e4e5152e8a0d664ea8a4a165276ba291d341b50d134ad5b305ede  ./database.js
+62befb38b1bfd5a3af2e7c2950097fb41f13963453edec68be3cb10bb6428c84  ./database.js
 f93241ade81fddd3cc40a914969c282a8fbd1bdb06bf6698220b1c390900f284  ./package-lock.json
 bf26684b96ba313dfd89402c7cf3513c74f218f5003851fadd5c1de0815dcc45  ./package.json
 a93a43a0c36f46711936b2115276122e60cfa5ba490c16e2f8a095824f26c077  ./public/css/clawmaster.css
@@ -9,15 +9,16 @@ a93a43a0c36f46711936b2115276122e60cfa5ba490c16e2f8a095824f26c077  ./public/css/c
 a6e422d84845272a373144d83f6b5bd550db633379eddda0982ba146a754870e  ./public/icons/pangolin-photo.png
 1384d9f2bc6f526ccdd786b2b0f52915cbe36d6096203f9a7b387a2fc32cff26  ./public/js/readonly-ui.js
 77a098a7568c291b2a68c858c3e33fa0192b314e9e7bcb061f7508ffa7750b2c  ./readonly-access.cjs
-df3fc526b43568506cddbd0cf3b3d57bec41f86eaffefbb248eebcb5cdaa8826  ./receipt-integrity.cjs
+acbd775d0ef102fcbffa8484e1f63f2cc7863f2ddd78c8510630251012bdf716  ./receipt-integrity.cjs
 77a6ec8eecf1cd6de5330616109b093698a3ea201408ddcb15381403262debab  ./region-catalog.js
-effc2e98fee39859318c7b15aa1d298dd5576b347b9b6656cae35059e52d8b94  ./server.js
+72fd9684fc2e2db9fd498ba1e58e63aed7d92036fb4c74341fd97865edf322b0  ./server.js
 c402fb788758a147af712ee5e988a254b8871f1a88a4b4a010c12e87ebeb89f6  ./sqlite-session-store.js
 0b85afd449cec8d277f5625a75a37210d26d7cd0c6b0688035fb49499f542305  ./tests/code-package-candidate-acceptance.mjs
 d4e02cedf061214cdd9a2e4b4a49d85e2fcf724a34940219a4975f78545c5181  ./tests/code-package-production.test.mjs
 ee61f91effd45e2a582b3ee4e2843d99be26942c64b16d50d4ceab95a132125c  ./tests/download-center-log-permission.test.mjs
 2358541cf3fb0aada5a9e5b2794e68c7e633c568bec4739a7c151ae783ce0221  ./tests/image-archive-guard.test.mjs
-e68dbb48d958481606ed5b716667ac4acace260abbb6b740d547ab7ace2ce8dd  ./tests/product-multi-factory.test.mjs
+c4c747daccefce0b2e1c4e4e8a6cb389178cf12b70663570733f126deb67412f  ./tests/multi-factory-boundaries.test.mjs
+ededffeffd565a5c77904219800e382cae9996287e4f9c003f4bd01b95aefaef  ./tests/product-multi-factory.test.mjs
 71a330e79ec470811c8752f9e9e2800f87eb06a62c1b6a4f3fed477abf20a63f  ./views/admin-business.ejs
 3386b03f92036d1c291ac3e9ab587f918ecbc9452baa933bc7047d0139f73d8b  ./views/admin-me.ejs
 723ba3908ace438e96b5f48df444167a07141e5d4bb3b9e39dae585e076e1bb7  ./views/admin.ejs
@@ -26,7 +27,7 @@ e68dbb48d958481606ed5b716667ac4acace260abbb6b740d547ab7ace2ce8dd  ./tests/produc
 ce598a6026d1427b08baf8ef26e49faab52137d57a5c32cf87a4da6240d5d94a  ./views/codes.ejs
 b325f5ae5ead1b610b17bc4798e6bd3168301daadbf8407760b3d0a0d9e3ec87  ./views/distributors.ejs
 6a9660a7d516c86627ec56d8040ffebdb78a79e242bd704a881eb7415b57d57d  ./views/downloads.ejs
-7e0913e5e3d8697540ff3fa1b4022fc6f7656d3bb55904de67dadd7272ba3638  ./views/factory.ejs
+553ca889bed99c4d57a4c04997bfe009657f0e17d2c08f6366640067b4ec2ca5  ./views/factory.ejs
 5ff4a13279558b357c191752b1ba023c95d7e2869a25603a68b08705539c634a  ./views/generate.ejs
 da0b085c6b385855889ae66fb7789b2fb78a1b1bbb690a5ecc7c3628225f86dc  ./views/login.ejs
 11f0417c04b8fe2fef51ddb25e5e05c64cb7d5f16f37d7d8caad7d4c5ec5b00d  ./views/logs.ejs
@@ -37,6 +38,6 @@ f452579870b5f90534882a080dffe327d1a5300bdecc0cd293b71886772ee0fa  ./views/partia
 114fa920d10db83523dc7c60ce93ff113b06187ab513f14cae0cf8b9298933ea  ./views/profile.ejs
 743cfc10a70a3b68818dc27c5687ed00d0add2dda425124c737bac437cafc032  ./views/register.ejs
 a91687235c01381fe730dba0de2d5ee97f8b9d972f821819b958aff0ad0799eb  ./views/settings.ejs
-93cc0ec5164cb136282313cfe859f59b0e63488319f9e33ea264ae030cf7903c  ./views/users.ejs
+35b9fa6c85865c8b672f2074a66447cdb3ee5195debe3bfd3f3d929182f22c8b  ./views/users.ejs
 4990bc063dc83d3c8d940c7ac30480d9caac4e3cd83acafab5c5e4f06d336262  ./views/verify.ejs
 84adb819a7109c9e20a36ea607941084a3a977cb422ca86331360803361b2388  ./views/warehouse.ejs

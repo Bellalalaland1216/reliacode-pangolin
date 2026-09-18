@@ -58,6 +58,15 @@
             <label class="text-13" for="selBatch">批次号 <span class="required-mark">*</span></label>
             <input type="text" id="selBatch" class="form-control" placeholder="必填，如：20260829">
           </div>
+          <% if (user.role !== 'factory') { %>
+          <div class="form-group mb-0">
+            <label class="text-13" for="selOperationFactory">本次实际生产工厂 <span class="required-mark">*</span></label>
+            <select id="selOperationFactory" class="form-control">
+              <option value="">请选择实际生产工厂</option>
+              <% factories.forEach(factory => { %><option value="<%= factory.id %>"><%= factory.name %></option><% }); %>
+            </select>
+          </div>
+          <% } %>
         </div>
         <div class="flex-actions-wrap">
           <button id="confirmProductBtn" class="btn btn-primary" type="button"><%- icon('check') %> 确认并开始扫码</button>
@@ -235,6 +244,17 @@
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
       })[ch]);
     }
+    function normalizeFactoryCode(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      try {
+        const url = new URL(raw, location.origin);
+        const match = url.pathname.match(/\/v\/([A-Za-z0-9]+)\/?$/);
+        if (match) return match[1].toUpperCase();
+      } catch (_) {}
+      const match = raw.match(/(?:^|[^A-Za-z0-9])([BS][A-Za-z0-9]+)(?:$|[^A-Za-z0-9])/i);
+      return (match ? match[1] : raw).replace(/\s+/g, '').toUpperCase();
+    }
 
     // 手机震动提示（浏览器/微信里比声音更可靠）
     function vibrate(pattern) {
@@ -332,6 +352,11 @@
     let cancelStockKind = 'boxed'; // boxed=箱码/装箱子码；nobox=无箱码已入库子码
     let noBoxMode = false;         // 无箱码入库模式开关
     let noBoxInCount = 0;          // 本次会话无箱码入库数量
+    const operationFactorySelect = document.getElementById('selOperationFactory');
+    const operationFactoryId = () => operationFactorySelect ? (parseInt(operationFactorySelect.value) || null) : null;
+    const withOperationFactory = payload => operationFactorySelect
+      ? { ...payload, operation_factory_id: operationFactoryId() }
+      : payload;
 
     // 沿用上一箱的产品+箱规（刷新页面也不丢）
     function getLastPack() {
@@ -353,7 +378,8 @@
         const res = await fetch('/api/products');
         const data = await res.json();
         products = (data.products || []).map(p => ({
-          id: p.id, name: p.name, spec: p.spec || '', box_size: p.box_size || 0, batch_no: p.batch_no || ''
+          id: p.id, name: p.name, spec: p.spec || '', box_size: p.box_size || 0, batch_no: p.batch_no || '',
+          factory_ids: Array.isArray(p.factory_ids) ? p.factory_ids.map(Number) : []
         }));
         renderProductOptions();
       } catch (e) {
@@ -367,6 +393,17 @@
         `<option value="${Number(p.id)}">${escapeHtml(p.name)}${p.spec ? ' (' + escapeHtml(p.spec) + ')' : ''}${p.box_size ? ' · 默认箱规' + Number(p.box_size) : ''}</option>`
       ).join('');
       if (selectedId) sel.value = String(selectedId);
+    }
+    function updateOperationFactoryOptions(productId, selectedId) {
+      if (!operationFactorySelect) return;
+      const product = products.find(row => row.id === Number(productId));
+      const allowed = new Set((product?.factory_ids || []).map(Number));
+      Array.from(operationFactorySelect.options).forEach(option => {
+        if (!option.value) return;
+        option.disabled = !allowed.has(Number(option.value));
+      });
+      const desired = Number(selectedId) || Number(operationFactorySelect.value) || 0;
+      operationFactorySelect.value = allowed.has(desired) ? String(desired) : '';
     }
 
     function setBigStatus(text, cls, iconName) {
@@ -396,7 +433,7 @@
 
     // 输入框/扫码枪回车入口
     async function handleScan() {
-      const code = extractCode(scanInput.value);
+      const code = normalizeFactoryCode(scanInput.value);
       scanInput.value = '';
       if (!code) return;
       await processCode(code);
@@ -664,7 +701,7 @@
 
       const res = await fetch('/api/factory/pack/scan-nobox', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ item_code: itemCode, product_id: productId, batch_no: batch })
+        body: JSON.stringify(withOperationFactory({ item_code: itemCode, product_id: productId, batch_no: batch }))
       });
       const data = await res.json();
 
@@ -711,6 +748,7 @@
       const panel = document.getElementById('productPanel');
       document.getElementById('productPanelBox').textContent = boxCode ? '（箱码：' + boxCode + '）' : '';
       renderProductOptions(prefillProduct && prefillProduct.id);
+      updateOperationFactoryOptions(prefillProduct && prefillProduct.id, prefillProduct && prefillProduct.operation_factory_id);
       const sel = document.getElementById('selProduct');
       if (prefillProduct) {
         const p = products.find(x => x.id === prefillProduct.id) || prefillProduct;
@@ -739,13 +777,14 @@
     function cancelProductEdits() {
       if (productConfirming || scanInFlight || cancelSubmitting) return toast('上一项正在处理，请稍后取消编辑', 'error');
       const saved = currentBox && !noBoxMode
-        ? { id: currentBox.product_id, box_size: boxSize, batch_no: currentBox.batch_no || '' }
+        ? { id: currentBox.product_id, box_size: boxSize, batch_no: currentBox.batch_no || '', operation_factory_id: currentBox.receipt_factory_id || null }
         : getLastPack();
       const product = saved && products.find(p => p.id === saved.id);
       document.getElementById('selProduct').value = product ? String(product.id) : '';
       document.getElementById('selBoxSize').value = product ? saved.box_size : '';
       document.getElementById('selBatch').value = product ? saved.batch_no : '';
-      packingReady = !!(product && saved.box_size > 0 && saved.batch_no);
+      updateOperationFactoryOptions(product?.id, saved?.operation_factory_id);
+      packingReady = !!(product && saved.box_size > 0 && saved.batch_no && (!operationFactorySelect || operationFactoryId()));
       updateReadyState();
       document.getElementById('productPanelBox').textContent = packingReady ? '（' + product.name + ' · 每箱 ' + saved.box_size + ' · 批次 ' + saved.batch_no + '）' : '';
       setBigStatus(packingReady ? '已取消修改，继续使用已确认的产品和批次' : '已取消修改，请先选择产品、箱规和批次', 'big-idle', 'box');
@@ -762,6 +801,7 @@
         updateReadyState();
         const pid = parseInt(sel.value);
         const p = products.find(x => x.id === pid);
+        updateOperationFactoryOptions(pid);
         if (p && p.box_size > 0) {
           sizeInput.value = p.box_size;
         } else {
@@ -774,6 +814,12 @@
       packingReady = false;
       updateReadyState();
     }));
+    if (operationFactorySelect) operationFactorySelect.addEventListener('change', () => {
+      packingReady = false;
+      updateReadyState();
+      loadPackRecords();
+      loadPackSummary();
+    });
 
     // 确认产品+箱规
     async function confirmProduct() {
@@ -792,6 +838,7 @@
       if (!productId) return toast('请选择产品', 'error');
       if (!size || size < 1) return toast('请输入有效箱规（每箱装几个）', 'error');
       if (!batch) return toast('请输入批次号', 'error');
+      if (operationFactorySelect && !operationFactoryId()) return toast('请选择本次实际生产工厂', 'error');
 
       const p = products.find(x => x.id === productId);
 
@@ -812,7 +859,7 @@
 
       // 尚未扫码（无当前箱）：仅记录“预选”产品+箱规，供后续扫码自动沿用
       if (!currentBox) {
-        setLastPack({ id: productId, name: p ? p.name : '', box_size: size, batch_no: batch });
+        setLastPack({ id: productId, name: p ? p.name : '', box_size: size, batch_no: batch, operation_factory_id: operationFactoryId() });
         packingReady = true;
         updateReadyState();
         playBeep('item');
@@ -826,7 +873,7 @@
 
       const res = await fetch('/api/factory/pack/set-product', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ box_code: currentBox.box_code, product_id: productId, box_size: size, batch_no: batch })
+        body: JSON.stringify(withOperationFactory({ box_code: currentBox.box_code, product_id: productId, box_size: size, batch_no: batch }))
       });
       const data = await res.json();
       if (!data.success) return flashError(data.msg || '设置产品失败');
@@ -834,7 +881,7 @@
       packingReady = true;
       updateReadyState();
 
-      setLastPack({ id: productId, name: p ? p.name : '', box_size: size, batch_no: batch });
+      setLastPack({ id: productId, name: p ? p.name : '', box_size: size, batch_no: batch, operation_factory_id: operationFactoryId() });
       // 重新拉取箱信息（此时已带产品）；hideProductPanel 会自动恢复连续扫码
       await startPacking(currentBox.box_code, true);
       hideProductPanel();
@@ -850,7 +897,8 @@
       const cur = currentBox.product_id ? {
         id: currentBox.product_id,
         box_size: boxSize,
-        batch_no: currentBox.batch_no || ''
+        batch_no: currentBox.batch_no || '',
+        operation_factory_id: currentBox.receipt_factory_id || null
       } : getLastPack();
       showProductPanel(currentBox.box_code, cur);
       setBigStatus('请选择新产品并确认箱规', 'big-select', 'refresh');
@@ -865,8 +913,11 @@
       const data = await res.json();
       if (!data.success) return flashError(data.msg || '箱码不存在');
 
+      const selectedOperationFactory = operationFactoryId();
       currentBox = data.box;
       currentBoxCompleted = false;
+      updateOperationFactoryOptions(currentBox.product_id || document.getElementById('selProduct').value,
+        currentBox.receipt_factory_id || selectedOperationFactory);
 
       // 空白箱码：需要先选产品
       if (data.need_product) {
@@ -876,13 +927,14 @@
         const preBatch = document.getElementById('selBatch').value.trim();
         const last = getLastPack();
         const chosen = (preProductId && preSize && preSize > 0)
-          ? { id: preProductId, box_size: preSize, batch_no: preBatch }
+          ? { id: preProductId, box_size: preSize, batch_no: preBatch, operation_factory_id: operationFactoryId() }
           : (last && last.id ? last : null);
+        if (chosen) updateOperationFactoryOptions(chosen.id, chosen.operation_factory_id);
         if (chosen && !isRefresh) {
           // 自动沿用已选/上次产品+箱规，直接进入扫码
           const r2 = await fetch('/api/factory/pack/set-product', {
             method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ box_code: boxCode, product_id: chosen.id, box_size: chosen.box_size, batch_no: chosen.batch_no || '' })
+            body: JSON.stringify(withOperationFactory({ box_code: boxCode, product_id: chosen.id, box_size: chosen.box_size, batch_no: chosen.batch_no || '' }))
           });
           const d2 = await r2.json();
           if (d2.success) {
@@ -941,7 +993,7 @@
 
       const res = await fetch('/api/factory/pack/scan', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ box_code: currentBox.box_code, item_code: itemCode, box_size: boxSize })
+        body: JSON.stringify(withOperationFactory({ box_code: currentBox.box_code, item_code: itemCode, box_size: boxSize }))
       });
       const data = await res.json();
 
@@ -993,7 +1045,7 @@
       button.disabled = true;
       try {
         const response = await fetch('/api/factory/pack/set-product', { method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({box_code: currentBox.box_code, product_id: currentBox.product_id, batch_no: currentBox.batch_no, box_size: size}) });
+          body: JSON.stringify(withOperationFactory({box_code: currentBox.box_code, product_id: currentBox.product_id, batch_no: currentBox.batch_no, box_size: size})) });
         const data = await response.json();
         if (!response.ok || !data.success) throw new Error(data.msg || '箱规保存失败');
         boxSize = data.box_size;
@@ -1001,7 +1053,7 @@
         currentBoxCompleted = bound >= boxSize;
         input.value = boxSize;
         if (Number(document.getElementById('selProduct').value) === currentBox.product_id) document.getElementById('selBoxSize').value = boxSize;
-        setLastPack({id: currentBox.product_id, name: currentBox.product_name, box_size: boxSize, batch_no: currentBox.batch_no});
+        setLastPack({id: currentBox.product_id, name: currentBox.product_name, box_size: boxSize, batch_no: currentBox.batch_no, operation_factory_id: currentBox.receipt_factory_id || operationFactoryId()});
         updateProgress();
         toast('箱规已保存为 ' + boxSize, 'success');
         setBigStatus(`箱规已保存（${bound}/${boxSize}）`, currentBoxCompleted ? 'big-full' : 'big-packing', 'box');
@@ -1040,7 +1092,9 @@
     async function loadPackRecords() {
       const list = document.getElementById('packRecordsList');
       try {
-        const res = await fetch('/api/factory/pack/records');
+        const params = new URLSearchParams();
+        if (operationFactoryId()) params.set('factory_id', String(operationFactoryId()));
+        const res = await fetch('/api/factory/pack/records' + (params.size ? '?' + params.toString() : ''));
         const data = await res.json();
         if (!data.success) throw new Error(data.msg || '加载失败');
         const st = data.stats || {};
@@ -1075,7 +1129,10 @@
     async function loadPackSummary() {
       const date = packSummaryDate.value || '';
       try {
-        const url = '/api/factory/pack/summary' + (date ? '?date=' + encodeURIComponent(date) : '');
+        const params = new URLSearchParams();
+        if (date) params.set('date', date);
+        if (operationFactoryId()) params.set('factory_id', String(operationFactoryId()));
+        const url = '/api/factory/pack/summary' + (params.size ? '?' + params.toString() : '');
         const res = await fetch(url);
         const data = await res.json();
         if (!data.success) throw new Error(data.msg || '加载失败');

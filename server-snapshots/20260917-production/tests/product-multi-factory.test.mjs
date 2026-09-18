@@ -12,6 +12,8 @@ test('product factories use an idempotent many-to-many schema with legacy backfi
   assert.match(database, /PRIMARY KEY \(product_id, factory_id\)/);
   assert.match(database, /FOREIGN KEY \(product_id\) REFERENCES products\(id\) ON DELETE CASCADE/);
   assert.match(database, /INSERT OR IGNORE INTO product_factories[\s\S]*SELECT id, factory_id FROM products/);
+  assert.match(database, /product_factories_brand_guard_insert/);
+  assert.match(database, /PRODUCT_FACTORY_BRAND_CONFLICT/);
 });
 
 test('product create, update and factory visibility use all selected factories', () => {
@@ -21,7 +23,11 @@ test('product create, update and factory visibility use all selected factories',
   assert.match(server, /replaceProductFactories\(product\.id, factoryIds\)/);
   assert.match(server, /EXISTS \(SELECT 1 FROM product_factories pf WHERE pf\.product_id=products\.id AND pf\.factory_id=\?\)/);
   assert.match(server, /PRODUCT_FACTORY_FORBIDDEN/);
+  assert.match(server, /RECEIPT_FACTORY_FORBIDDEN/);
+  assert.match(server, /PRODUCT_FACTORY_HAS_ACTIVE_STOCK/);
+  assert.match(server, /FACTORY_HAS_ACTIVE_STOCK/);
   assert.match(server, /factory_ids: rows\.map\(row => row\.id\)/);
+  assert.match(server, /withProductsFactories/);
 });
 
 test('product editor exposes discoverable multi-factory choices and submits an array', () => {
@@ -32,6 +38,9 @@ test('product editor exposes discoverable multi-factory choices and submits an a
   assert.match(view, /const factory_ids = selectedFactoryIds\(\)/);
   assert.match(view, /JSON\.stringify\(\{name, spec, ena13, batch_no: '', box_size: boxSize, factory_ids, brand_id/);
   assert.match(view, /data-factories=/);
+  const factoryView = read('views/factory.ejs');
+  assert.match(factoryView, /本次实际生产工厂/);
+  assert.match(factoryView, /operation_factory_id/);
   assert.match(css, /\.product-factory-choices/);
   assert.match(css, /\.product-factory-choice/);
 });

@@ -77,8 +77,10 @@ module.exports = function receiptIntegrity(db) {
       }
     };
   }
-  function owner(req, product, box) {
-    return box?.receipt_factory_id || (req.session.user?.role === 'factory' ? req.session.user.factory_id : null) || product?.factory_id || null;
+  function owner(req, product, box, explicitFactoryId = null) {
+    return box?.receipt_factory_id ||
+      (req.session.user?.role === 'factory' ? req.session.user.factory_id : null) ||
+      (Number(explicitFactoryId) || null);
   }
   function boxConflict(id) {
     return !!db.prepare(`SELECT 1 FROM items i JOIN boxes b ON b.id=i.box_id WHERE b.id=? AND

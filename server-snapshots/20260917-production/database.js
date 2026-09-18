@@ -176,9 +176,11 @@ function initDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       contact TEXT DEFAULT '',
+      enabled INTEGER DEFAULT 1,
       created_at TEXT DEFAULT (datetime('now','localtime'))
     )
   `);
+  try { db.exec(`ALTER TABLE factories ADD COLUMN enabled INTEGER DEFAULT 1`); } catch(e) {}
 
   // 邀请码表（admin 生成，合作工厂/代理商凭码自助注册账号）
   db.exec(`
@@ -682,7 +684,8 @@ function initDatabase() {
   {
     const fCount = db.prepare('SELECT COUNT(*) as c FROM factories').get().c;
     if (fCount === 0) {
-      const r = db.prepare('INSERT INTO factories (name, contact) VALUES (?,?)').run('默认工厂', '');
+      const defaultBrandId = db.prepare('SELECT id FROM brands WHERE enabled=1 ORDER BY id LIMIT 1').get()?.id || null;
+      const r = db.prepare('INSERT INTO factories (name, contact, brand_id) VALUES (?,?,?)').run('默认工厂', '', defaultBrandId);
       const fid = r.lastInsertRowid;
       db.prepare(`UPDATE users SET factory_id=? WHERE role='factory' AND factory_id IS NULL`).run(fid);
       db.prepare(`UPDATE products SET factory_id=? WHERE factory_id IS NULL`).run(fid);
@@ -702,6 +705,22 @@ function initDatabase() {
       FOREIGN KEY (factory_id) REFERENCES factories(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_product_factories_factory ON product_factories(factory_id, product_id);
+    DROP TRIGGER IF EXISTS product_factories_brand_guard_insert;
+    DROP TRIGGER IF EXISTS product_factories_brand_guard_update;
+    CREATE TRIGGER product_factories_brand_guard_insert
+      BEFORE INSERT ON product_factories
+      WHEN NOT EXISTS (
+        SELECT 1 FROM products p JOIN factories f ON f.id=NEW.factory_id
+        WHERE p.id=NEW.product_id AND p.brand_id IS NOT NULL AND f.brand_id IS NOT NULL AND p.brand_id=f.brand_id
+      )
+      BEGIN SELECT RAISE(ABORT, 'PRODUCT_FACTORY_BRAND_CONFLICT'); END;
+    CREATE TRIGGER product_factories_brand_guard_update
+      BEFORE UPDATE OF product_id, factory_id ON product_factories
+      WHEN NOT EXISTS (
+        SELECT 1 FROM products p JOIN factories f ON f.id=NEW.factory_id
+        WHERE p.id=NEW.product_id AND p.brand_id IS NOT NULL AND f.brand_id IS NOT NULL AND p.brand_id=f.brand_id
+      )
+      BEGIN SELECT RAISE(ABORT, 'PRODUCT_FACTORY_BRAND_CONFLICT'); END;
   `);
   // 幂等回填：升级前每个产品的单一归属工厂自动成为第一家授权工厂。
   db.prepare(`INSERT OR IGNORE INTO product_factories (product_id, factory_id)

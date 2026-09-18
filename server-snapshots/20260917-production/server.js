@@ -109,8 +109,9 @@ app.use(session({
 app.use((req, res, next) => {
   if (!req.session.user) return next();
   const row = db.prepare(`SELECT u.id,u.username,u.display_name,u.role,u.enabled,u.brand_id,u.factory_id,u.distributor_id,
-    b.enabled AS brand_enabled,b.name AS brand_name FROM users u LEFT JOIN brands b ON b.id=u.brand_id WHERE u.id=?`).get(req.session.user.id);
-  if (!row || !row.enabled || (row.brand_id && !row.brand_enabled)) {
+    b.enabled AS brand_enabled,b.name AS brand_name,f.enabled AS factory_enabled
+    FROM users u LEFT JOIN brands b ON b.id=u.brand_id LEFT JOIN factories f ON f.id=u.factory_id WHERE u.id=?`).get(req.session.user.id);
+  if (!row || !row.enabled || (row.brand_id && !row.brand_enabled) || (row.role === 'factory' && !row.factory_enabled)) {
     return req.session.destroy(() => res.status(401).json({success:false,needLogin:true,msg:'登录状态已失效'}));
   }
   req.session.user = {...req.session.user,id:row.id,username:row.username,display_name:row.display_name,
@@ -637,6 +638,7 @@ app.post('/login', loginRateLimit, (req, res, next) => {
   if (user.role === 'factory') {
     factory = db.prepare('SELECT * FROM factories WHERE id=?').get(user.factory_id);
     if (!factory) return res.status(403).render('login', { brand: '穿山甲溯源大师', error: '该账号未绑定工厂，请联系管理员' });
+    if (!factory.enabled) return res.status(403).render('login', { brand: '穿山甲溯源大师', error: '该工厂已停用，请联系品牌管理员' });
   }
   // 品牌信息快照（brand/warehouse/factory/distributor 均按品牌隔离）
   let brandInfo = null;
@@ -700,7 +702,8 @@ app.post('/api/register/check-code', registrationRateLimit, (req, res) => {
   if (!inv || inv.status !== 0) return res.status(409).json({ success: false, code: 'INVITATION_ALREADY_USED', msg: '邀请码无效或已被使用' });
   let factory_name = null;
   if (inv.role === 'factory' && inv.factory_id) {
-    factory_name = db.prepare('SELECT name FROM factories WHERE id=?').get(inv.factory_id)?.name || null;
+    factory_name = db.prepare('SELECT name FROM factories WHERE id=? AND enabled=1').get(inv.factory_id)?.name || null;
+    if (!factory_name) return res.status(409).json({ success: false, code: 'INVITATION_FACTORY_INACTIVE', msg: '邀请码绑定的工厂已停用，请联系管理员重新生成' });
   }
   res.json({ success: true, role: inv.role, note: inv.note, factory_name });
 });
@@ -740,7 +743,7 @@ app.post('/api/register', registrationRateLimit, (req, res) => {
     if (inv.role === 'factory') {
       // 工厂注册：绑定邀请码指定的已建档工厂（固定项）；人名存 display_name，手机号存 phone
       if (!inv.factory_id) throw new Error('INVITATION_FACTORY_INVALID');
-      const fac = db.prepare('SELECT * FROM factories WHERE id=?').get(inv.factory_id);
+      const fac = db.prepare('SELECT * FROM factories WHERE id=? AND enabled=1').get(inv.factory_id);
       if (!fac) throw new Error('INVITATION_FACTORY_INVALID');
       db.prepare('INSERT INTO users (username, password_hash, display_name, phone, role, factory_id, brand_id) VALUES (?,?,?,?,?,?,?)')
         .run(username, hashPassword(password), contact, phone, 'factory', inv.factory_id, inv.brand_id || null);
@@ -807,7 +810,7 @@ app.post('/api/invitations', requireRole('admin', 'brand'), (req, res) => {
   if (role === 'factory') {
     factory_id = parseInt(req.body.factory_id) || null;
     if (!factory_id) return res.json({ success: false, msg: '工厂注册码必须选择归属工厂（请先在工厂管理建档）' });
-    const fac = db.prepare('SELECT * FROM factories WHERE id=?').get(factory_id);
+    const fac = db.prepare('SELECT * FROM factories WHERE id=? AND enabled=1').get(factory_id);
     if (!fac) return res.json({ success: false, msg: '所选工厂不存在，请刷新后重试' });
     if (!brandAllowed(scope, fac.brand_id)) return res.json({ success: false, msg: '所选工厂不在你的品牌范围内' });
   }
@@ -965,10 +968,10 @@ app.get('/generate', requireRole('admin', 'brand', 'brand_staff'), (req, res) =>
         WHERE p.brand_id = ?
         ORDER BY p.id DESC
       `).all(scope);
-  const products = productRows.map(withProductFactories);
+  const products = withProductsFactories(productRows);
   const factories = scope === null
-    ? db.prepare('SELECT id, name, brand_id FROM factories ORDER BY id DESC').all()
-    : db.prepare('SELECT id, name, brand_id FROM factories WHERE brand_id=? ORDER BY id DESC').all(scope);
+    ? db.prepare('SELECT id, name, brand_id FROM factories WHERE enabled=1 ORDER BY id DESC').all()
+    : db.prepare('SELECT id, name, brand_id FROM factories WHERE brand_id=? AND enabled=1 ORDER BY id DESC').all(scope);
   const brands = scope === null
     ? db.prepare('SELECT id, name FROM brands WHERE enabled=1 ORDER BY id').all()
     : [];
@@ -1001,7 +1004,11 @@ app.get('/factory', requireRole('admin', 'factory', 'brand', 'brand_staff'), (re
   }
   sql += ' ORDER BY id DESC';
   const products = db.prepare(sql).all(...params);
-  res.render('factory', { products });
+  const scope = brandScope(req);
+  const factories = scope === null
+    ? db.prepare('SELECT id,name,brand_id FROM factories WHERE enabled=1 ORDER BY name,id').all()
+    : db.prepare('SELECT id,name,brand_id FROM factories WHERE brand_id=? AND enabled=1 ORDER BY name,id').all(scope);
+  res.render('factory', { products, factories });
 });
 
 // 代理商管理页面（brand 只看自己品牌；admin 建代理商时可选归属品牌）
@@ -1177,9 +1184,9 @@ function productFactoryRows(productId) {
     FROM product_factories pf JOIN factories f ON f.id=pf.factory_id
     WHERE pf.product_id=? ORDER BY pf.created_at, f.id`).all(productId);
 }
-function withProductFactories(product) {
+function withProductFactories(product, providedRows = null) {
   if (!product) return null;
-  const rows = productFactoryRows(product.id);
+  const rows = providedRows ? [...providedRows] : productFactoryRows(product.id);
   if (!rows.length && product.factory_id) {
     const legacy = db.prepare('SELECT id,name,brand_id FROM factories WHERE id=?').get(product.factory_id);
     if (legacy) rows.push(legacy);
@@ -1191,10 +1198,24 @@ function withProductFactories(product) {
     factory_name: rows.length ? rows.map(row => row.name).join('、') : (product.factory_name || '')
   };
 }
+function withProductsFactories(products) {
+  if (!products.length) return [];
+  const ids = products.map(product => product.id);
+  const placeholders = ids.map(() => '?').join(',');
+  const rows = db.prepare(`SELECT pf.product_id,f.id,f.name,f.brand_id
+    FROM product_factories pf JOIN factories f ON f.id=pf.factory_id
+    WHERE pf.product_id IN (${placeholders}) ORDER BY pf.created_at,f.id`).all(...ids);
+  const byProduct = new Map();
+  rows.forEach(row => {
+    if (!byProduct.has(row.product_id)) byProduct.set(row.product_id, []);
+    byProduct.get(row.product_id).push(row);
+  });
+  return products.map(product => withProductFactories(product, byProduct.get(product.id) || []));
+}
 function resolveProductFactories(factoryIds, scope, expectedBrandId = null) {
   if (!factoryIds.length) return { rows: [], brandId: expectedBrandId || (scope === null ? null : scope) };
   const placeholders = factoryIds.map(() => '?').join(',');
-  const rows = db.prepare(`SELECT id,name,brand_id FROM factories WHERE id IN (${placeholders})`).all(...factoryIds);
+  const rows = db.prepare(`SELECT id,name,brand_id FROM factories WHERE enabled=1 AND id IN (${placeholders})`).all(...factoryIds);
   if (rows.length !== factoryIds.length) return { error: '所选工厂不存在，请刷新后重试' };
   const brandIds = [...new Set(rows.map(row => Number(row.brand_id) || 0))];
   if (brandIds.length !== 1 || !brandIds[0]) return { error: '所选工厂必须全部归属同一有效品牌' };
@@ -1213,6 +1234,48 @@ function factoryAssignedToProduct(factoryId, productId) {
     UNION ALL SELECT 1 WHERE NOT EXISTS (SELECT 1 FROM product_factories WHERE product_id=?)
     AND (SELECT factory_id FROM products WHERE id=?)=? LIMIT 1`)
     .get(productId, factoryId, productId, productId, factoryId);
+}
+function factoryReceiptAllowed(req, receipt) {
+  const user = currentUser(req);
+  if (user?.role !== 'factory') return true;
+  const owner = Number(receipt?.receipt_factory_id) || 0;
+  if (owner && owner !== Number(user.factory_id)) return false;
+  const productId = Number(receipt?.product_id) || 0;
+  return !productId || factoryAssignedToProduct(user.factory_id, productId);
+}
+function operationFactory(req, product, receipt = null) {
+  const user = currentUser(req);
+  if (user?.role === 'factory') {
+    if (!factoryAssignedToProduct(user.factory_id, product.id)) return { error: '该产品未授权给当前工厂' };
+    if (receipt?.receipt_factory_id && Number(receipt.receipt_factory_id) !== Number(user.factory_id)) {
+      return { error: '该实物码已归属其他工厂，不能继续操作' };
+    }
+    return { id: Number(user.factory_id) };
+  }
+  const requested = asId(req.body.operation_factory_id);
+  const existing = Number(receipt?.receipt_factory_id) || 0;
+  if (existing) {
+    if (requested && requested !== existing) return { error: '该实物码已有生产工厂，不能在当前流程中改派' };
+    return { id: existing };
+  }
+  if (!requested) return { error: '请选择本次实际生产工厂' };
+  const factory = db.prepare('SELECT id,brand_id FROM factories WHERE id=? AND enabled=1').get(requested);
+  if (!factory || Number(factory.brand_id) !== Number(product.brand_id) || !factoryAssignedToProduct(factory.id, product.id)) {
+    return { error: '所选工厂未启用或未获该产品授权' };
+  }
+  return { id: factory.id };
+}
+function activeReceiptsForFactories(productId, factoryIds) {
+  if (!factoryIds.length) return { items: 0, boxes: 0 };
+  const placeholders = factoryIds.map(() => '?').join(',');
+  const items = db.prepare(`SELECT COUNT(*) c FROM items
+    WHERE product_id=? AND receipt_factory_id IN (${placeholders}) AND status='scanned' AND boxed_at IS NOT NULL`)
+    .get(productId, ...factoryIds).c;
+  const boxes = db.prepare(`SELECT COUNT(*) c FROM boxes
+    WHERE product_id=? AND receipt_factory_id IN (${placeholders}) AND status='in_stock'
+      AND (item_count>0 OR EXISTS (SELECT 1 FROM items i WHERE i.box_id=boxes.id))`)
+    .get(productId, ...factoryIds).c;
+  return { items, boxes };
 }
 function scopedProduct(req, id) {
   const product = db.prepare('SELECT * FROM products WHERE id=?').get(asId(id));
@@ -1299,6 +1362,16 @@ app.put('/api/products/:id', requireRole('admin', 'brand', 'brand_staff'), (req,
   const factoryId = factoryIds[0] || null;
   const resolvedFactories = resolveProductFactories(factoryIds, scope, product.brand_id);
   if (resolvedFactories.error) return res.status(400).json({ success: false, code: 'PRODUCT_FACTORY_INVALID', msg: resolvedFactories.error });
+  const currentFactoryIds = withProductFactories(product).factory_ids;
+  const removedFactoryIds = currentFactoryIds.filter(factoryId => !factoryIds.includes(factoryId));
+  const activeReceipts = activeReceiptsForFactories(product.id, removedFactoryIds);
+  if (activeReceipts.items || activeReceipts.boxes) {
+    return res.status(409).json({
+      success: false,
+      code: 'PRODUCT_FACTORY_HAS_ACTIVE_STOCK',
+      msg: `不能移除仍有在库实物的工厂：涉及 ${activeReceipts.boxes} 个箱码、${activeReceipts.items} 个子码。请先完成发货、取消入库或办理工厂交接。`
+    });
+  }
   const expectedVersion = req.body.version == null ? product.version : Number(req.body.version);
   const result = db.transaction(() => {
     const updated = db.prepare(`UPDATE products SET name=?, spec=?, batch_no=?, box_size=?, factory_id=?, description=?, ena13=?, version=version+1
@@ -1348,7 +1421,7 @@ app.get('/api/products', requireRole('admin', 'factory', 'brand', 'brand_staff')
     params.push(user.brand_id);
   }
   sql += ' ORDER BY id DESC';
-  const products = db.prepare(sql).all(...params).map(withProductFactories);
+  const products = withProductsFactories(db.prepare(sql).all(...params));
   res.json({ success: true, products });
 });
 
@@ -1421,7 +1494,10 @@ app.post('/api/products/:id/batches', requireRole('admin', 'brand', 'brand_staff
 
 function scopedBatch(req, id) {
   const row = db.prepare(`SELECT pb.*,p.name product_name FROM product_batches pb JOIN products p ON p.id=pb.product_id WHERE pb.id=?`).get(asId(id));
-  return row && brandAllowed(brandScope(req), row.brand_id) ? row : null;
+  if (!row || !brandAllowed(brandScope(req), row.brand_id)) return null;
+  const user = currentUser(req);
+  if (user?.role === 'factory' && !factoryAssignedToProduct(user.factory_id, row.product_id)) return null;
+  return row;
 }
 function appendTraceEntry(req, res) {
   const batch = scopedBatch(req, req.params.batchId || req.body.batch_id);
@@ -1887,6 +1963,12 @@ app.post('/api/codes/bind', requireRole('admin', 'brand', 'brand_staff'), receip
   if (!brandAllowed(scope, box.eff_brand_id)) return res.json({ success: false, msg: '该箱码不属于你的品牌' });
   if (box.status === 'shipped' || box.distributor_id != null || box.status === 'invalid') return res.json({ success: false, msg: '该箱已发货或作废，不能继续绑定' });
   if (!box.product_id) return res.json({ success: false, msg: '请先为箱码选择产品再绑定子码' });
+  const product = db.prepare('SELECT * FROM products WHERE id=?').get(box.product_id);
+  if (!product) return res.status(409).json({ success: false, code: 'BOX_PRODUCT_MISSING', msg: '箱码关联的产品不存在，请先核对历史资料' });
+  const receiptOwner = operationFactory(req, product, box);
+  if (receiptOwner.error) {
+    return res.status(receiptOwner.error.includes('请选择') ? 400 : 403).json({ success: false, code: 'RECEIPT_FACTORY_REQUIRED', msg: receiptOwner.error });
+  }
 
   const readBindableItem = db.prepare(`
     SELECT i.*, COALESCE(i.brand_id, p.brand_id) as eff_brand_id
@@ -1897,6 +1979,9 @@ app.post('/api/codes/bind', requireRole('admin', 'brand', 'brand_staff'), receip
     return res.status(404).json({ success: false, code: 'ITEM_NOT_FOUND', msg: '部分子码不存在或无权访问' });
   }
   if (requestedItems.some(item => item.box_id && item.box_id !== box.id)) return res.status(409).json({success:false,msg:'部分子码已在其他箱，本次未绑定'});
+  if (requestedItems.some(item => item.receipt_factory_id && Number(item.receipt_factory_id) !== Number(receiptOwner.id))) {
+    return res.status(409).json({ success: false, code: 'RECEIPT_FACTORY_CONFLICT', msg: '部分子码已归属其他生产工厂，不能混装' });
+  }
   const currentCount = db.prepare('SELECT COUNT(*) c FROM items WHERE box_id=?').get(box.id).c;
   if (box.box_size > 0 && currentCount + requestedItems.filter(item => !item.box_id).length > box.box_size) return res.status(409).json({success:false,msg:'子码数量超过箱规，请先核对箱规'});
   if (receiptIntegrity.boxConflict(box.id)) return res.status(409).json({success:false,msg:'该箱已有商品、品牌或批次冲突，请先核对历史资料'});
@@ -1909,8 +1994,7 @@ app.post('/api/codes/bind', requireRole('admin', 'brand', 'brand_staff'), receip
   }
 
   const tx = db.transaction(() => {
-    const product = db.prepare('SELECT * FROM products WHERE id=?').get(box.product_id);
-    const factory = receiptIntegrity.owner(req, product, box);
+    const factory = receiptOwner.id;
     db.prepare('UPDATE boxes SET receipt_factory_id=? WHERE id=?').run(factory, box.id);
     for (const item of requestedItems) {
       if (item.box_id) continue; // 已绑定的跳过
@@ -2291,11 +2375,13 @@ app.post('/api/factory/pack/start', requireRole('admin', 'factory', 'brand', 'br
   if (!box) return res.json({ success: false, msg: '箱码不存在' });
   if (box.status === 'shipped') return res.json({ success: false, msg: '该箱已发货，不能继续装箱' });
   if (box.status === 'invalid') return res.json({ success: false, msg: '该箱码已作废，无法装箱' });
-  // 数据隔离：码只归属品牌，品牌旗下任意工厂账号都能扫；只看品牌归属
-  // 空白箱码没有产品，用箱码自身 brand_id 判断归属
+  // 空白码先按品牌隔离；一旦入库，receipt_factory_id 锁定实际生产工厂。
   const scope = brandScope(req);
   if (!brandAllowed(scope, box.eff_brand_id)) {
     return res.json({ success: false, msg: '该箱码不属于你的品牌，无法装箱' });
+  }
+  if (!factoryReceiptAllowed(req, box)) {
+    return res.status(404).json({ success: false, code: 'RECEIPT_FACTORY_FORBIDDEN', msg: '箱码不存在或不属于当前工厂' });
   }
   const operator = currentUser(req);
   if (operator?.role === 'factory' && box.product_id && !factoryAssignedToProduct(operator.factory_id, box.product_id)) {
@@ -2332,6 +2418,10 @@ app.post('/api/factory/pack/set-product', requireRole('admin', 'factory', 'brand
 
   const product = scopedProduct(req, product_id);
   if (!product) return res.status(404).json({ success: false, msg: '产品不存在或未授权给当前工厂' });
+  const receiptOwner = operationFactory(req, product, box);
+  if (receiptOwner.error) {
+    return res.status(receiptOwner.error.includes('请选择') ? 400 : 403).json({ success: false, code: 'RECEIPT_FACTORY_REQUIRED', msg: receiptOwner.error });
+  }
 
   const scope = brandScope(req);
   if (!brandAllowed(scope, box.brand_id)) return res.json({ success: false, msg: '该箱码不属于你的品牌' });
@@ -2350,8 +2440,8 @@ app.post('/api/factory/pack/set-product', requireRole('admin', 'factory', 'brand
   const boundCount = db.prepare('SELECT COUNT(*) c FROM items WHERE box_id=?').get(box.id).c;
   if (!batch_no && !box.batch_no) return res.status(400).json({success:false,msg:'请输入批次号'});
   if (!Number.isSafeInteger(effectiveSize) || effectiveSize < 1 || effectiveSize < boundCount) return res.status(400).json({success:false,msg:'箱规必须为正整数且不能小于已绑子码数量'});
-  db.prepare('UPDATE boxes SET product_id=?, brand_id=COALESCE(?, ?), batch_no=?, box_size=? WHERE id=?')
-    .run(product_id, product.brand_id, box.brand_id, batch_no || box.batch_no, effectiveSize, box.id);
+  db.prepare('UPDATE boxes SET product_id=?, brand_id=COALESCE(?, ?), batch_no=?, box_size=?, receipt_factory_id=? WHERE id=?')
+    .run(product_id, product.brand_id, box.brand_id, batch_no || box.batch_no, effectiveSize, receiptOwner.id, box.id);
   logOperation(req, 'pack_set_product', 'box', box.box_code, `箱码「${box.box_code}」设置产品：${product.name}${box_size ? `，箱规 ${box_size}` : ''}`);
 
   res.json({ success: true, msg: `已选择产品：${product.name}`, box_size: box_size || product.box_size || 0 });
@@ -2373,10 +2463,13 @@ app.post('/api/factory/pack/scan', requireRole('admin', 'factory', 'brand', 'bra
   if (!box) return res.json({ success: false, msg: '箱码不存在' });
   if (box.status === 'shipped') return res.json({ success: false, msg: '该箱已发货，不能继续绑定' });
   if (box.status === 'invalid') return res.json({ success: false, msg: '该箱码已作废，不能绑定' });
-  // 数据隔离：码只归属品牌，品牌旗下任意工厂账号都能扫
+  // 品牌和产品授权通过后，仍需校验该实物箱的实际生产工厂归属。
   const scope = brandScope(req);
   if (!brandAllowed(scope, box.eff_brand_id)) {
     return res.json({ success: false, msg: '该箱码不属于你的品牌，无法装箱' });
+  }
+  if (!factoryReceiptAllowed(req, box)) {
+    return res.status(404).json({ success: false, code: 'RECEIPT_FACTORY_FORBIDDEN', msg: '箱码不存在或不属于当前工厂' });
   }
   const operator = currentUser(req);
   if (operator?.role === 'factory' && box.product_id && !factoryAssignedToProduct(operator.factory_id, box.product_id)) {
@@ -2386,6 +2479,11 @@ app.post('/api/factory/pack/scan', requireRole('admin', 'factory', 'brand', 'bra
   // 空白箱码必须先选产品再扫子码
   if (!box.product_id) {
     return res.json({ success: false, msg: '该箱还未选择产品，请先在上方选择产品并确认箱规' });
+  }
+  const product = db.prepare('SELECT * FROM products WHERE id=?').get(box.product_id);
+  const receiptOwner = product ? operationFactory(req, product, box) : { error: '箱码产品不存在' };
+  if (receiptOwner.error) {
+    return res.status(receiptOwner.error.includes('请选择') ? 400 : 403).json({ success: false, code: 'RECEIPT_FACTORY_REQUIRED', msg: receiptOwner.error });
   }
   if (receiptIntegrity.boxConflict(box.id)) return res.status(409).json({success:false,msg:'该箱已有商品、品牌或批次冲突，请先核对历史资料'});
 
@@ -2400,6 +2498,10 @@ app.post('/api/factory/pack/scan', requireRole('admin', 'factory', 'brand', 'bra
   `).get(item_code);
   if (!item) return res.json({ success: false, msg: '子码不存在' });
   if (!brandAllowed(scope, item.eff_brand_id)) return res.status(404).json({ success: false, code: 'ITEM_NOT_FOUND', msg: '子码不存在或无权访问' });
+  if (!factoryReceiptAllowed(req, item)) return res.status(404).json({ success: false, code: 'RECEIPT_FACTORY_FORBIDDEN', msg: '子码不存在或不属于当前工厂' });
+  if (item.receipt_factory_id && Number(item.receipt_factory_id) !== Number(receiptOwner.id)) {
+    return res.status(409).json({ success: false, code: 'RECEIPT_FACTORY_CONFLICT', msg: '子码与箱码的生产工厂不一致，不能混装' });
+  }
 
   const curBound = db.prepare('SELECT COUNT(*) as c FROM items WHERE box_id=?').get(box.id).c;
 
@@ -2438,8 +2540,7 @@ app.post('/api/factory/pack/scan', requireRole('admin', 'factory', 'brand', 'bra
   db.prepare("UPDATE items SET box_id=?, product_id=COALESCE(?, product_id), brand_id=COALESCE(brand_id, ?), batch_no=?, status='scanned', boxed_at=datetime('now','localtime') WHERE id=?")
     .run(box.id, box.product_id, box.eff_brand_id, box.batch_no || '', item.id);
   const count = curBound + 1;
-  const product = db.prepare('SELECT * FROM products WHERE id=?').get(box.product_id);
-  const factory = receiptIntegrity.owner(req, product, box);
+  const factory = receiptIntegrity.owner(req, product, box, receiptOwner.id);
   db.prepare('UPDATE items SET receipt_factory_id=? WHERE id=?').run(factory, item.id);
   db.prepare('UPDATE boxes SET item_count=?,box_size=?,receipt_factory_id=? WHERE id=?').run(count, boxSize, factory, box.id);
 
@@ -2483,6 +2584,11 @@ app.post('/api/factory/pack/scan-nobox', requireRole('admin', 'factory', 'brand'
   `).get(item_code);
   if (!item) return res.status(404).json({ success: false, code: 'ITEM_NOT_FOUND', msg: '子码不存在或无权访问' });
   if (!brandAllowed(scope, item.eff_brand_id)) return res.status(404).json({ success: false, code: 'ITEM_NOT_FOUND', msg: '子码不存在或无权访问' });
+  if (!factoryReceiptAllowed(req, item)) return res.status(404).json({ success: false, code: 'RECEIPT_FACTORY_FORBIDDEN', msg: '子码不存在或不属于当前工厂' });
+  const receiptOwner = operationFactory(req, product, item);
+  if (receiptOwner.error) {
+    return res.status(receiptOwner.error.includes('请选择') ? 400 : 403).json({ success: false, code: 'RECEIPT_FACTORY_REQUIRED', msg: receiptOwner.error });
+  }
   if (itemHasShipment(item)) return res.json({ success: false, msg: '该子码已发货，不能入库' });
   if (item.status === 'invalid') return res.json({ success: false, msg: '该子码已作废，不能入库' });
   if (item.eff_brand_id && product.brand_id && item.eff_brand_id !== product.brand_id) return res.json({ success: false, msg: '子码与产品的品牌不一致，不能更改码的品牌归属' });
@@ -2504,7 +2610,7 @@ app.post('/api/factory/pack/scan-nobox', requireRole('admin', 'factory', 'brand'
   if (!effectiveBatch) return res.status(400).json({success:false,msg:'请输入批次号'});
   db.prepare("UPDATE items SET product_id=?, brand_id=COALESCE(?, brand_id), batch_no=?, status='scanned', boxed_at=datetime('now','localtime') WHERE id=?")
     .run(product.id, product.brand_id, effectiveBatch, item.id);
-  db.prepare('UPDATE items SET receipt_factory_id=? WHERE id=?').run(receiptIntegrity.owner(req, product), item.id);
+  db.prepare('UPDATE items SET receipt_factory_id=? WHERE id=?').run(receiptIntegrity.owner(req, product, item, receiptOwner.id), item.id);
 
   logPackRecord(req, 'nobox', null, item_code, product.name, `无箱码入库：${product.name}${product.spec ? '（'+product.spec+'）' : ''}${effectiveBatch ? ' · 批次 '+effectiveBatch : ''}`, product.spec, 0, 1);
 
@@ -2524,6 +2630,12 @@ app.get('/api/factory/pack/records', requireRole('admin', 'factory', 'brand', 'b
   const scope = brandScope(req);
   const factoryId = u.factory_id || (parseInt(req.query.factory_id) || 0);
   const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+  if (u.role !== 'factory' && factoryId > 0) {
+    const requestedFactory = db.prepare('SELECT id,brand_id FROM factories WHERE id=?').get(factoryId);
+    if (!requestedFactory || !brandAllowed(scope, requestedFactory.brand_id)) {
+      return res.status(404).json({ success: false, code: 'FACTORY_NOT_FOUND', msg: '工厂不存在或无权访问' });
+    }
+  }
 
   // 工厂账号：只看自己的记录；品牌/管理员：可看本品牌/全部
   let where = '1=1';
@@ -2531,12 +2643,15 @@ app.get('/api/factory/pack/records', requireRole('admin', 'factory', 'brand', 'b
   if (u.role === 'factory') {
     where = 'COALESCE(receipt_factory_id,factory_id) = ?';
     params.push(factoryId);
+  } else if (factoryId > 0) {
+    where = scope === null
+      ? 'COALESCE(receipt_factory_id,factory_id) = ?'
+      : 'brand_id = ? AND COALESCE(receipt_factory_id,factory_id) = ?';
+    if (scope !== null) params.push(scope);
+    params.push(factoryId);
   } else if (scope !== null) {
     where = 'brand_id = ?';
     params.push(scope);
-  } else if (factoryId > 0) {
-    where = 'COALESCE(receipt_factory_id,factory_id) = ?';
-    params.push(factoryId);
   }
 
   // 明细
@@ -2569,8 +2684,14 @@ app.get('/api/factory/pack/summary', requireRole('admin', 'factory', 'brand', 'b
   const scope = brandScope(req);
   const factoryId = u.factory_id || (parseInt(req.query.factory_id) || 0);
   const date = (req.query.date || '').trim();
+  if (u.role !== 'factory' && factoryId > 0) {
+    const requestedFactory = db.prepare('SELECT id,brand_id FROM factories WHERE id=?').get(factoryId);
+    if (!requestedFactory || !brandAllowed(scope, requestedFactory.brand_id)) {
+      return res.status(404).json({ success: false, code: 'FACTORY_NOT_FOUND', msg: '工厂不存在或无权访问' });
+    }
+  }
 
-  // 组装 boxes 上的筛选：品牌 + 工厂（工厂通过 products.factory_id 关联）
+  // 组装 boxes 上的筛选：品牌 + 实际收货工厂（receipt_factory_id）。
   // 业务日期口径：以「箱内子码的最后装箱时间（boxed_at）」为准，空箱回退箱码创建时间；
   // 取消绑定后重新装箱，会按重新装箱的时间归到业务日期，实现“当日入库实时联动”。
   const boxConds = ['EXISTS (SELECT 1 FROM items current_item WHERE current_item.box_id=b.id)'];
@@ -2578,12 +2699,16 @@ app.get('/api/factory/pack/summary', requireRole('admin', 'factory', 'brand', 'b
   if (u.role === 'factory') {
     boxConds.push('b.receipt_factory_id = ?');
     boxParams.push(factoryId);
-  } else if (scope !== null && scope > 0) {
-    boxConds.push('COALESCE(b.brand_id, p.brand_id) = ?');
-    boxParams.push(scope);
   } else if (factoryId > 0) {
     boxConds.push('b.receipt_factory_id = ?');
     boxParams.push(factoryId);
+    if (scope !== null && scope > 0) {
+      boxConds.push('COALESCE(b.brand_id, p.brand_id) = ?');
+      boxParams.push(scope);
+    }
+  } else if (scope !== null && scope > 0) {
+    boxConds.push('COALESCE(b.brand_id, p.brand_id) = ?');
+    boxParams.push(scope);
   }
   const bizDateExpr = `COALESCE(
       (SELECT date(MAX(i.boxed_at)) FROM items i WHERE i.box_id = b.id AND i.boxed_at IS NOT NULL),
@@ -2598,8 +2723,11 @@ app.get('/api/factory/pack/summary', requireRole('admin', 'factory', 'brand', 'b
   const dateConds = [];
   const dateParams = [];
   if (u.role === 'factory') { dateConds.push('b.receipt_factory_id = ?'); dateParams.push(factoryId); }
+  else if (factoryId > 0) {
+    dateConds.push('b.receipt_factory_id = ?'); dateParams.push(factoryId);
+    if (scope !== null && scope > 0) { dateConds.push('COALESCE(b.brand_id, p.brand_id) = ?'); dateParams.push(scope); }
+  }
   else if (scope !== null && scope > 0) { dateConds.push('COALESCE(b.brand_id, p.brand_id) = ?'); dateParams.push(scope); }
-  else if (factoryId > 0) { dateConds.push('b.receipt_factory_id = ?'); dateParams.push(factoryId); }
   const dateWhere = dateConds.length ? 'AND ' + dateConds.join(' AND ') : '';
   const dateRows = db.prepare(
     `SELECT DISTINCT ${bizDateExpr} d
@@ -2615,12 +2743,16 @@ app.get('/api/factory/pack/summary', requireRole('admin', 'factory', 'brand', 'b
   if (u.role === 'factory') {
     noBoxConds.push('i.receipt_factory_id = ?');
     noBoxParams.push(factoryId);
-  } else if (scope !== null && scope > 0) {
-    noBoxConds.push('COALESCE(i.brand_id, p.brand_id) = ?');
-    noBoxParams.push(scope);
   } else if (factoryId > 0) {
     noBoxConds.push('i.receipt_factory_id = ?');
     noBoxParams.push(factoryId);
+    if (scope !== null && scope > 0) {
+      noBoxConds.push('COALESCE(i.brand_id, p.brand_id) = ?');
+      noBoxParams.push(scope);
+    }
+  } else if (scope !== null && scope > 0) {
+    noBoxConds.push('COALESCE(i.brand_id, p.brand_id) = ?');
+    noBoxParams.push(scope);
   }
   const noBoxDateRows = db.prepare(
     `SELECT DISTINCT date(i.boxed_at) d
@@ -2956,9 +3088,13 @@ app.post('/api/codes/cancel-stock', requireRole('admin', 'factory', 'brand', 'br
   if (box) {
     if (expectedMode === 'nobox') return res.json({ success: false, msg: '这是箱码，请使用「箱码/装箱子码取消入库」入口' });
     if (!brandAllowed(scope, box.eff_brand_id)) return res.json({ success: false, msg: '该箱码不存在或无权访问' });
+    if (!factoryReceiptAllowed(req, box)) return res.status(404).json({ success: false, code: 'RECEIPT_FACTORY_FORBIDDEN', msg: '该箱码不存在或不属于当前工厂' });
     if (box.status === 'invalid') return res.json({ success: false, msg: '该箱码已作废，不能取消入库' });
     if (box.status === 'shipped' || box.distributor_id != null || box.shipped_at || db.prepare('SELECT 1 FROM shipments WHERE box_id=? LIMIT 1').get(box.id)) return res.json({ success: false, msg: '该箱已发货，请先「取消发货」再取消入库' });
     const children = db.prepare('SELECT * FROM items WHERE box_id=?').all(box.id);
+    if (children.some(item => !factoryReceiptAllowed(req, item))) {
+      return res.status(409).json({ success: false, code: 'RECEIPT_FACTORY_CONFLICT', msg: '箱内存在其他工厂的子码，不能整箱取消入库' });
+    }
     if (children.some(itemHasShipment)) return res.json({ success: false, msg: '箱内子码已发货，请先取消发货' });
     if (children.some(item => item.status === 'invalid')) return res.json({ success: false, msg: '箱内包含作废子码，不能取消入库' });
     if (!box.product_id && children.length === 0) return res.json({ success: false, msg: '该箱码尚未入库，无需取消' });
@@ -2977,6 +3113,7 @@ app.post('/api/codes/cancel-stock', requireRole('admin', 'factory', 'brand', 'br
     FROM items i LEFT JOIN products p ON i.product_id=p.id WHERE i.item_code=?`).get(code);
   if (!item) return res.json({ success: false, msg: '码不存在，请核实是箱码还是子码' });
   if (!brandAllowed(scope, item.eff_brand_id)) return res.json({ success: false, msg: '该子码不存在或无权访问' });
+  if (!factoryReceiptAllowed(req, item)) return res.status(404).json({ success: false, code: 'RECEIPT_FACTORY_FORBIDDEN', msg: '该子码不存在或不属于当前工厂' });
   if (item.status === 'invalid') return res.json({ success: false, msg: '该子码已作废，不能取消入库' });
   if (itemHasShipment(item)) return res.json({ success: false, msg: '该子码已发货，请先「取消发货」再取消入库' });
   const isNoBoxReceipt = !item.box_id && item.status === 'scanned' && !!item.boxed_at && !!item.product_id;
@@ -4350,8 +4487,8 @@ app.get('/users', requireRole('admin', 'brand'), (req, res) => {
     ? db.prepare('SELECT id, name, region FROM distributors ORDER BY id DESC').all()
     : db.prepare('SELECT id, name, region FROM distributors WHERE brand_id=? ORDER BY id DESC').all(scope);
   const factories = scope === null
-    ? db.prepare('SELECT id, name FROM factories ORDER BY id DESC').all()
-    : db.prepare('SELECT id, name FROM factories WHERE brand_id=? ORDER BY id DESC').all(scope);
+    ? db.prepare('SELECT id, name FROM factories WHERE enabled=1 ORDER BY id DESC').all()
+    : db.prepare('SELECT id, name FROM factories WHERE brand_id=? AND enabled=1 ORDER BY id DESC').all(scope);
   const invitations = scope === null
     ? db.prepare(`
         SELECT i.id, i.code, i.role, i.note, i.status, i.used_by, i.used_at, i.created_at, b.name as brand_name, f.name as factory_name, u.display_name as user_name
@@ -4418,7 +4555,7 @@ app.post('/api/users', requireRole('admin', 'brand'), (req, res) => {
     if (!String(display_name || '').trim()) return res.json({ success: false, msg: '工厂账号必须填写人名' });
     if (!/^1\d{10}$/.test(phone)) return res.json({ success: false, msg: '工厂账号必须填写11位手机号' });
     if (!factory_id) return res.json({ success: false, msg: '工厂账号必须绑定工厂' });
-    const f = db.prepare('SELECT * FROM factories WHERE id=?').get(factory_id);
+    const f = db.prepare('SELECT * FROM factories WHERE id=? AND enabled=1').get(factory_id);
     if (!f) return res.json({ success: false, msg: '工厂不存在' });
     if (!brandAllowed(scope, f.brand_id)) return res.json({ success: false, msg: '该工厂不属于你的品牌' });
     brand_id = f.brand_id || brand_id;
@@ -4436,8 +4573,8 @@ app.post('/api/users', requireRole('admin', 'brand'), (req, res) => {
 app.get('/api/factories', requireRole('admin', 'brand'), (req, res) => {
   const scope = brandScope(req);
   const factories = scope === null
-    ? db.prepare('SELECT f.id, f.name, f.contact, f.created_at, b.name as brand_name FROM factories f LEFT JOIN brands b ON f.brand_id=b.id ORDER BY f.id DESC').all()
-    : db.prepare('SELECT f.id, f.name, f.contact, f.created_at, b.name as brand_name FROM factories f LEFT JOIN brands b ON f.brand_id=b.id WHERE f.brand_id=? ORDER BY f.id DESC').all(scope);
+    ? db.prepare('SELECT f.id, f.name, f.contact, f.enabled, f.created_at, b.name as brand_name FROM factories f LEFT JOIN brands b ON f.brand_id=b.id ORDER BY f.enabled DESC,f.id DESC').all()
+    : db.prepare('SELECT f.id, f.name, f.contact, f.enabled, f.created_at, b.name as brand_name FROM factories f LEFT JOIN brands b ON f.brand_id=b.id WHERE f.brand_id=? ORDER BY f.enabled DESC,f.id DESC').all(scope);
   res.json({ success: true, factories });
 });
 app.post('/api/factories', requireRole('admin', 'brand'), (req, res) => {
@@ -4453,14 +4590,14 @@ app.post('/api/factories', requireRole('admin', 'brand'), (req, res) => {
   res.json({ success: true, id: r.lastInsertRowid, msg: '工厂已创建' });
 });
 
-// 删除工厂（admin/brand/brand_staff）：
-//   有账号绑定的工厂必须先解绑；产品的其他工厂关联和历史收货工厂不受影响。
+// 删除工厂：空工厂物理删除；有历史记录的工厂只停用归档，保留审计名称与收货归属。
 app.delete('/api/factories/:id', requireRole('admin', 'brand'), (req, res) => {
   const id = parseInt(req.params.id);
   if (!id) return res.json({ success: false, msg: '工厂不存在' });
   const f = db.prepare('SELECT * FROM factories WHERE id=?').get(id);
   if (!f) return res.json({ success: false, msg: '工厂不存在' });
   if (!brandAllowed(brandScope(req), f.brand_id)) return res.json({ success: false, msg: '没有权限操作该工厂' });
+  if (!f.enabled) return res.json({ success: true, archived: true, msg: `工厂「${f.name}」已处于停用归档状态` });
   const userCount = db.prepare('SELECT COUNT(*) as c FROM users WHERE factory_id=?').get(id).c;
   if (userCount > 0) {
     return res.json({ success: false, msg: `该工厂下还有 ${userCount} 个账号，请先到账号管理中解除绑定后再删除` });
@@ -4474,17 +4611,39 @@ app.delete('/api/factories/:id', requireRole('admin', 'brand'), (req, res) => {
   const itemCount = db.prepare(`SELECT COUNT(DISTINCT i.id) as c FROM items i JOIN products p ON p.id=i.product_id
     LEFT JOIN product_factories pf ON pf.product_id=p.id
     WHERE pf.factory_id=? OR (pf.product_id IS NULL AND p.factory_id=?)`).get(id, id).c;
+  const activeItems = db.prepare(`SELECT COUNT(*) c FROM items
+    WHERE receipt_factory_id=? AND status='scanned' AND boxed_at IS NOT NULL`).get(id).c;
+  const activeBoxes = db.prepare(`SELECT COUNT(*) c FROM boxes
+    WHERE receipt_factory_id=? AND status='in_stock'
+      AND (item_count>0 OR EXISTS (SELECT 1 FROM items i WHERE i.box_id=boxes.id))`).get(id).c;
+  if (activeItems || activeBoxes) {
+    return res.status(409).json({
+      success: false,
+      code: 'FACTORY_HAS_ACTIVE_STOCK',
+      msg: `该工厂仍有 ${activeBoxes} 个在库箱码、${activeItems} 个在库子码，请先完成发货、取消入库或工厂交接，不能删除或停用。`
+    });
+  }
+  const receiptHistory = db.prepare(`SELECT
+      (SELECT COUNT(*) FROM boxes WHERE receipt_factory_id=?) +
+      (SELECT COUNT(*) FROM items WHERE receipt_factory_id=?) +
+      (SELECT COUNT(*) FROM pack_records WHERE COALESCE(receipt_factory_id,factory_id)=?) AS c`).get(id, id, id).c;
+  const shouldArchive = receiptHistory > 0;
   const tx = db.transaction(() => {
     const primaryProducts = db.prepare('SELECT id FROM products WHERE factory_id=?').all(id);
     db.prepare('DELETE FROM product_factories WHERE factory_id=?').run(id);
     const nextFactory = db.prepare('SELECT factory_id FROM product_factories WHERE product_id=? ORDER BY created_at,factory_id LIMIT 1');
     const updatePrimary = db.prepare('UPDATE products SET factory_id=? WHERE id=?');
     primaryProducts.forEach(product => updatePrimary.run(nextFactory.get(product.id)?.factory_id || null, product.id));
-    db.prepare('DELETE FROM factories WHERE id=?').run(id);
+    if (shouldArchive) db.prepare('UPDATE factories SET enabled=0 WHERE id=?').run(id);
+    else db.prepare('DELETE FROM factories WHERE id=?').run(id);
   });
   tx();
-  logOperation(req, 'delete_factory', 'factory', id, `工厂「${f.name}」已删除（解除 ${productCount} 个产品关联；涉及 ${boxCount} 箱码/${itemCount} 子码，历史收货归属保留）`);
-  res.json({ success: true, msg: `工厂「${f.name}」已删除` });
+  const action = shouldArchive ? 'archive_factory' : 'delete_factory';
+  const detail = shouldArchive
+    ? `工厂「${f.name}」已停用归档（解除 ${productCount} 个产品关联；保留 ${receiptHistory} 条历史收货/装箱引用）`
+    : `空工厂「${f.name}」已删除（解除 ${productCount} 个产品关联；涉及 ${boxCount} 箱码/${itemCount} 子码）`;
+  logOperation(req, action, 'factory', id, detail);
+  res.json({ success: true, archived: shouldArchive, msg: shouldArchive ? `工厂「${f.name}」已停用归档，历史记录完整保留` : `空工厂「${f.name}」已删除` });
 });
 
 // 修改账号（重置密码 / 启停 / 改角色；brand 只能操作本品牌账号且不能改成 admin/brand）
@@ -4521,7 +4680,7 @@ app.put('/api/users/:id', requireRole('admin', 'brand'), (req, res) => {
     newBrandId = distributor.brand_id;
   } else if (newRole === 'factory') {
     newFactoryId = parseInt(factory_id) || user.factory_id || null;
-    const factory = newFactoryId ? db.prepare('SELECT id,brand_id FROM factories WHERE id=?').get(newFactoryId) : null;
+    const factory = newFactoryId ? db.prepare('SELECT id,brand_id FROM factories WHERE id=? AND enabled=1').get(newFactoryId) : null;
     if (!factory || !factory.brand_id) return res.json({ success: false, msg: '工厂账号必须绑定已归属品牌的有效工厂' });
     if (!brandAllowed(scope, factory.brand_id)) return res.status(403).json({ success: false, code: 'ACCOUNT_TENANT_FORBIDDEN', msg: '不能把账号绑定到其他品牌的工厂' });
     newBrandId = factory.brand_id;
