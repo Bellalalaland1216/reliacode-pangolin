@@ -4719,7 +4719,14 @@ app.delete('/api/users/:id', requireRole('admin', 'brand'), (req, res) => {
 // ===================== 个人资料 / 修改密码 =====================
 
 app.get('/profile', requireLogin, (req, res) => {
-  res.render('profile', { user: req.session.user, roleNames: ROLE_NAMES });
+  const assignment = db.prepare(`SELECT f.name AS factory_name,
+      COALESCE(factory_brand.name, account_brand.name) AS responsible_brand_name
+    FROM users u
+    LEFT JOIN factories f ON f.id=u.factory_id
+    LEFT JOIN brands factory_brand ON factory_brand.id=f.brand_id
+    LEFT JOIN brands account_brand ON account_brand.id=u.brand_id
+    WHERE u.id=?`).get(req.session.user.id) || {};
+  res.render('profile', { user: { ...req.session.user, ...assignment }, roleNames: ROLE_NAMES });
 });
 
 app.post('/api/profile/password', requireLogin, (req, res) => {

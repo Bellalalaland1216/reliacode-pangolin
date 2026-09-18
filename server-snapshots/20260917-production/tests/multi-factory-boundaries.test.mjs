@@ -133,6 +133,10 @@ test('multi-factory permissions keep product authorization and physical receipt 
     }
 
     const factoryBSession = await login('factory_boundary_b');
+    const factoryBProfile = await request(factoryBSession, '/profile');
+    assert.equal(factoryBProfile.status, 200);
+    assert.match(factoryBProfile.text, /data-profile-factory-name[^>]+value="工厂乙"/);
+    assert.match(factoryBProfile.text, /data-profile-brand-name[^>]+value="边界品牌甲"/);
     const products = await request(factoryBSession, '/api/products');
     assert.equal(products.data.products.some(product => product.id === exclusiveProduct), false);
     assert.equal((await request(factoryBSession, `/api/batches/${batchId}/trace`)).status, 404);

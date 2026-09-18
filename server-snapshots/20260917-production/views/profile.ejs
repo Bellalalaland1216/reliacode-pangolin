@@ -28,6 +28,16 @@
         <label>角色</label>
         <input type="text" class="form-control" value="<%= roleNames[user.role] || user.role %>" disabled>
       </div>
+      <% if (user.role === 'factory') { %>
+      <div class="form-group">
+        <label>所属工厂</label>
+        <input type="text" class="form-control" data-profile-factory-name value="<%= user.factory_name || '未配置' %>" disabled>
+      </div>
+      <div class="form-group">
+        <label>负责品牌</label>
+        <input type="text" class="form-control" data-profile-brand-name value="<%= user.responsible_brand_name || '未配置' %>" disabled>
+      </div>
+      <% } %>
       <hr class="section-divider">
       <div class="card-title profile-section-title">修改密码</div>
       <div class="form-group">
