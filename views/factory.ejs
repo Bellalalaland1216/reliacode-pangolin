@@ -26,15 +26,28 @@
       <h1>工厂装箱</h1>
       <p>扫码绑定箱码与子码，满箱后自动完成装箱。</p>
     </header>
-    <div class="card">
-      <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">工厂装箱
-        <form method="POST" action="/logout" style="margin:0;">
-          <button type="submit" class="btn btn-outline" style="color:#d93025;border-color:#d93025;font-weight:600;">退出登录</button>
-        </form>
+
+    <section class="card operational-dashboard" aria-labelledby="packingDashboardTitle">
+      <div class="card-title split-title" id="packingDashboardTitle">
+        <span>装箱看板</span>
+        <button id="packRecordsBtn" class="btn btn-outline btn-sm" type="button"><%- icon('refresh') %> 刷新</button>
       </div>
+      <div class="operations-metrics">
+        <div class="operations-metric"><strong id="statBoxes">0</strong><span>本次完成箱数</span></div>
+        <div class="operations-metric"><strong id="statItems">0</strong><span>本次绑定子码</span></div>
+        <div class="operations-metric"><strong id="statErrors">0</strong><span>本次扫错</span></div>
+        <div class="operations-metric"><strong id="prScanCount">-</strong><span>累计扫码</span></div>
+        <div class="operations-metric"><strong id="prBoxCount">-</strong><span>累计装箱</span></div>
+        <div class="operations-metric"><strong id="prErrorCount">-</strong><span>累计扫错</span></div>
+      </div>
+    </section>
+
+    <div class="card">
+      <div class="card-title">工厂装箱</div>
       <p class="section-help">
         一个框连续扫：<strong>扫箱码（B开头）</strong> → <strong>选产品+箱规</strong>（第一箱，之后自动沿用） → <strong>逐个扫子码（S开头）</strong>自动绑定 → 扫满自动完成，扫下一个箱码开始新一箱。产品不符 / 重复扫 / 多扫都会自动拦截。<br>
         点<strong>「连续扫码」</strong>后摄像头保持常开：子码一个接一个扫，中途不用再点按钮；本箱扫满后直接把摄像头对准下一个箱码即可开新箱。
+        扫错时可进入<strong>取消入库</strong>模式；无需箱码的货品可选择产品后进入<strong>无箱码入库</strong>模式。
       </p>
 
       <!-- 大状态条 -->
@@ -54,7 +67,7 @@
       <!-- 取消入库入口 -->
       <div class="form-group">
         <button id="cancelStockBtn" type="button" class="btn btn-outline btn-sm"><%- icon('refresh') %> 取消入库</button>
-        <span class="muted-supporting-text" id="cancelStockHint">扫错箱码/子码装错箱？点「取消入库」后扫码累积待取消清单，再点「确认取消」二次确认</span>
+        <span class="mode-status is-hidden" id="cancelStockHint" aria-live="polite"></span>
       </div>
       <!-- 待取消入库清单 + 确认按钮（取消入库模式下显示） -->
       <div class="form-group is-hidden" id="cancelStockPanel">
@@ -71,7 +84,7 @@
       <!-- 无箱码入库入口：不需要扫箱码，直接扫子码关联产品完成入库（大包粮等） -->
       <div class="form-group">
         <button id="noBoxModeBtn" type="button" class="btn btn-outline btn-sm"><%- icon('check') %> 无箱码入库</button>
-        <span class="muted-supporting-text" id="noBoxModeHint">大包粮等无需装箱的货品：先在上方选好产品/批次，点「无箱码入库」后直接扫子码即完成入库</span>
+        <span class="mode-status is-hidden" id="noBoxModeHint" aria-live="polite"></span>
       </div>
       <!-- 无箱码入库会话统计 -->
       <div id="noBoxStats" class="form-group is-hidden">
@@ -148,25 +161,6 @@
       </div>
     </div>
 
-    <!-- 本次会话统计 -->
-    <div class="card">
-      <div class="card-title">本次会话统计</div>
-      <div class="session-stats">
-        <div class="stat-column">
-          <div class="stat-value" id="statBoxes">0</div>
-          <div class="muted-supporting-text">完成箱数</div>
-        </div>
-        <div class="stat-column">
-          <div class="stat-value" id="statItems">0</div>
-          <div class="muted-supporting-text">绑定子码</div>
-        </div>
-        <div class="stat-column">
-          <div class="stat-value" id="statErrors">0</div>
-          <div class="muted-supporting-text">扫错次数</div>
-        </div>
-      </div>
-    </div>
-
     <!-- 按产品汇总装箱（独立主导视图：日期维度筛选 + 产品名称汇总 + 逐级下钻） -->
     <div class="card">
       <div class="card-title split-title">
@@ -181,15 +175,6 @@
       <div id="packSummaryList" class="empty-list-state">加载中...</div>
     </div>
 
-    <!-- 扫码记录（累计数字概览） -->
-    <div class="card">
-      <div class="card-title">扫码记录 <button id="packRecordsBtn" class="btn btn-outline btn-sm" type="button"><%- icon('refresh') %> 刷新</button></div>
-      <div class="pack-records-summary" id="packRecordsSummary">
-        <div class="stat-column"><div class="stat-value" id="prScanCount">-</div><div class="muted-supporting-text">累计扫码</div></div>
-        <div class="stat-column"><div class="stat-value" id="prBoxCount">-</div><div class="muted-supporting-text">累计装箱</div></div>
-        <div class="stat-column"><div class="stat-value" id="prErrorCount">-</div><div class="muted-supporting-text">累计扫错</div></div>
-      </div>
-    </div>
   </div>
 
   <script src="/js/html5-qrcode.min.js"></script>
@@ -307,6 +292,9 @@
     }
 
     const scanInput = document.getElementById('scanInput');
+    let cancelStockMode = false;   // 取消入库模式开关
+    let noBoxMode = false;         // 无箱码入库模式开关
+    let noBoxInCount = 0;          // 本次会话无箱码入库数量
     scanInput.addEventListener('keypress', e => { if (e.key === 'Enter') handleScan(); });
     // 前置条件就绪前禁用扫码录入
     updateReadyState();
@@ -345,7 +333,20 @@
     let scanning = false;                    // 摄像头连续扫码是否进行中
     let resumeScanAfterProduct = false;      // 选完产品后是否自动恢复连续扫码
 
+    function guidePackingSetup(message) {
+      const panel = document.getElementById('productPanel');
+      const product = document.getElementById('selProduct');
+      panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => product.focus({ preventScroll: true }), 320);
+      toast(message || '请先选择产品、箱规和批次号，然后确认启用扫码', 'error');
+    }
+
     function cameraScan() {
+      const noBoxProductReady = noBoxMode && !!parseInt(document.getElementById('selProduct').value);
+      if (!cancelStockMode && !packingReady && !noBoxProductReady) {
+        guidePackingSetup(noBoxMode ? '无箱码入库需要先选择产品' : '请先选择产品、箱规和批次号，然后确认启用扫码');
+        return;
+      }
       scanning = true;
       const tip = currentBox
         ? `连续扫码：子码(S开头) ${boxSize > 0 ? '· ' + (parseInt(document.getElementById('boundCount').textContent) || 0) + '/' + boxSize : ''} · 箱满后直接扫下一箱码`
@@ -367,9 +368,6 @@
     }
 
     // 核心：自动识别 B开头=箱码 / S开头=子码
-    let cancelStockMode = false;   // 取消入库模式开关
-    let noBoxMode = false;         // 无箱码入库模式开关
-    let noBoxInCount = 0;          // 本次会话无箱码入库数量
     async function processCode(code) {
       if (cancelStockMode) {
         await cancelStock(code);
@@ -388,12 +386,12 @@
       }
       if (/^B/i.test(code)) {
         if (!packingReady) {
-          return flashError('请先在上方选择产品、箱规、批次号并点「确认」后，才能扫码装箱', 'err');
+          return guidePackingSetup('请先选择产品、箱规和批次号，然后确认启用扫码');
         }
         await startPacking(code);
       } else if (/^S/i.test(code)) {
         if (!packingReady) {
-          return flashError('请先在上方选择产品、箱规、批次号并点「确认」后，才能扫码录入', 'err');
+          return guidePackingSetup('请先选择产品、箱规和批次号，然后确认启用扫码');
         }
         await scanItem(code);
       } else {
@@ -401,18 +399,24 @@
       }
     }
 
-    // 前置条件就绪状态：未选择产品/箱规/批次号前，禁用扫码录入
+    // 前置条件不足时仍允许点击；点击后会定位到缺失项，避免按钮看起来失效。
     function updateReadyState() {
       const input = document.getElementById('scanInput');
       const camBtn = document.getElementById('cameraScanBtn');
+      const ready = packingReady || cancelStockMode || noBoxMode;
+      input.removeAttribute('disabled');
+      camBtn.removeAttribute('disabled');
+      input.setAttribute('aria-disabled', 'false');
+      camBtn.setAttribute('aria-disabled', 'false');
+      camBtn.classList.toggle('needs-setup', !ready);
       if (packingReady) {
-        input.removeAttribute('disabled');
-        camBtn.removeAttribute('disabled');
         input.placeholder = '扫箱码(B开头) / 扫子码(S开头)';
+      } else if (cancelStockMode) {
+        input.placeholder = '扫箱码/子码加入取消清单';
+      } else if (noBoxMode) {
+        input.placeholder = '无箱码入库：扫子码(S开头)';
       } else {
-        input.setAttribute('disabled', 'disabled');
-        camBtn.setAttribute('disabled', 'disabled');
-        input.placeholder = '请先完成产品/箱规/批次号选择';
+        input.placeholder = '可输入码值；首次使用请先完成下方产品设置';
       }
     }
 
@@ -519,14 +523,17 @@
           panel.classList.remove('is-hidden');
           input.placeholder = '扫箱码/子码 加入取消清单…';
           hint.textContent = '已开启取消入库：扫码把码加入待取消清单，扫完点「确认取消入库」二次确认后执行';
+          hint.classList.remove('is-hidden');
           toast('已开启取消入库模式，扫码累积清单', 'success');
         } else {
           btn.textContent = '取消入库';
           btn.classList.remove('active');
           panel.classList.add('is-hidden');
           input.placeholder = '扫箱码(B开头) / 扫子码(S开头)';
-          hint.textContent = '扫错箱码/子码装错箱？点「取消入库」后扫码累积待取消清单，再点「确认取消」二次确认';
+          hint.textContent = '';
+          hint.classList.add('is-hidden');
         }
+        updateReadyState();
         input.focus();
       });
     })();
@@ -544,15 +551,18 @@
           btn.classList.add('active');
           input.placeholder = '无箱码入库：扫子码(S开头)…';
           hint.textContent = '已开启无箱码入库：直接扫子码即完成入库（自动关联上方选的产品+批次号），再点一次退出';
+          hint.classList.remove('is-hidden');
           stats.classList.remove('is-hidden');
           toast('已开启无箱码入库模式', 'success');
         } else {
           btn.textContent = '无箱码入库';
           btn.classList.remove('active');
           input.placeholder = '扫箱码(B开头) / 扫子码(S开头)';
-          hint.textContent = '大包粮等无需装箱的货品：先在上方选好产品/批次，点「无箱码入库」后直接扫子码即完成入库';
+          hint.textContent = '';
+          hint.classList.add('is-hidden');
           stats.classList.add('is-hidden');
         }
+        updateReadyState();
         input.focus();
       });
     })();

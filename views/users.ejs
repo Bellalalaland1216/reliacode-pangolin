@@ -47,7 +47,7 @@
             <td><%= u.role === 'admin' ? '全部品牌' : (u.brand_name || '<未绑定>') %></td>
             <td><%= u.factory_name || '-' %></td>
             <td><%= u.distributor_name || '-' %></td>
-            <td><%= u.enabled ? '<span class="tag tag-green">启用</span>' : '<span class="tag tag-red">停用</span>' %></td>
+            <td><%- u.enabled ? '<span class="tag tag-green">启用</span>' : '<span class="tag tag-red">停用</span>' %></td>
             <td class="small-text secondary-text"><%= u.last_login_at || '从未登录' %></td>
             <td class="no-wrap">
               <button class="btn btn-outline btn-sm edit-user-btn" type="button" data-user-id="<%= u.id %>">编辑</button>
