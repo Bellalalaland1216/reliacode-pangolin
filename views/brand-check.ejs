@@ -38,14 +38,14 @@
 
     <section class="card">
       <div class="card-title"><%- icon('search') %> 查询溯源码</div>
-      <div class="form-group">
-        <div class="verify-input-row" style="display:flex;gap:8px;">
+      <div class="form-group query-control-group">
+        <div class="verify-input-row query-control-row">
           <label for="codeInput" class="sr-only">输入或扫描箱码或子码</label>
-          <input type="text" id="codeInput" class="form-control" placeholder="输入或扫描箱码(B)/子码(S)" autocomplete="off" style="flex:1;">
+          <input type="text" id="codeInput" class="form-control" placeholder="输入或扫描箱码(B)/子码(S)" autocomplete="off">
           <button id="scanBtn" type="button" class="btn btn-outline no-wrap" title="摄像头扫码"><%- icon('camera') %> 扫码</button>
+          <button id="checkBtn" class="btn btn-primary no-wrap" type="button">立即查询</button>
         </div>
       </div>
-      <button id="checkBtn" class="btn btn-primary" type="button">立即查询</button>
       <div id="checkStatus" class="form-hint" role="status" aria-live="polite"></div>
     </section>
 

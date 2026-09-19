@@ -19,6 +19,40 @@
   <%- include('partials/nav', { active: 'distributors' }) %>
 
   <div class="container">
+    <section class="card data-display-module distributor-list-module">
+      <div class="card-title">代理商列表</div>
+      <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>名称</th><th class="col-sm-hide">电话</th><th>区域</th><th class="col-sm-hide">地址</th><% if (brands && brands.length > 0) { %><th class="col-sm-hide">归属品牌</th><% } %>
+            <th class="col-sm-hide">创建时间</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% distributors.forEach(d => { %>
+          <tr>
+            <td><%= d.name %></td>
+            <td class="col-sm-hide"><%= d.phone || '-' %></td>
+            <td><span class="tag tag-blue"><%= d.region || '未设置' %></span></td>
+            <td class="col-sm-hide"><%= d.address || '-' %></td>
+            <% if (brands && brands.length > 0) { %><td class="col-sm-hide"><%= d.brand_name || '-' %></td><% } %>
+            <td class="col-sm-hide meta-cell"><%= d.created_at %></td>
+            <td>
+              <% if (user && ['admin', 'brand', 'AUDIT_VIEWER'].includes(user.role)) { %><a class="btn btn-outline btn-sm" href="/portal?distributor_id=<%= d.id %>">查看工作台</a><% } %>
+              <button class="btn btn-outline btn-sm edit-dist-btn" type="button" data-dist-id="<%= d.id %>" data-dist-name="<%= d.name %>" data-dist-phone="<%= d.phone || '' %>" data-dist-region="<%= d.region || '' %>" data-dist-covered="<%= d.covered_regions || '' %>" data-dist-address="<%= d.address || '' %>">编辑</button>
+              <button class="btn btn-danger btn-sm delete-dist-btn" type="button" data-dist-id="<%= d.id %>">删除</button>
+            </td>
+          </tr>
+          <% }); %>
+          <% if (distributors.length === 0) { %>
+          <tr><td colspan="6" class="empty-cell">暂无代理商</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+      </div>
+    </section>
+
     <div class="card">
       <div class="card-title">新增代理商</div>
       <div class="entity-form-grid">
@@ -52,39 +86,6 @@
       <button id="addDistBtn" class="btn btn-primary" type="button">添加代理商</button>
     </div>
 
-    <div class="card">
-      <div class="card-title">代理商列表</div>
-      <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>名称</th><th class="col-sm-hide">电话</th><th>区域</th><th class="col-sm-hide">地址</th><% if (brands && brands.length > 0) { %><th class="col-sm-hide">归属品牌</th><% } %>
-            <th class="col-sm-hide">创建时间</th><th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% distributors.forEach(d => { %>
-          <tr>
-            <td><%= d.name %></td>
-            <td class="col-sm-hide"><%= d.phone || '-' %></td>
-            <td><span class="tag tag-blue"><%= d.region || '未设置' %></span></td>
-            <td class="col-sm-hide"><%= d.address || '-' %></td>
-            <% if (brands && brands.length > 0) { %><td class="col-sm-hide"><%= d.brand_name || '-' %></td><% } %>
-            <td class="col-sm-hide meta-cell"><%= d.created_at %></td>
-            <td>
-              <% if (user && ['admin', 'brand', 'AUDIT_VIEWER'].includes(user.role)) { %><a class="btn btn-outline btn-sm" href="/portal?distributor_id=<%= d.id %>">查看工作台</a><% } %>
-              <button class="btn btn-outline btn-sm edit-dist-btn" type="button" data-dist-id="<%= d.id %>" data-dist-name="<%= d.name %>" data-dist-phone="<%= d.phone || '' %>" data-dist-region="<%= d.region || '' %>" data-dist-covered="<%= d.covered_regions || '' %>" data-dist-address="<%= d.address || '' %>">编辑</button>
-              <button class="btn btn-danger btn-sm delete-dist-btn" type="button" data-dist-id="<%= d.id %>">删除</button>
-            </td>
-          </tr>
-          <% }); %>
-          <% if (distributors.length === 0) { %>
-          <tr><td colspan="6" class="empty-cell">暂无代理商</td></tr>
-          <% } %>
-        </tbody>
-      </table>
-      </div>
-    </div>
   </div>
 
   <!-- 编辑弹窗 -->

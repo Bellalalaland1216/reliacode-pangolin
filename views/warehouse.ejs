@@ -29,6 +29,32 @@
       </div>
     </section>
 
+    <!-- 发货记录 -->
+    <section class="card data-display-module shipment-records-module">
+      <div class="card-title split-title">
+        <span>近期发货明细</span>
+        <button class="btn btn-outline btn-sm" type="button" id="exportShipBtn"><%- icon('download') %> 导出Excel</button>
+      </div>
+      <div class="form-group">
+        <label>按发货日期查询</label>
+        <input type="date" id="shipDateInput" class="form-control">
+      </div>
+      <div class="form-group">
+        <input type="text" id="orderSearchInput" class="form-control" placeholder="🔍 按订单编号或备注查找">
+      </div>
+      <table class="table" id="shipTable">
+        <thead>
+          <tr>
+            <th>产品名称</th><th>产品件数</th><th>箱数</th>
+            <th>订单编号</th><th>代理商</th><th>区域</th><th>操作人</th><th>发货时间</th><th>备注</th><th>码值明细</th>
+          </tr>
+        </thead>
+        <tbody id="shipBody">
+          <tr><td colspan="10" class="empty-cell">加载中...</td></tr>
+        </tbody>
+      </table>
+    </section>
+
     <div class="card">
       <div class="card-title">扫码发货</div>
       <p class="section-help warehouse-help">
@@ -38,7 +64,7 @@
         <div class="scan-hero-icon"><%- icon('box', 'ui-icon-lg') %></div>
         <div class="scan-input-row">
           <input type="text" id="boxCode" class="form-control scan-box-input scan-flex-input"
-            placeholder="扫描 / 输入箱码或子码" autofocus>
+            placeholder="扫描 / 输入箱码或子码">
           <button type="button" class="btn btn-outline no-wrap" id="openScannerBtn"><%- icon('camera') %> 手机扫码</button>
         </div>
       </div>
@@ -94,31 +120,6 @@
       <button class="btn btn-success full-width" id="shipBoxBtn">确认发货</button>
     </div>
 
-    <!-- 发货记录 -->
-    <div class="card">
-      <div class="card-title split-title">
-        <span>近期发货明细</span>
-        <button class="btn btn-outline btn-sm" type="button" id="exportShipBtn"><%- icon('download') %> 导出Excel</button>
-      </div>
-      <div class="form-group">
-        <label>按发货日期查询</label>
-        <input type="date" id="shipDateInput" class="form-control">
-      </div>
-      <div class="form-group">
-        <input type="text" id="orderSearchInput" class="form-control" placeholder="🔍 按订单编号或备注查找">
-      </div>
-      <table class="table" id="shipTable">
-        <thead>
-          <tr>
-            <th>产品名称</th><th>产品件数</th><th>箱数</th>
-            <th>订单编号</th><th>代理商</th><th>区域</th><th>操作人</th><th>发货时间</th><th>备注</th><th>码值明细</th>
-          </tr>
-        </thead>
-        <tbody id="shipBody">
-          <tr><td colspan="10" class="empty-cell">加载中...</td></tr>
-        </tbody>
-      </table>
-    </div>
   </div>
 
   <script src="/js/html5-qrcode.min.js"></script>

@@ -42,6 +42,20 @@
       </div>
     </section>
 
+    <!-- 按产品汇总装箱（独立主导视图：日期维度筛选 + 产品名称汇总 + 逐级下钻） -->
+    <section class="card data-display-module packing-summary-module">
+      <div class="card-title split-title">
+        <span>装箱汇总视图</span>
+        <div class="inline-control-row">
+          <label class="text-13 muted-text" for="packSummaryDate">日期</label>
+          <select id="packSummaryDate" class="form-control compact-select"><option value="">全部日期</option></select>
+          <button id="packSummaryBtn" class="btn btn-outline btn-sm" type="button"><%- icon('refresh') %> 查询</button>
+        </div>
+      </div>
+      <div class="pack-summary-total" id="packSummaryTotal"></div>
+      <div id="packSummaryList" class="empty-list-state">加载中...</div>
+    </section>
+
     <div class="card">
       <div class="card-title">工厂装箱</div>
       <p class="section-help">
@@ -59,7 +73,7 @@
         <div class="factory-scan-row">
           <label for="scanInput" class="sr-only">扫描箱码或子码</label>
           <input type="text" id="scanInput" class="form-control scan-box-input flex-1"
-            placeholder="扫箱码(B开头) / 扫子码(S开头)" autofocus autocomplete="off">
+            placeholder="扫箱码(B开头) / 扫子码(S开头)" autocomplete="off">
           <button id="cameraScanBtn" type="button" class="btn btn-outline no-wrap"><%- icon('camera') %> 连续扫码</button>
         </div>
       </div>
@@ -159,20 +173,6 @@
           <p class="empty-list-state">暂无子码</p>
         </div>
       </div>
-    </div>
-
-    <!-- 按产品汇总装箱（独立主导视图：日期维度筛选 + 产品名称汇总 + 逐级下钻） -->
-    <div class="card">
-      <div class="card-title split-title">
-        <span>装箱汇总视图</span>
-        <div class="inline-control-row">
-          <label class="text-13 muted-text" for="packSummaryDate">日期</label>
-          <select id="packSummaryDate" class="form-control compact-select"><option value="">全部日期</option></select>
-          <button id="packSummaryBtn" class="btn btn-outline btn-sm" type="button"><%- icon('refresh') %> 查询</button>
-        </div>
-      </div>
-      <div class="pack-summary-total" id="packSummaryTotal"></div>
-      <div id="packSummaryList" class="empty-list-state">加载中...</div>
     </div>
 
   </div>

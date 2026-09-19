@@ -16,6 +16,33 @@
   <%- include('partials/nav', { active: 'settings' }) %>
 
   <div class="container">
+    <!-- 中奖记录 -->
+    <section class="card data-display-module prize-records-module">
+      <div class="card-title">中奖记录（最近50条）</div>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>溯源码</th><th>活动</th><th>奖品</th><th>金额/内容</th><th>扫码区域</th><th>中奖时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (prizes.length === 0) { %>
+          <tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">暂无中奖记录</td></tr>
+          <% } %>
+          <% prizes.forEach(p => { %>
+          <tr>
+            <td style="font-family:monospace;font-size:12px;"><%= p.item_code %></td>
+            <td><%= p.campaign_name || '-' %></td>
+            <td><%= p.prize_type === 'red_packet' ? '💰红包' : p.prize_type === 'coupon' ? '🎟️优惠券' : p.prize_type === 'goods' ? '🎁实物' : '👋' %></td>
+            <td><%= p.prize_name || '-' %><%= p.prize_value ? '（' + p.prize_value + '元）' : '' %></td>
+            <td style="font-size:12px;"><%= p.scan_location || '-' %></td>
+            <td style="font-size:12px;color:#666;"><%= p.created_at %></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </section>
+
     <!-- 品牌设置 -->
     <div class="card">
       <div class="card-title">品牌设置（消费者扫码页展示）</div>
@@ -175,33 +202,6 @@
               <button class="btn btn-outline btn-sm" onclick="toggleCampaign(<%= c.id %>)"><%= c.enabled ? '停用' : '启用' %></button>
               <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="deleteCampaign(<%= c.id %>)">删除</button>
             </td>
-          </tr>
-          <% }); %>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- 中奖记录 -->
-    <div class="card">
-      <div class="card-title">中奖记录（最近50条）</div>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>溯源码</th><th>活动</th><th>奖品</th><th>金额/内容</th><th>扫码区域</th><th>中奖时间</th>
-          </tr>
-        </thead>
-        <tbody>
-          <% if (prizes.length === 0) { %>
-          <tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">暂无中奖记录</td></tr>
-          <% } %>
-          <% prizes.forEach(p => { %>
-          <tr>
-            <td style="font-family:monospace;font-size:12px;"><%= p.item_code %></td>
-            <td><%= p.campaign_name || '-' %></td>
-            <td><%= p.prize_type === 'red_packet' ? '💰红包' : p.prize_type === 'coupon' ? '🎟️优惠券' : p.prize_type === 'goods' ? '🎁实物' : '👋' %></td>
-            <td><%= p.prize_name || '-' %><%= p.prize_value ? '（' + p.prize_value + '元）' : '' %></td>
-            <td style="font-size:12px;"><%= p.scan_location || '-' %></td>
-            <td style="font-size:12px;color:#666;"><%= p.created_at %></td>
           </tr>
           <% }); %>
         </tbody>

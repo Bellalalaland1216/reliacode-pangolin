@@ -23,28 +23,30 @@
     <div class="card">
       <div class="card-title">码查询</div>
       <div class="codes-toolbar">
-        <div class="form-group codes-search-field">
-          <label for="searchKeyword" class="sr-only">搜索箱码或子码</label>
-          <input type="text" id="searchKeyword" class="form-control" placeholder="输入箱码或子码搜索">
+        <div class="codes-query-row">
+          <div class="form-group codes-search-field">
+            <label for="searchKeyword" class="sr-only">搜索箱码或子码</label>
+            <input type="text" id="searchKeyword" class="form-control" placeholder="输入箱码或子码搜索">
+          </div>
+          <button id="scanCodeBtn" class="btn btn-outline no-wrap" type="button"><%- icon('camera') %> 扫码查询</button>
+          <button id="searchCodesBtn" class="btn btn-primary no-wrap" type="button">搜索</button>
         </div>
-        <button id="scanCodeBtn" class="btn btn-outline no-wrap" type="button"><%- icon('camera') %> 扫码查询</button>
-        <div>
+        <div class="codes-filter-row">
           <label class="codes-type-label">
             <input type="radio" name="codeType" value="box" checked aria-label="查询箱码"> 箱码
             <input type="radio" name="codeType" value="item" class="codes-item-radio" aria-label="查询子码"> 子码
           </label>
+          <label for="statusFilter" class="sr-only">筛选码状态</label>
+          <select id="statusFilter" class="form-control codes-status-filter">
+            <option value="">全部状态</option>
+            <option value="in_stock">在库</option>
+            <option value="shipped">已发货</option>
+            <option value="scanned">已扫码</option>
+            <option value="invalid">已作废</option>
+          </select>
+          <button id="openPrintDialogBtn" class="btn btn-outline" type="button"><%- icon('print') %> 批量打印</button>
+          <button id="exportExcelBtn" class="btn btn-outline" type="button"><%- icon('download') %> 导出 Excel</button>
         </div>
-        <label for="statusFilter" class="sr-only">筛选码状态</label>
-        <select id="statusFilter" class="form-control codes-status-filter">
-          <option value="">全部状态</option>
-          <option value="in_stock">在库</option>
-          <option value="shipped">已发货</option>
-          <option value="scanned">已扫码</option>
-          <option value="invalid">已作废</option>
-        </select>
-        <button id="searchCodesBtn" class="btn btn-primary" type="button">搜索</button>
-        <button id="openPrintDialogBtn" class="btn btn-outline" type="button"><%- icon('print') %> 批量打印</button>
-        <button id="exportExcelBtn" class="btn btn-outline" type="button"><%- icon('download') %> 导出 Excel</button>
       </div>
     </div>
 
