@@ -21,7 +21,6 @@
     <section class="card data-display-module package-history-module" aria-labelledby="packageHistoryTitle">
       <div class="card-title package-section-heading" id="packageHistoryTitle">
         <span><%- icon('clipboard') %> 码包记录</span>
-        <small>最近 100 个任务</small>
       </div>
       <div class="table-wrap">
         <table class="table package-table">
@@ -117,7 +116,7 @@
           </fieldset>
         </div>
         <details class="package-batch-origin">
-          <summary>新批次溯源起点 <small>仅当选择了具体产品时需填写</small></summary>
+          <summary>新批次溯源起点</summary>
           <div class="package-origin-grid">
             <div class="form-group">
               <label for="packageOriginTitle">原料来源标题</label>
@@ -133,12 +132,6 @@
             </div>
           </div>
         </details>
-        <div class="package-delivery-spec" aria-label="TXT 交付规范">
-          <span><strong>TXT</strong> UTF-8</span>
-          <span><strong>换行</strong> Windows CRLF</span>
-          <span><strong>内容</strong> 一行一个扫码链接</span>
-          <span><strong>追溯</strong> 永久绑定本任务</span>
-        </div>
         <div class="form-actions">
           <button id="createPackageBtn" class="btn btn-primary" type="button"><%- icon('plus') %> 生成 50,000 个码</button>
           <a href="/generate" class="btn btn-outline">管理产品与批次</a>

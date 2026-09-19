@@ -16,7 +16,6 @@
     <section class="profile-identity" aria-labelledby="profileTitle">
       <div class="profile-avatar"><%= (user.display_name || user.username).slice(0,1).toUpperCase() %></div>
       <div>
-        <p class="profile-kicker">个人设置</p>
         <h1 id="profileTitle"><%= user.display_name %></h1>
         <dl class="profile-facts">
           <div><dt>登录账号</dt><dd><%= user.username %></dd></div>
@@ -27,10 +26,7 @@
 
     <section class="profile-password-panel" aria-labelledby="passwordTitle">
       <header class="profile-password-head">
-        <div>
-          <span class="profile-step-label">安全验证</span>
-          <h2 id="passwordTitle">修改密码</h2>
-        </div>
+        <h2 id="passwordTitle">修改密码</h2>
         <ol class="password-progress" aria-label="修改密码步骤">
           <li class="is-active" id="passwordProgressVerify"><span>1</span>验证原密码</li>
           <li id="passwordProgressNew"><span>2</span>设置新密码</li>

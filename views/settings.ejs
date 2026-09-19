@@ -11,14 +11,14 @@
 
   <main class="container settings-page">
     <header class="page-heading settings-heading">
-      <div><span class="section-kicker">消费者触达</span><h1>品牌营销</h1></div>
+      <h1>品牌营销</h1>
       <div class="settings-heading-metric"><strong><%= campaigns.filter(c => c.enabled).length %></strong><span>个活动进行中</span></div>
     </header>
     <p class="section-help">品牌资料用于消费者扫码页；素材上传后点击“保存品牌资料”生效。活动创建后可随时停用。</p>
 
     <section class="data-display-module marketing-records" aria-labelledby="prizeRecordsTitle">
       <div class="marketing-section-head">
-        <div><span class="section-kicker">实时反馈</span><h2 id="prizeRecordsTitle">中奖记录</h2></div>
+        <h2 id="prizeRecordsTitle">中奖记录</h2>
         <span class="record-limit">最近 50 条</span>
       </div>
       <div class="table-wrap"><table class="table marketing-table">
@@ -41,7 +41,7 @@
 
     <section class="marketing-brand-studio" aria-labelledby="brandStudioTitle">
       <div class="marketing-section-head">
-        <div><span class="section-kicker">扫码页形象</span><h2 id="brandStudioTitle">品牌资料</h2></div>
+        <h2 id="brandStudioTitle">品牌资料</h2>
         <div class="marketing-head-actions">
           <button class="btn btn-outline" id="previewH5Btn" type="button">预览扫码页</button>
           <button class="btn btn-primary" id="saveSettingsBtn" type="button">保存品牌资料</button>
@@ -68,7 +68,7 @@
     </section>
 
     <section class="marketing-media-section" aria-labelledby="mediaTitle">
-      <div class="marketing-section-head"><div><span class="section-kicker">视觉素材</span><h2 id="mediaTitle">图片与视频</h2></div></div>
+      <div class="marketing-section-head"><h2 id="mediaTitle">图片与视频</h2></div>
       <div class="marketing-media-grid">
         <article class="media-upload-panel media-image-panel">
           <div><strong>产品图片</strong><span>最多 6 张</span></div>
@@ -88,7 +88,7 @@
     </section>
 
     <section class="marketing-campaign-studio" aria-labelledby="campaignTitleHeading">
-      <div class="marketing-section-head"><div><span class="section-kicker">互动增长</span><h2 id="campaignTitleHeading">扫码活动</h2></div><button class="btn btn-coral" id="createCampaignBtn" type="button">创建活动</button></div>
+      <div class="marketing-section-head"><h2 id="campaignTitleHeading">扫码活动</h2><button class="btn btn-coral" id="createCampaignBtn" type="button">创建活动</button></div>
       <div class="campaign-form-grid">
         <div class="form-group campaign-name"><label for="cName">活动名称</label><input type="text" id="cName" class="form-control" placeholder="输入活动名称"></div>
         <div class="form-group campaign-dates"><label>有效期</label><div class="date-range"><input type="date" id="cStart" class="form-control"><span>至</span><input type="date" id="cEnd" class="form-control"></div></div>
@@ -107,7 +107,7 @@
     </section>
 
     <section class="backup-utility" aria-labelledby="backupTitle">
-      <div><span class="section-kicker">系统维护</span><h2 id="backupTitle">数据备份</h2></div>
+      <h2 id="backupTitle">数据备份</h2>
       <div class="backup-actions"><a class="btn btn-primary" href="/api/backup/download">立即备份并下载</a><button class="btn btn-outline" id="loadBackupsBtn" type="button">历史备份</button></div>
       <div id="backupList" class="backup-list"></div>
     </section>

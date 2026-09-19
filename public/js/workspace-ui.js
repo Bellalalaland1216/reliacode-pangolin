@@ -123,7 +123,10 @@
     const host = document.querySelector('.container');
     if (!host) return;
     const heading = host.querySelector(':scope > .page-header, :scope > .page-heading');
-    if (heading) heading.insertAdjacentElement('afterend', details);
+    if (heading) {
+      details.classList.add('page-help-inline');
+      heading.append(details);
+    }
     else host.prepend(details);
   }
 
