@@ -80,18 +80,51 @@
       '.card > p:not(.empty-state):not(.empty-list-state):not(.form-hint):not([role="status"])',
       '.group-card > p:not(.empty-state):not(.empty-list-state):not(.form-hint):not([role="status"])'
     ].join(', ');
+    const unique = new Map();
     document.querySelectorAll(helpSelector).forEach(copy => {
       if (copy.closest('details') || copy.dataset.keepVisible === 'true') return;
-      const details = document.createElement('details');
-      details.className = 'page-help';
-      const summary = document.createElement('summary');
-      summary.textContent = '使用说明';
-      const body = document.createElement('div');
-      body.className = 'page-help-content';
-      copy.replaceWith(details);
-      body.appendChild(copy);
-      details.append(summary, body);
+      const text = copy.textContent.replace(/\s+/g, ' ').trim();
+      if (!text) {
+        copy.remove();
+        return;
+      }
+      const section = copy.closest('.card, .group-card, section');
+      const heading = section && section.querySelector('.card-title > span:first-child, .card-title, h2, h3');
+      if (!unique.has(text)) unique.set(text, { text, title: heading ? heading.textContent.trim() : '' });
+      copy.remove();
     });
+
+    document.querySelectorAll('details.page-help').forEach(details => {
+      const text = (details.querySelector('.page-help-content') || details).textContent.replace(/\s+/g, ' ').trim();
+      if (text && !unique.has(text)) unique.set(text, { text, title: '' });
+      details.remove();
+    });
+
+    if (!unique.size) return;
+    const details = document.createElement('details');
+    details.className = 'page-help page-help-hub';
+    const summary = document.createElement('summary');
+    summary.textContent = '页面说明';
+    const body = document.createElement('div');
+    body.className = 'page-help-content page-help-list';
+    unique.forEach(item => {
+      const row = document.createElement('p');
+      row.className = 'page-help-item';
+      if (item.title) {
+        const label = document.createElement('strong');
+        label.textContent = item.title;
+        row.append(label, document.createTextNode(' · ' + item.text));
+      } else {
+        row.textContent = item.text;
+      }
+      body.appendChild(row);
+    });
+    details.append(summary, body);
+    const host = document.querySelector('.container');
+    if (!host) return;
+    const heading = host.querySelector(':scope > .page-header, :scope > .page-heading');
+    if (heading) heading.insertAdjacentElement('afterend', details);
+    else host.prepend(details);
   }
 
   function replaceLoadingCopy(root) {

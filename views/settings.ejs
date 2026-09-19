@@ -5,238 +5,129 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>品牌营销 - <%= brand %></title>
   <link rel="stylesheet" href="/css/style.css">
-  <style>
-    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
-    @media (max-width: 800px) { .row { grid-template-columns: 1fr; } }
-    .inline-row { display: flex; gap: 8px; flex-wrap: wrap; }
-    .prize-emoji { font-size: 32px; }
-  </style>
 </head>
 <body>
   <%- include('partials/nav', { active: 'settings' }) %>
 
-  <div class="container">
-    <!-- 中奖记录 -->
-    <section class="card data-display-module prize-records-module">
-      <div class="card-title">中奖记录（最近50条）</div>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>溯源码</th><th>活动</th><th>奖品</th><th>金额/内容</th><th>扫码区域</th><th>中奖时间</th>
-          </tr>
-        </thead>
+  <main class="container settings-page">
+    <header class="page-heading settings-heading">
+      <div><span class="section-kicker">消费者触达</span><h1>品牌营销</h1></div>
+      <div class="settings-heading-metric"><strong><%= campaigns.filter(c => c.enabled).length %></strong><span>个活动进行中</span></div>
+    </header>
+    <p class="section-help">品牌资料用于消费者扫码页；素材上传后点击“保存品牌资料”生效。活动创建后可随时停用。</p>
+
+    <section class="data-display-module marketing-records" aria-labelledby="prizeRecordsTitle">
+      <div class="marketing-section-head">
+        <div><span class="section-kicker">实时反馈</span><h2 id="prizeRecordsTitle">中奖记录</h2></div>
+        <span class="record-limit">最近 50 条</span>
+      </div>
+      <div class="table-wrap"><table class="table marketing-table">
+        <thead><tr><th>溯源码</th><th>活动</th><th>奖品</th><th>金额 / 内容</th><th>扫码区域</th><th>中奖时间</th></tr></thead>
         <tbody>
-          <% if (prizes.length === 0) { %>
-          <tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">暂无中奖记录</td></tr>
-          <% } %>
+          <% if (prizes.length === 0) { %><tr><td colspan="6" class="empty-list-state">暂无中奖记录</td></tr><% } %>
           <% prizes.forEach(p => { %>
           <tr>
-            <td style="font-family:monospace;font-size:12px;"><%= p.item_code %></td>
-            <td><%= p.campaign_name || '-' %></td>
-            <td><%= p.prize_type === 'red_packet' ? '💰红包' : p.prize_type === 'coupon' ? '🎟️优惠券' : p.prize_type === 'goods' ? '🎁实物' : '👋' %></td>
-            <td><%= p.prize_name || '-' %><%= p.prize_value ? '（' + p.prize_value + '元）' : '' %></td>
-            <td style="font-size:12px;"><%= p.scan_location || '-' %></td>
-            <td style="font-size:12px;color:#666;"><%= p.created_at %></td>
+            <td class="mono-text"><%= p.item_code %></td>
+            <td class="font-semibold"><%= p.campaign_name || '-' %></td>
+            <td><%= p.prize_type === 'red_packet' ? '红包' : p.prize_type === 'coupon' ? '优惠券' : p.prize_type === 'goods' ? '实物' : '谢谢参与' %></td>
+            <td><%= p.prize_name || '-' %><%= p.prize_value ? ' · ' + p.prize_value + ' 元' : '' %></td>
+            <td class="meta-cell"><%= p.scan_location || '-' %></td>
+            <td class="meta-cell"><%= p.created_at %></td>
           </tr>
           <% }); %>
         </tbody>
-      </table>
+      </table></div>
     </section>
 
-    <!-- 品牌设置 -->
-    <div class="card">
-      <div class="card-title">品牌设置（消费者扫码页展示）</div>
-      <div class="row">
-        <div>
-          <div class="form-group">
-            <label>品牌名称</label>
-            <input type="text" id="brandName" class="form-control" value="<%= settings.brand_name || '' %>" placeholder="如：XX品牌">
-          </div>
-          <div class="form-group">
-            <label>Logo 标识（可填文字/Emoji）</label>
-            <input type="text" id="logoText" class="form-control" value="<%= settings.logo_text || '' %>" placeholder="如：🏷️ 或 公司首字">
-          </div>
-          <div class="form-group">
-            <label>Logo 图片（上传后优先于文字/Emoji 展示）</label>
-            <input type="file" id="logoFile" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none;" onchange="uploadLogo()">
-            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-              <button class="btn btn-outline btn-sm" onclick="document.getElementById('logoFile').click()">📷 上传LOGO图片</button>
-              <img id="logoPreview" src="<%= settings.logo_image || '' %>" alt="" style="width:44px;height:44px;object-fit:contain;border-radius:8px;background:#f5f5f5;border:1px solid #e5e5e5;display:<%= settings.logo_image ? 'inline-block' : 'none' %>;">
-              <button class="btn btn-outline btn-sm" id="logoRemoveBtn" style="color:#ea4335;border-color:#ea4335;display:<%= settings.logo_image ? '' : 'none' %>;" onclick="removeLogo()">移除图片</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>品牌副标题（验证页品牌名下方一行金色小字，如「晶球主粮开创者」，留空则不展示）</label>
-            <input type="text" id="brandSubtitle" class="form-control" value="<%= settings.brand_subtitle || '' %>" placeholder="如：晶球主粮开创者">
-          </div>
-          <div class="form-group">
-            <label>欢迎语</label>
-            <input type="text" id="welcomeMsg" class="form-control" value="<%= settings.welcome_msg || '' %>" placeholder="如：正品验证 · 一扫溯源">
-          </div>
-        </div>
-        <div>
-          <div class="form-group">
-            <label>主题色</label>
-            <input type="color" id="themeColor" class="form-control" value="<%= settings.theme_color || '#1a73e8' %>" style="height:44px;padding:4px;">
-          </div>
-          <div class="form-group">
-            <label>客服电话（选填）</label>
-            <input type="text" id="contactPhone" class="form-control" value="<%= settings.contact_phone || '' %>" placeholder="如：400-888-8888">
-          </div>
-          <div style="margin-top:28px;">
-            <button class="btn btn-primary" onclick="saveSettings()">保存品牌设置</button>
-            <button class="btn btn-outline" onclick="previewH5()">预览扫码页</button>
-          </div>
+    <section class="marketing-brand-studio" aria-labelledby="brandStudioTitle">
+      <div class="marketing-section-head">
+        <div><span class="section-kicker">扫码页形象</span><h2 id="brandStudioTitle">品牌资料</h2></div>
+        <div class="marketing-head-actions">
+          <button class="btn btn-outline" id="previewH5Btn" type="button">预览扫码页</button>
+          <button class="btn btn-primary" id="saveSettingsBtn" type="button">保存品牌资料</button>
         </div>
       </div>
-
-      <!-- 品牌素材 -->
-      <hr style="border:none;border-top:1px dashed #ddd;margin:20px 0;">
-      <div class="card-title" style="font-size:15px;">品牌素材（消费者扫码页展示）</div>
-      <div class="row">
-        <div>
-          <div class="form-group">
-            <label>产品图片（最多6张，扫码页轮播展示）</label>
-            <input type="file" id="imgFiles" accept="image/jpeg,image/png,image/gif,image/webp" multiple style="display:none;" onchange="uploadImages()">
-            <button class="btn btn-outline btn-sm" onclick="document.getElementById('imgFiles').click()">📷 上传图片</button>
-            <span id="imgUploading" style="font-size:12px;color:#999;margin-left:8px;"></span>
-            <div id="imgList" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;"></div>
-          </div>
+      <div class="marketing-brand-grid">
+        <div class="marketing-form-fields">
+          <div class="form-group marketing-grid-wide"><label for="brandName">品牌名称</label><input type="text" id="brandName" class="form-control" value="<%= settings.brand_name || '' %>" placeholder="输入品牌名称"></div>
+          <div class="form-group"><label for="logoText">文字标识</label><input type="text" id="logoText" class="form-control" value="<%= settings.logo_text || '' %>" placeholder="公司简称或 Emoji"></div>
+          <div class="form-group"><label for="brandSubtitle">品牌副标题</label><input type="text" id="brandSubtitle" class="form-control" value="<%= settings.brand_subtitle || '' %>" placeholder="一句品牌主张"></div>
+          <div class="form-group marketing-grid-wide"><label for="welcomeMsg">欢迎语</label><input type="text" id="welcomeMsg" class="form-control" value="<%= settings.welcome_msg || '' %>" placeholder="正品验证 · 一扫溯源"></div>
+          <div class="form-group"><label for="contactPhone">客服电话</label><input type="text" id="contactPhone" class="form-control" value="<%= settings.contact_phone || '' %>" placeholder="选填"></div>
+          <label class="scan-count-toggle"><input type="checkbox" id="showScanCount"> <span>显示累计扫码次数</span></label>
         </div>
-        <div>
-          <div class="form-group">
-            <label>宣传视频（mp4 等，扫码页展示）</label>
-            <input type="file" id="videoFile" accept="video/*" style="display:none;" onchange="uploadVideo()">
-            <button class="btn btn-outline btn-sm" onclick="document.getElementById('videoFile').click()">🎬 上传视频</button>
-            <span id="videoUploading" style="font-size:12px;color:#999;margin-left:8px;"></span>
-            <div id="videoInfo" style="margin-top:10px;font-size:13px;"></div>
+        <aside class="brand-visual-panel">
+          <div class="brand-logo-editor">
+            <div class="brand-logo-orb"><img id="logoPreview" src="<%= settings.logo_image || '' %>" alt="品牌 Logo 预览" class="settings-logo-preview <%= settings.logo_image ? '' : 'is-hidden' %>"><span class="brand-logo-placeholder"><%= (settings.logo_text || '品').slice(0,1) %></span></div>
+            <div><strong>品牌 Logo</strong><div class="marketing-inline-actions"><input type="file" id="logoFile" accept="image/jpeg,image/png,image/gif,image/webp" class="visually-hidden"><button class="btn btn-outline btn-sm" id="chooseLogoBtn" type="button">上传图片</button><button class="btn btn-outline btn-sm danger-action <%= settings.logo_image ? '' : 'is-hidden' %>" type="button" id="logoRemoveBtn">移除</button></div></div>
           </div>
-          <div class="form-group">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-              <input type="checkbox" id="showScanCount" style="width:auto;"> 在扫码页展示累计扫码统计
-            </label>
-          </div>
-          <p style="font-size:12px;color:#999;">提示：图片和视频上传后需点击"保存品牌设置"才会生效。</p>
-        </div>
+          <% const themeValue = settings.theme_color && settings.theme_color.toLowerCase() !== '#1a73e8' ? settings.theme_color : '#0f7557'; %>
+          <div class="theme-editor"><label for="themeColor">主题色</label><div class="theme-palette"><input type="color" id="themeColor" value="<%= themeValue %>" aria-label="自定义主题色"><button type="button" class="theme-swatch is-selected" data-theme-color="#0f7557" aria-label="森林绿"></button><button type="button" class="theme-swatch theme-gold" data-theme-color="#d39a32" aria-label="暖金"></button><button type="button" class="theme-swatch theme-coral" data-theme-color="#d96754" aria-label="珊瑚橙"></button><button type="button" class="theme-swatch theme-jade" data-theme-color="#2aa77a" aria-label="鲜翠绿"></button></div></div>
+        </aside>
       </div>
-    </div>
+    </section>
 
-    <!-- 营销活动 -->
-    <div class="card">
-      <div class="card-title">扫码营销活动（消费者扫码后自动抽奖）</div>
-      <div class="row">
-        <div>
-          <div class="form-group">
-            <label>活动名称</label>
-            <input type="text" id="cName" class="form-control" placeholder="如：双11扫码抽红包">
-          </div>
-          <div class="form-group">
-            <label>活动时间</label>
-            <div class="inline-row">
-              <input type="date" id="cStart" class="form-control" style="flex:1;">
-              <span style="line-height:38px;">至</span>
-              <input type="date" id="cEnd" class="form-control" style="flex:1;">
-            </div>
-          </div>
-          <div class="form-group">
-            <label>中奖率（%）</label>
-            <input type="number" id="cRate" class="form-control" value="30" min="0" max="100" placeholder="如：30">
-          </div>
-        </div>
-        <div>
-          <div class="form-group">
-            <label>奖品类型</label>
-            <select id="cType" class="form-control" onchange="togglePrizeInputs()">
-              <option value="red_packet">💰 现金红包</option>
-              <option value="coupon">🎟️ 优惠券</option>
-              <option value="goods">🎁 实物奖品</option>
-              <option value="thanks">👋 谢谢参与</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>奖品名称</label>
-            <input type="text" id="cPrizeName" class="form-control" placeholder="如：夏日红包 / 满100减20券 / 定制帆布袋">
-          </div>
-          <div class="form-group" id="amountRow">
-            <label>红包/券金额</label>
-            <div class="inline-row">
-              <input type="number" id="cMin" class="form-control" style="flex:1;" placeholder="最低" value="1">
-              <span style="line-height:38px;">~</span>
-              <input type="number" id="cMax" class="form-control" style="flex:1;" placeholder="最高" value="5">
-            </div>
-          </div>
-          <div style="margin-top:28px;">
-            <button class="btn btn-success" onclick="createCampaign()">创建活动</button>
-          </div>
-        </div>
+    <section class="marketing-media-section" aria-labelledby="mediaTitle">
+      <div class="marketing-section-head"><div><span class="section-kicker">视觉素材</span><h2 id="mediaTitle">图片与视频</h2></div></div>
+      <div class="marketing-media-grid">
+        <article class="media-upload-panel media-image-panel">
+          <div><strong>产品图片</strong><span>最多 6 张</span></div>
+          <input type="file" id="imgFiles" accept="image/jpeg,image/png,image/gif,image/webp" multiple class="visually-hidden">
+          <button class="media-upload-action" id="chooseImagesBtn" type="button">＋ 添加图片</button>
+          <span id="imgUploading" class="upload-status"></span>
+          <div id="imgList" class="marketing-image-list"></div>
+        </article>
+        <article class="media-upload-panel media-video-panel">
+          <div><strong>宣传视频</strong><span>扫码页展示</span></div>
+          <input type="file" id="videoFile" accept="video/*" class="visually-hidden">
+          <button class="media-upload-action" id="chooseVideoBtn" type="button">＋ 添加视频</button>
+          <span id="videoUploading" class="upload-status"></span>
+          <div id="videoInfo" class="marketing-video-info"></div>
+        </article>
       </div>
+    </section>
 
-      <table class="table" style="margin-top:16px;">
-        <thead>
-          <tr>
-            <th>活动名称</th><th>奖品</th><th>中奖率</th><th>有效期</th><th>状态</th><th>操作</th>
-          </tr>
-        </thead>
+    <section class="marketing-campaign-studio" aria-labelledby="campaignTitleHeading">
+      <div class="marketing-section-head"><div><span class="section-kicker">互动增长</span><h2 id="campaignTitleHeading">扫码活动</h2></div><button class="btn btn-coral" id="createCampaignBtn" type="button">创建活动</button></div>
+      <div class="campaign-form-grid">
+        <div class="form-group campaign-name"><label for="cName">活动名称</label><input type="text" id="cName" class="form-control" placeholder="输入活动名称"></div>
+        <div class="form-group campaign-dates"><label>有效期</label><div class="date-range"><input type="date" id="cStart" class="form-control"><span>至</span><input type="date" id="cEnd" class="form-control"></div></div>
+        <div class="form-group"><label for="cRate">中奖率</label><div class="input-suffix"><input type="number" id="cRate" class="form-control" value="30" min="0" max="100"><span>%</span></div></div>
+        <div class="form-group"><label for="cType">奖品类型</label><select id="cType" class="form-control"><option value="red_packet">现金红包</option><option value="coupon">优惠券</option><option value="goods">实物奖品</option><option value="thanks">谢谢参与</option></select></div>
+        <div class="form-group"><label for="cPrizeName">奖品名称</label><input type="text" id="cPrizeName" class="form-control" placeholder="如：满 100 减 20 券"></div>
+        <div class="form-group" id="amountRow"><label>金额区间</label><div class="date-range"><input type="number" id="cMin" class="form-control" placeholder="最低" value="1"><span>至</span><input type="number" id="cMax" class="form-control" placeholder="最高" value="5"></div></div>
+      </div>
+      <div class="table-wrap campaign-table-wrap"><table class="table marketing-table">
+        <thead><tr><th>活动名称</th><th>奖品</th><th>中奖率</th><th>有效期</th><th>状态</th><th>操作</th></tr></thead>
         <tbody>
-          <% if (campaigns.length === 0) { %>
-          <tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">还没有创建活动</td></tr>
-          <% } %>
-          <% campaigns.forEach(c => { %>
-          <tr>
-            <td><%= c.name %></td>
-            <td>
-              <%= c.prize_type === 'red_packet' ? '💰红包' : c.prize_type === 'coupon' ? '🎟️优惠券' : c.prize_type === 'goods' ? '🎁实物' : '👋无' %>
-              <%= c.prize_name ? '· ' + c.prize_name : '' %>
-              <% if (c.prize_type === 'red_packet' || c.prize_type === 'coupon') { %>（<%= c.prize_min %>~<%= c.prize_max %>元）<% } %>
-            </td>
-            <td><%= c.win_rate %>%</td>
-            <td style="font-size:12px;"><%= c.start_date %> ~ <%= c.end_date %></td>
-            <td>
-              <% if (c.enabled) { %>
-                <span class="tag tag-green">进行中</span>
-              <% } else { %>
-                <span class="tag tag-gray">已停用</span>
-              <% } %>
-            </td>
-            <td>
-              <button class="btn btn-outline btn-sm" onclick="toggleCampaign(<%= c.id %>)"><%= c.enabled ? '停用' : '启用' %></button>
-              <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="deleteCampaign(<%= c.id %>)">删除</button>
-            </td>
-          </tr>
-          <% }); %>
+          <% if (campaigns.length === 0) { %><tr><td colspan="6" class="empty-list-state">还没有创建活动</td></tr><% } %>
+          <% campaigns.forEach(c => { %><tr><td class="font-semibold"><%= c.name %></td><td><%= c.prize_type === 'red_packet' ? '红包' : c.prize_type === 'coupon' ? '优惠券' : c.prize_type === 'goods' ? '实物' : '谢谢参与' %><%= c.prize_name ? ' · ' + c.prize_name : '' %><% if (c.prize_type === 'red_packet' || c.prize_type === 'coupon') { %> · <%= c.prize_min %>–<%= c.prize_max %> 元<% } %></td><td><strong class="campaign-rate"><%= c.win_rate %>%</strong></td><td class="meta-cell"><%= c.start_date %> — <%= c.end_date %></td><td><span class="tag <%= c.enabled ? 'tag-green' : 'tag-gray' %>"><%= c.enabled ? '进行中' : '已停用' %></span></td><td class="no-wrap"><button class="btn btn-outline btn-sm campaign-toggle-btn" type="button" data-campaign-id="<%= c.id %>"><%= c.enabled ? '停用' : '启用' %></button><button class="btn btn-outline btn-sm danger-action campaign-delete-btn" type="button" data-campaign-id="<%= c.id %>">删除</button></td></tr><% }); %>
         </tbody>
-      </table>
-    </div>
+      </table></div>
+    </section>
 
-    <!-- 数据备份 -->
-    <div class="card">
-      <div class="card-title">💾 数据备份</div>
-      <p style="color:#666;font-size:13px;margin-bottom:12px;">
-        服务器每日 03:00 自动备份（保留最近14份）。也可立即备份下载到本地留存。
-      </p>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-        <button class="btn btn-primary" onclick="location.href='/api/backup/download'">⬇ 立即备份并下载</button>
-        <button class="btn btn-outline" onclick="loadBackups()">查看历史备份</button>
-      </div>
-      <div id="backupList" style="margin-top:12px;"></div>
-    </div>
-  </div>
+    <section class="backup-utility" aria-labelledby="backupTitle">
+      <div><span class="section-kicker">系统维护</span><h2 id="backupTitle">数据备份</h2></div>
+      <div class="backup-actions"><a class="btn btn-primary" href="/api/backup/download">立即备份并下载</a><button class="btn btn-outline" id="loadBackupsBtn" type="button">历史备份</button></div>
+      <div id="backupList" class="backup-list"></div>
+    </section>
+  </main>
 
-  <script>
+  <script nonce="<%= cspNonce %>">
     // ---- 历史备份列表 ----
     async function loadBackups() {
       const res = await fetch('/api/backups');
       const d = await res.json();
       const box = document.getElementById('backupList');
       if (!d.success || d.backups.length === 0) {
-        box.innerHTML = '<p style="color:#999;font-size:13px;">暂无历史备份（自动备份每日凌晨生成）</p>';
+        box.innerHTML = '<p class="backup-empty">暂无历史备份</p>';
         return;
       }
       box.innerHTML = '<table class="table"><thead><tr><th>备份文件</th><th>大小</th><th>时间</th><th>操作</th></tr></thead><tbody>' +
         d.backups.map(b => `<tr>
-          <td style="font-family:monospace;font-size:12px;">${b.name}</td>
+          <td class="mono-text">${b.name}</td>
           <td>${(b.size / 1024).toFixed(1)} KB</td>
-          <td style="font-size:12px;color:#666;">${b.created_at}</td>
+          <td class="meta-cell">${b.created_at}</td>
           <td><a class="btn btn-outline btn-sm" href="/api/backups/download/${encodeURIComponent(b.name)}">下载</a></td>
         </tr>`).join('') + '</tbody></table>';
     }
@@ -265,31 +156,69 @@
     function renderLogo() {
       const img = document.getElementById('logoPreview');
       img.src = logoImage;
-      img.style.display = logoImage ? 'inline-block' : 'none';
-      document.getElementById('logoRemoveBtn').style.display = logoImage ? '' : 'none';
+      img.classList.toggle('is-hidden', !logoImage);
+      document.getElementById('logoRemoveBtn').classList.toggle('is-hidden', !logoImage);
     }
 
     function renderImgs() {
       const box = document.getElementById('imgList');
-      box.innerHTML = imgArr.map((u, i) => `
-        <div style="position:relative;width:84px;height:84px;border:1px solid #eee;border-radius:8px;overflow:hidden;">
-          <img src="${u}" style="width:100%;height:100%;object-fit:cover;">
-          <div onclick="removeImg(${i})" title="删除" style="position:absolute;top:0;right:0;width:20px;height:20px;background:rgba(0,0,0,.55);color:#fff;text-align:center;line-height:20px;cursor:pointer;font-size:12px;">×</div>
-          ${i === 0 ? '<div style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.45);color:#fff;font-size:10px;text-align:center;">封面</div>' : ''}
-        </div>
-      `).join('') || '<span style="font-size:12px;color:#999;">暂无图片</span>';
+      box.replaceChildren();
+      if (!imgArr.length) {
+        const empty = document.createElement('span');
+        empty.className = 'media-empty';
+        empty.textContent = '暂无图片';
+        box.appendChild(empty);
+        return;
+      }
+      imgArr.forEach((url, index) => {
+        const item = document.createElement('figure');
+        item.className = 'marketing-media-thumb';
+        const image = document.createElement('img');
+        image.src = url;
+        image.alt = index === 0 ? '品牌封面' : `品牌图片 ${index + 1}`;
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'marketing-media-remove';
+        remove.dataset.removeImage = String(index);
+        remove.setAttribute('aria-label', '删除图片');
+        remove.textContent = '×';
+        item.append(image, remove);
+        if (index === 0) {
+          const cover = document.createElement('span');
+          cover.className = 'marketing-cover-label';
+          cover.textContent = '封面';
+          item.appendChild(cover);
+        }
+        box.appendChild(item);
+      });
     }
     function removeImg(i) { imgArr.splice(i, 1); renderImgs(); }
     function removeVideo() { videoUrl = ''; renderVideo(); }
 
     function renderVideo() {
       const el = document.getElementById('videoInfo');
-      el.innerHTML = videoUrl
-        ? `<div style="display:flex;align-items:center;gap:8px;">
-             <a href="${videoUrl}" target="_blank" style="font-size:13px;">🎬 已上传视频</a>
-             <button class="btn btn-outline btn-sm" style="color:var(--danger);" onclick="removeVideo()">删除</button>
-           </div>`
-        : '<span style="font-size:12px;color:#999;">暂无视频</span>';
+      el.replaceChildren();
+      if (!videoUrl) {
+        const empty = document.createElement('span');
+        empty.className = 'media-empty';
+        empty.textContent = '暂无视频';
+        el.appendChild(empty);
+        return;
+      }
+      const row = document.createElement('div');
+      row.className = 'marketing-video-row';
+      const link = document.createElement('a');
+      link.href = videoUrl;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = '查看已上传视频';
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'btn btn-outline btn-sm danger-action';
+      remove.id = 'removeVideoBtn';
+      remove.textContent = '删除';
+      row.append(link, remove);
+      el.appendChild(row);
     }
 
     async function uploadImages() {
@@ -373,7 +302,7 @@
 
     function togglePrizeInputs() {
       const type = document.getElementById('cType').value;
-      document.getElementById('amountRow').style.display = (type === 'red_packet' || type === 'coupon') ? '' : 'none';
+      document.getElementById('amountRow').hidden = !(type === 'red_packet' || type === 'coupon');
     }
 
     function createCampaign() {
@@ -409,8 +338,42 @@
         .then(r => r.json()).then(() => location.reload());
     }
 
+    const themeInput = document.getElementById('themeColor');
+    document.querySelectorAll('.theme-swatch').forEach(swatch => {
+      swatch.addEventListener('click', () => {
+        themeInput.value = swatch.dataset.themeColor;
+        document.querySelectorAll('.theme-swatch').forEach(item => item.classList.toggle('is-selected', item === swatch));
+      });
+    });
+    themeInput.addEventListener('input', () => {
+      document.querySelectorAll('.theme-swatch').forEach(item => item.classList.toggle('is-selected', item.dataset.themeColor.toLowerCase() === themeInput.value.toLowerCase()));
+    });
+
+    document.getElementById('previewH5Btn').addEventListener('click', previewH5);
+    document.getElementById('saveSettingsBtn').addEventListener('click', saveSettings);
+    document.getElementById('chooseLogoBtn').addEventListener('click', () => document.getElementById('logoFile').click());
+    document.getElementById('logoRemoveBtn').addEventListener('click', removeLogo);
+    document.getElementById('logoFile').addEventListener('change', uploadLogo);
+    document.getElementById('chooseImagesBtn').addEventListener('click', () => document.getElementById('imgFiles').click());
+    document.getElementById('imgFiles').addEventListener('change', uploadImages);
+    document.getElementById('chooseVideoBtn').addEventListener('click', () => document.getElementById('videoFile').click());
+    document.getElementById('videoFile').addEventListener('change', uploadVideo);
+    document.getElementById('createCampaignBtn').addEventListener('click', createCampaign);
+    document.getElementById('loadBackupsBtn').addEventListener('click', loadBackups);
+    document.getElementById('cType').addEventListener('change', togglePrizeInputs);
+    document.getElementById('imgList').addEventListener('click', event => {
+      const button = event.target.closest('[data-remove-image]');
+      if (button) removeImg(Number(button.dataset.removeImage));
+    });
+    document.getElementById('videoInfo').addEventListener('click', event => {
+      if (event.target.closest('#removeVideoBtn')) removeVideo();
+    });
+    document.querySelectorAll('.campaign-toggle-btn').forEach(button => button.addEventListener('click', () => toggleCampaign(Number(button.dataset.campaignId))));
+    document.querySelectorAll('.campaign-delete-btn').forEach(button => button.addEventListener('click', () => deleteCampaign(Number(button.dataset.campaignId))));
+
     // 初始化素材区
     document.getElementById('showScanCount').checked = '<%= settings.show_scan_count === undefined || settings.show_scan_count === null ? '1' : settings.show_scan_count %>' !== '0';
+    togglePrizeInputs();
     renderImgs();
     renderVideo();
   </script>

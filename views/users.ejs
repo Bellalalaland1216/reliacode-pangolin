@@ -19,18 +19,19 @@
 <body>
   <%- include('partials/nav', { active: 'users' }) %>
 
-  <div class="container">
-    <div class="card">
+  <main class="container users-page">
+    <header class="page-heading users-page-heading">
+      <div><span class="section-kicker">组织与权限</span><h1>账号管理</h1></div>
+      <span class="users-count"><strong><%= users.length %></strong> 个账号</span>
+    </header>
+    <p class="section-help">账号、品牌、工厂和邀请码在本页统一管理。角色权限与合作方注册规则可在此处展开查看。</p>
+
+    <section class="card management-section management-accounts">
       <div class="card-title split-title">
-        <span>账号管理</span>
+        <span><small>成员</small>账号列表</span>
         <button id="openCreateBtn" class="btn btn-primary btn-sm" type="button"><%- icon('plus') %> 新建账号</button>
       </div>
-      <p class="section-help">
-        角色说明：普通用户=个人溯源查询；平台管理员=全部功能（含品牌管理）；品牌管理员=本品牌的完整独立界面（产品/码/工厂/代理商/发货/预警）；工厂装箱=仅装箱作业（只管理本厂产品）；品牌方=仅发货作业；代理商=仅查看自己的库存与扫码数据。<br>
-        合作方自助注册：在下方「邀请码管理」生成邀请码发给合作工厂/代理商，对方打开登录页点「注册账号」凭码自助注册。<br>
-        <b>多品牌售卖流程：</b>先在「品牌管理」创建品牌 → 在上方「新建账号」选角色「品牌管理员」并绑定该品牌 → 把账号密码交给客户，客户登录后只能看到自己品牌的数据。
-      </p>
-      <table class="table">
+      <div class="table-wrap"><table class="table management-table">
         <thead>
           <tr>
             <th>账号</th><th>姓名</th><th>手机号</th><th>角色</th><th>归属品牌</th><th>绑定工厂</th><th>绑定代理商</th>
@@ -60,38 +61,35 @@
           </tr>
           <% }); %>
         </tbody>
-      </table>
-    </div>
+      </table></div>
+    </section>
 
     <% if (user.role === 'admin') { %>
     <!-- 品牌管理（平台管理员专用） -->
-    <div class="card mt-16">
+    <section class="card mt-16 management-section management-brands">
       <div class="card-title split-title">
-        <span>品牌管理</span>
+        <span><small>数据空间</small>品牌</span>
         <div class="modal-actions">
           <input type="text" id="brandName" class="form-control compact-150-control" placeholder="品牌名称">
           <input type="text" id="brandContact" class="form-control compact-150-control" placeholder="联系人（选填）">
           <button id="createBrandBtn" class="btn btn-primary btn-sm" type="button"><%- icon('plus') %> 新建品牌</button>
         </div>
       </div>
-      <p class="section-help">
-        每个品牌是一套独立的数据空间：产品、码、工厂、代理商、发货、预警互不可见。创建品牌后，在上方「新建账号」选角色「品牌管理员」并绑定该品牌，账号密码交给客户即可。
-      </p>
-      <table class="table">
+      <div class="table-wrap"><table class="table management-table">
         <thead>
           <tr><th>品牌</th><th>联系人</th><th>产品</th><th>工厂</th><th>代理商</th><th>账号</th><th>状态</th><th>创建时间</th><th>操作</th></tr>
         </thead>
         <tbody id="brandBody">
           <tr><td colspan="9" class="text-center muted-text">加载中…</td></tr>
         </tbody>
-      </table>
-    </div>
+      </table></div>
+    </section>
     <% } %>
 
     <!-- 工厂列表（admin/brand/brand_staff 可管理） -->
-    <div class="card mt-16">
+    <section class="card mt-16 management-section management-factories">
       <div class="card-title split-title">
-        <span>工厂管理</span>
+        <span><small>生产组织</small>工厂</span>
         <div class="flex-actions-wrap">
           <% if (user.role === 'admin') { %>
           <select id="factoryBrand" class="form-control compact-auto-control">
@@ -104,11 +102,8 @@
           <button id="addFactoryBtn" class="btn btn-primary btn-sm" type="button"><%- icon('plus') %> 新建工厂</button>
         </div>
       </div>
-      <p class="section-help">
-        工厂用于组织装箱团队，归属于品牌。<strong>码只归属品牌</strong>，品牌旗下任意工厂账号都能扫码装箱，无需按工厂区分。删除工厂时，相关产品/箱码/子码的工厂引用会自动清空（码本身保留），但若工厂下还有账号则需先解绑。
-      </p>
       <div class="table-wrap">
-      <table class="table">
+      <table class="table management-table">
         <thead>
           <tr><th>ID</th><th>工厂名</th><th>联系人</th><th>归属品牌</th><th>账号数</th><th>创建时间</th><th class="action-column">操作</th></tr>
         </thead>
@@ -117,12 +112,12 @@
         </tbody>
       </table>
       </div>
-    </div>
+    </section>
 
     <!-- 邀请码管理 -->
-    <div class="card mt-16">
+    <section class="card mt-16 management-section management-invitations">
       <div class="card-title split-title">
-        <span>邀请码管理</span>
+        <span><small>合作方注册</small>邀请码</span>
         <div class="flex-actions-wrap">
           <% if (user.role === 'admin') { %>
           <select id="invBrand" class="form-control compact-auto-control">
@@ -147,10 +142,7 @@
           <button id="genInviteBtn" class="btn btn-primary btn-sm" type="button"><%- icon('plus') %> 生成邀请码</button>
         </div>
       </div>
-      <p class="section-help">
-        生成后把注册链接或邀请码发给合作方：对方打开 <b>/register</b> 页面凭码自助注册，注册即用，每个码只能用一次。<% if (user.role === 'admin') { %>平台管理员生成时请先选择归属品牌，否则该码注册的账号将不属于任何品牌。<% } %>
-      </p>
-      <table class="table">
+      <div class="table-wrap"><table class="table management-table">
         <thead>
           <tr><th>邀请码</th><th>类型</th><th>归属品牌</th><th>归属工厂</th><th>备注</th><th>状态</th><th>注册账号</th><th>注册人姓名</th><th>生成时间</th><th>操作</th></tr>
         </thead>
@@ -179,9 +171,9 @@
           </tr>
           <% }); %>
         </tbody>
-      </table>
-    </div>
-  </div>
+      </table></div>
+    </section>
+  </main>
 
   <!-- 新建/编辑弹窗 -->
   <div class="modal-mask" id="mask">

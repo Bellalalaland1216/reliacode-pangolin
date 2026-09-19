@@ -51,7 +51,6 @@
       <section class="product-modal" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
         <header class="product-modal-header">
           <div>
-            <p class="product-modal-eyebrow">产品配置</p>
             <h2 id="productModalTitle">新增产品</h2>
           </div>
           <button id="closeProductModalBtn" class="icon-button" type="button" aria-label="关闭新增产品窗口"><%- icon('xmark') %></button>
@@ -68,17 +67,15 @@
           <form id="productForm" class="product-workspace" novalidate>
             <div class="product-editor-pane">
               <section class="product-step-panel is-active" data-panel="basic">
-                <div class="section-kicker">基础资料</div>
-                <h3>定义消费者识别的产品</h3>
+                <h3>基本信息</h3>
                 <div class="product-form-grid">
                   <div class="form-group product-grid-wide">
                     <label for="pName">产品名称</label>
                     <input type="text" id="pName" class="form-control" placeholder="例如：谷饲牛腩" maxlength="80" required autocomplete="off">
                   </div>
                   <div class="form-group">
-                    <label for="pEna13">ENA13 条形码编号</label>
+                    <label for="pEna13">EAN-13 条形码</label>
                     <input type="text" id="pEna13" class="form-control" placeholder="例如：6978147612841" maxlength="32" inputmode="numeric" autocomplete="off">
-                    <p class="form-help">全球通用 EAN-13 商品条码，选填。</p>
                   </div>
                   <div class="form-group">
                     <label for="pSpec">规格</label>
@@ -112,22 +109,18 @@
               </section>
 
               <section class="product-step-panel" data-panel="media" hidden>
-                <div class="section-kicker">产品图片</div>
-                <h3>建立可信、清晰的产品印象</h3>
-                <p class="form-help">支持 JPEG、PNG、WebP，最多 6 张，每张不超过 5 MB。第一张将作为默认封面。</p>
+                <h3>产品图片</h3>
                 <label class="product-upload-zone" for="pImages">
                   <%- icon('camera') %>
                   <strong>选择或拖放产品图片</strong>
-                  <span>图片内容可保留真实色彩，界面控件保持黑白。</span>
                 </label>
                 <input id="pImages" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" multiple>
                 <div id="productImageList" class="product-image-list" aria-live="polite"></div>
+                <details class="product-help"><summary>图片要求</summary><p>JPEG、PNG 或 WebP，最多 6 张，每张不超过 5 MB；第一张作为封面。</p></details>
               </section>
 
               <section class="product-step-panel" data-panel="trace" hidden>
-                <div class="section-kicker">溯源流程</div>
-                <h3>选择消费者可见的履历阶段</h3>
-                <p class="form-help">勾选要公开的阶段，并可为每个阶段补充文字说明和图片（可选，有就填）。</p>
+                <h3>溯源流程</h3>
                 <div class="trace-stage-list">
                   <% [['origin','原料来源','展示原料供应方及模糊化产地'],['processing','加工生产','展示加工节点和生产时间'],['quality','质量检验','展示检验结论及公开凭证'],['warehouse','仓储入库','展示入库节点和时间'],['shipping','物流发货','展示流通过程中的关键节点']].forEach((stage, index) => { %>
                   <div class="trace-stage-row" data-stage="<%= stage[0] %>">
@@ -146,15 +139,14 @@
                   </div>
                   <% }); %>
                 </div>
+                <details class="product-help"><summary>填写说明</summary><p>勾选消费者可见的阶段；阶段说明和图片均可选填。</p></details>
               </section>
 
               <section class="product-step-panel" data-panel="campaign" hidden>
-                <div class="section-kicker">营销内容</div>
-                <h3>添加与验证信息明确分隔的品牌活动</h3>
+                <h3>营销内容</h3>
                 <div class="form-group">
                   <label for="campaignImage">活动图片</label>
                   <input id="campaignImage" class="form-control" type="file" accept="image/jpeg,image/png,image/webp">
-                  <p class="form-help">支持 JPEG、PNG、WebP，单张不超过 5 MB。</p>
                 </div>
                 <div class="form-group">
                   <label for="campaignTitle">活动标题</label>
@@ -168,7 +160,7 @@
                   <label for="campaignUrl">活动链接</label>
                   <input id="campaignUrl" class="form-control" type="url" inputmode="url" placeholder="https://example.com/activity">
                 </div>
-                <p class="form-help">营销内容保存后进入待审核状态，审核通过前不会出现在公开扫码页。</p>
+                <details class="product-help"><summary>发布说明</summary><p>图片支持 JPEG、PNG、WebP，单张不超过 5 MB。营销内容审核通过后才会公开。</p></details>
                 <div id="marketingReviewPanel" class="marketing-review-panel" hidden>
                   <span>审核状态：<strong id="marketingReviewStatus">待审核</strong></span>
                   <% if (user && (user.role === 'admin' || user.role === 'brand')) { %>
@@ -178,8 +170,24 @@
               </section>
 
               <section class="product-step-panel product-mobile-preview-panel" data-panel="preview" hidden>
-                <div class="section-kicker">扫码预览</div>
-                <h3>消费者页面实时预览</h3>
+                <h3>发布前检查</h3>
+                <div class="product-preview-summary">
+                  <div class="preview-summary-lead">
+                    <span class="preview-summary-badge">扫码页已生成</span>
+                    <strong id="previewSummaryName">未填写产品名称</strong>
+                    <p id="previewSummarySpec">填写基本信息后会在这里汇总。</p>
+                  </div>
+                  <dl class="preview-summary-stats">
+                    <div><dt>产品图片</dt><dd id="previewSummaryImages">0 张</dd></div>
+                    <div><dt>溯源节点</dt><dd id="previewSummaryTrace">0 项</dd></div>
+                    <div><dt>营销内容</dt><dd id="previewSummaryCampaign">未设置</dd></div>
+                  </dl>
+                  <div class="preview-summary-checks">
+                    <span id="previewCheckName">○ 产品名称</span>
+                    <span id="previewCheckTrace">○ 溯源流程</span>
+                    <span id="previewCheckMedia">○ 产品图片</span>
+                  </div>
+                </div>
                 <div id="mobilePreviewMount"></div>
               </section>
             </div>
@@ -578,6 +586,26 @@
       campaign.hidden = !campaignTitle && !campaignDescription;
       document.getElementById('previewCampaignTitle').textContent = campaignTitle;
       document.getElementById('previewCampaignDescription').textContent = campaignDescription;
+
+      const summaryName = document.getElementById('previewSummaryName');
+      if (summaryName) {
+        const productName = document.getElementById('pName').value.trim();
+        const productSpec = document.getElementById('pSpec').value.trim();
+        const traceCount = document.querySelectorAll('input[name="traceStage"]:checked').length;
+        summaryName.textContent = productName || '未填写产品名称';
+        document.getElementById('previewSummarySpec').textContent = productSpec || '规格尚未填写';
+        document.getElementById('previewSummaryImages').textContent = `${productImages.length} 张`;
+        document.getElementById('previewSummaryTrace').textContent = `${traceCount} 项`;
+        document.getElementById('previewSummaryCampaign').textContent = campaignTitle || campaignDescription ? '已设置' : '未设置';
+        const setCheck = (id, ready, label) => {
+          const node = document.getElementById(id);
+          node.textContent = `${ready ? '✓' : '○'} ${label}`;
+          node.classList.toggle('is-ready', ready);
+        };
+        setCheck('previewCheckName', !!productName, '产品名称');
+        setCheck('previewCheckTrace', traceCount > 0, '溯源流程');
+        setCheck('previewCheckMedia', productImages.length > 0, '产品图片');
+      }
     }
 
     function renderTraceImagePreview(stage) {

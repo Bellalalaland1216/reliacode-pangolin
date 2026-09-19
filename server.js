@@ -4631,6 +4631,13 @@ app.get('/profile', requireLogin, (req, res) => {
   res.render('profile', { user: req.session.user, roleNames: ROLE_NAMES });
 });
 
+app.post('/api/profile/password/verify', requireLogin, (req, res) => {
+  const user = db.prepare('SELECT password_hash FROM users WHERE id=?').get(req.session.user.id);
+  const valid = !!user && verifyPassword(String(req.body.old_password || ''), user.password_hash);
+  if (!valid) return res.status(400).json({ success: false, msg: '原密码错误' });
+  res.json({ success: true });
+});
+
 app.post('/api/profile/password', requireLogin, (req, res) => {
   const { old_password, new_password } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.session.user.id);
