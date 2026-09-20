@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+  <%- include('partials/boot-head') %>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>品牌营销 - <%= brand %></title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
+  <%- include('partials/boot-loader') %>
   <%- include('partials/nav', { active: 'settings' }) %>
 
   <main class="container settings-page">

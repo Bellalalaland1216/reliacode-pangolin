@@ -1898,3 +1898,40 @@ html { color-scheme: light; }
   outline-offset: 2px !important;
   box-shadow: 0 0 0 4px var(--wood-focus-ring) !important;
 }
+
+
+/* Balanced quick-action rows v6: every incomplete row uses the full available width. */
+.app-grid.app-grid-balanced.app-grid-cols-2,
+.app-grid.app-grid-balanced.app-grid-cols-3,
+.app-grid.app-grid-balanced.app-grid-cols-4 {
+  width: 100% !important;
+  grid-template-columns: repeat(12, minmax(0, 1fr)) !important;
+  gap: 1px !important;
+  padding: 1px 0 !important;
+  border: 0 !important;
+  background: var(--wood-line) !important;
+}
+.app-grid.app-grid-balanced .app-tile {
+  min-height: 78px;
+  border: 0 !important;
+  background: rgba(249, 255, 252, .9) !important;
+}
+.app-grid.app-grid-balanced .app-tile[hidden] { display: none !important; }
+.app-grid.app-grid-balanced .app-tile:hover { background: rgba(222, 244, 235, .92) !important; }
+.app-grid.app-grid-cols-4 .app-tile { grid-column: span 3; }
+.app-grid.app-grid-cols-4.app-grid-rem-1 .app-grid-tail { grid-column: span 12; }
+.app-grid.app-grid-cols-4.app-grid-rem-2 .app-grid-tail { grid-column: span 6; }
+.app-grid.app-grid-cols-4.app-grid-rem-3 .app-grid-tail { grid-column: span 4; }
+.app-grid.app-grid-cols-3 .app-tile { grid-column: span 4; }
+.app-grid.app-grid-cols-3.app-grid-rem-1 .app-grid-tail { grid-column: span 12; }
+.app-grid.app-grid-cols-3.app-grid-rem-2 .app-grid-tail { grid-column: span 6; }
+.app-grid.app-grid-cols-2 .app-tile { grid-column: span 6; }
+.app-grid.app-grid-cols-2.app-grid-rem-1 .app-grid-tail { grid-column: span 12; }
+
+/* The initial load is fully opaque; request overlays after boot keep the lighter glass treatment. */
+.workspace-loading.is-booting {
+  z-index: 10000;
+  background: #effbf6;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}

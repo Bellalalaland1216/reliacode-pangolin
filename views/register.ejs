@@ -2,6 +2,7 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
+  <%- include('partials/boot-head') %>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light">
@@ -13,6 +14,7 @@
   <script src="/js/register-glass.js?v=20260917fit2" defer></script>
 </head>
 <body>
+  <%- include('partials/boot-loader') %>
   <main class="register-page">
     <div class="register-shell" data-mode="<%= registrationMode %>">
       <h1 class="sr-only">注册穿山甲溯源大师账号</h1>

@@ -23,6 +23,8 @@
   function ensureOverlay() {
     if (overlay && overlay.isConnected) return overlay;
     if (!document.body) return null;
+    overlay = document.getElementById('workspaceBootLoader');
+    if (overlay) return overlay;
     overlay = document.createElement('div');
     overlay.className = 'workspace-loading';
     overlay.setAttribute('role', 'status');
@@ -144,6 +146,32 @@
     });
   }
 
+  function balanceActionGrids() {
+    const viewportWidth = window.innerWidth;
+    document.querySelectorAll('.app-grid').forEach(grid => {
+      const items = Array.from(grid.children).filter(item =>
+        item.classList.contains('app-tile') && !item.hidden && getComputedStyle(item).display !== 'none'
+      );
+      grid.classList.remove('app-grid-balanced', 'app-grid-cols-2', 'app-grid-cols-3', 'app-grid-cols-4', 'app-grid-rem-0', 'app-grid-rem-1', 'app-grid-rem-2', 'app-grid-rem-3');
+      grid.querySelectorAll('.app-grid-tail').forEach(item => item.classList.remove('app-grid-tail'));
+      if (!items.length) return;
+
+      let columns = viewportWidth <= 768 ? 2 : viewportWidth <= 1100 ? 3 : 4;
+      if (viewportWidth > 1100 && items.length % 3 === 0 && items.length % 4 !== 0) columns = 3;
+      const remainder = items.length % columns;
+      grid.classList.add('app-grid-balanced', `app-grid-cols-${columns}`, `app-grid-rem-${remainder}`);
+      if (remainder) items.slice(-remainder).forEach(item => item.classList.add('app-grid-tail'));
+    });
+  }
+
+  function bindBalancedGridResize() {
+    let resizeFrame = 0;
+    window.addEventListener('resize', () => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(balanceActionGrids);
+    }, { passive: true });
+  }
+
   function bindNavigationLoading() {
     document.addEventListener('click', event => {
       const link = event.target.closest('a[href]');
@@ -166,6 +194,8 @@
   function init() {
     foldHelp();
     replaceLoadingCopy(document.body);
+    balanceActionGrids();
+    bindBalancedGridResize();
     bindNavigationLoading();
     const observer = new MutationObserver(records => {
       records.forEach(record => record.addedNodes.forEach(replaceLoadingCopy));
