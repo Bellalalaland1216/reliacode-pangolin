@@ -3,12 +3,12 @@
 
   const elephantMarkup = (small = false) => `
     <span class="${small ? 'inline-elephant' : 'walking-elephant'}" aria-hidden="true">
-      <svg viewBox="0 0 160 122" focusable="false">
-        <ellipse class="elephant-shadow" cx="82" cy="116" rx="50" ry="5.5"></ellipse>
+      <svg viewBox="0 0 569 458" focusable="false">
+        <ellipse class="elephant-shadow" cx="286" cy="451" rx="168" ry="7"></ellipse>
         <g class="elephant-figure">
-          <path class="elephant-body" d="M48 18C62 7 82 3 98 8c17 5 27 20 27 38 15 4 26 15 31 30 5 15 1 29-7 40h-30c0-15-7-24-18-24s-19 9-19 24H57V83c0-20-9-34-19-34S22 61 22 76c0 15 5 25 9 31 4 7 0 12-7 12C12 119 4 105 4 85V55c0-20 14-32 34-34 4 0 7-1 10-3Z"></path>
-          <circle class="elephant-eye" cx="45" cy="43" r="4"></circle>
-          <path class="elephant-ear" d="M74 59c25 1 41-13 46-34"></path>
+          <image class="elephant-art elephant-leg elephant-leg-rear" href="/images/elephant-loader-rear.webp?v=20260920-exact-v2" width="569" height="458" preserveAspectRatio="xMidYMid meet"></image>
+          <image class="elephant-art elephant-leg elephant-leg-front" href="/images/elephant-loader-front.webp?v=20260920-exact-v2" width="569" height="458" preserveAspectRatio="xMidYMid meet"></image>
+          <image class="elephant-art elephant-art-core" href="/images/elephant-loader-body.webp?v=20260920-exact-v2" width="569" height="458" preserveAspectRatio="xMidYMid meet"></image>
         </g>
       </svg>
     </span>`;
@@ -27,7 +27,7 @@
     overlay.setAttribute('role', 'status');
     overlay.setAttribute('aria-live', 'polite');
     overlay.setAttribute('aria-label', '正在处理');
-    overlay.innerHTML = `<div class="workspace-loading-inner">${elephantMarkup()}<span>正在处理</span></div>`;
+    overlay.innerHTML = `<div class="workspace-loading-inner">${elephantMarkup()}</div>`;
     document.body.appendChild(overlay);
     return overlay;
   }
@@ -140,7 +140,8 @@
       const value = node.textContent.trim();
       if (!/^(加载中|正在加载|正在查询|正在生成)(…|\.\.\.)?$/.test(value)) return;
       node.dataset.elephantLoading = 'true';
-      node.innerHTML = `<span class="inline-loading-content">${elephantMarkup(true)}<span>${value.replace(/(…|\.\.\.)$/, '')}</span></span>`;
+      node.setAttribute('aria-label', value.replace(/(…|\.\.\.)$/, ''));
+      node.innerHTML = `<span class="inline-loading-content">${elephantMarkup(true)}</span>`;
     });
   }
 

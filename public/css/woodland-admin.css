@@ -925,30 +925,60 @@ button[type="submit"].topbar-logout-button {
   font-weight: 680;
   letter-spacing: .06em;
 }
-.walking-elephant { display: block; width: 112px; height: 84px; }
+.walking-elephant { display: block; width: 136px; height: 110px; }
 .walking-elephant svg,
 .inline-elephant svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.elephant-body { fill: #07513d; }
-.elephant-eye { fill: #fff; }
-.elephant-ear { fill: none; stroke: #fff; stroke-width: 6.5; stroke-linecap: butt; }
-.elephant-shadow { fill: rgba(7, 81, 61, .14); animation: elephant-shadow-step .72s ease-in-out infinite; transform-origin: center; }
-.elephant-figure { animation: elephant-body-step .72s ease-in-out infinite; transform-origin: 50% 92%; }
+.elephant-art { pointer-events: none; }
+.elephant-leg {
+  transform-box: fill-box;
+  will-change: transform;
+}
+.elephant-leg-front {
+  transform-origin: 45% 55%;
+  animation: elephant-leg-front .72s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+.elephant-leg-rear {
+  transform-origin: 77% 67%;
+  animation: elephant-leg-rear .72s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+.elephant-shadow {
+  fill: rgba(7, 81, 61, .12);
+  transform-origin: center;
+  animation: elephant-shadow-step .72s ease-in-out infinite;
+}
+.elephant-figure {
+  transform-origin: 50% 84%;
+  animation: elephant-body-step .72s ease-in-out infinite;
+}
 @keyframes elephant-body-step {
-  0%, 100% { transform: translate(-1px, 0) rotate(-.6deg); }
-  50% { transform: translate(1px, -5px) rotate(.6deg); }
+  0%, 100% { transform: translateY(0) rotate(-.25deg); }
+  25%, 75% { transform: translateY(-3px) rotate(0); }
+  50% { transform: translateY(0) rotate(.25deg); }
+}
+@keyframes elephant-leg-front {
+  0%, 50%, 100% { transform: translate(0, 0) rotate(0); }
+  25% { transform: translate(-7px, -5px) rotate(2deg); }
+  75% { transform: translate(6px, 1px) rotate(-1.4deg); }
+}
+@keyframes elephant-leg-rear {
+  0%, 50%, 100% { transform: translate(0, 0) rotate(0); }
+  25% { transform: translate(6px, 1px) rotate(-1.4deg); }
+  75% { transform: translate(-7px, -5px) rotate(2deg); }
 }
 @keyframes elephant-shadow-step {
-  0%, 100% { transform: scaleX(1); opacity: .8; }
-  50% { transform: scaleX(.82); opacity: .48; }
+  0%, 100% { transform: scaleX(1); opacity: .72; }
+  50% { transform: scaleX(.84); opacity: .42; }
 }
 .inline-loading-content {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
   color: var(--wood-muted);
 }
-.inline-elephant { display: inline-block; width: 34px; height: 25px; }
-.inline-elephant .elephant-figure { animation-duration: .72s; }
+.inline-elephant { display: inline-block; width: 42px; height: 34px; }
+.inline-elephant .elephant-figure,
+.inline-elephant .elephant-leg,
+.inline-elephant .elephant-shadow { animation-duration: .82s; }
 
 @media (min-width: 769px) {
   .logout-menu { display: none !important; }
@@ -1253,6 +1283,7 @@ main.users-page > section.management-invitations.card { border: 1px dashed #7fb6
 }
 @media (prefers-reduced-motion: reduce) {
   .elephant-figure,
+  .elephant-leg,
   .elephant-shadow { animation-duration: 1.8s !important; }
 }
 

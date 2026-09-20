@@ -1,3 +1,6 @@
+<link rel="preload" href="/images/elephant-loader-body.webp?v=20260920-exact-v2" as="image" type="image/webp">
+<link rel="preload" href="/images/elephant-loader-front.webp?v=20260920-exact-v2" as="image" type="image/webp">
+<link rel="preload" href="/images/elephant-loader-rear.webp?v=20260920-exact-v2" as="image" type="image/webp">
 <style nonce="<%= cspNonce %>">
   html.page-booting { overflow: hidden; }
   html.page-booting body { overflow: hidden !important; }
@@ -11,18 +14,22 @@
   html.page-booting #workspaceBootLoader,
   #workspaceBootLoader.is-visible { visibility: visible; opacity: 1; pointer-events: auto; }
   #workspaceBootLoader.is-booting { background: #effbf6; }
-  #workspaceBootLoader .workspace-loading-inner { display: grid; justify-items: center; gap: 8px; font: 680 13px/1.4 system-ui, sans-serif; letter-spacing: .06em; }
-  #workspaceBootLoader .walking-elephant { display: block; width: 112px; height: 84px; }
+  #workspaceBootLoader .workspace-loading-inner { display: grid; place-items: center; }
+  #workspaceBootLoader .walking-elephant { display: block; width: 136px; height: 110px; }
   #workspaceBootLoader svg { display: block; width: 100%; height: 100%; overflow: visible; }
-  #workspaceBootLoader .elephant-body { fill: #07513d; }
-  #workspaceBootLoader .elephant-eye { fill: #fff; }
-  #workspaceBootLoader .elephant-ear { fill: none; stroke: #fff; stroke-width: 6.5; stroke-linecap: butt; }
-  #workspaceBootLoader .elephant-shadow { fill: rgba(7,81,61,.14); animation: boot-elephant-shadow .62s ease-in-out infinite; transform-origin: center; }
-  #workspaceBootLoader .elephant-figure { animation: boot-elephant-body .72s ease-in-out infinite; transform-origin: 50% 92%; }
-  @keyframes boot-elephant-body { 0%,100%{transform:translate(-1px,0) rotate(-.6deg)} 50%{transform:translate(1px,-5px) rotate(.6deg)} }
-  @keyframes boot-elephant-shadow { 0%,100%{transform:scaleX(1);opacity:.8} 50%{transform:scaleX(.82);opacity:.48} }
+  #workspaceBootLoader .elephant-art { pointer-events: none; }
+  #workspaceBootLoader .elephant-leg { transform-box: fill-box; will-change: transform; }
+  #workspaceBootLoader .elephant-leg-front { transform-origin:45% 55%; animation:boot-elephant-leg-front .72s cubic-bezier(.45,0,.55,1) infinite; }
+  #workspaceBootLoader .elephant-leg-rear { transform-origin:77% 67%; animation:boot-elephant-leg-rear .72s cubic-bezier(.45,0,.55,1) infinite; }
+  #workspaceBootLoader .elephant-shadow { fill:rgba(7,81,61,.12); transform-origin:center; animation:boot-elephant-shadow .72s ease-in-out infinite; }
+  #workspaceBootLoader .elephant-figure { transform-origin:50% 84%; animation:boot-elephant-body .72s ease-in-out infinite; }
+  @keyframes boot-elephant-body { 0%,100%{transform:translateY(0) rotate(-.25deg)} 25%,75%{transform:translateY(-3px) rotate(0)} 50%{transform:translateY(0) rotate(.25deg)} }
+  @keyframes boot-elephant-leg-front { 0%,50%,100%{transform:translate(0,0) rotate(0)} 25%{transform:translate(-7px,-5px) rotate(2deg)} 75%{transform:translate(6px,1px) rotate(-1.4deg)} }
+  @keyframes boot-elephant-leg-rear { 0%,50%,100%{transform:translate(0,0) rotate(0)} 25%{transform:translate(6px,1px) rotate(-1.4deg)} 75%{transform:translate(-7px,-5px) rotate(2deg)} }
+  @keyframes boot-elephant-shadow { 0%,100%{transform:scaleX(1);opacity:.72} 50%{transform:scaleX(.84);opacity:.42} }
   @media (prefers-reduced-motion: reduce) {
     #workspaceBootLoader .elephant-figure,
+    #workspaceBootLoader .elephant-leg,
     #workspaceBootLoader .elephant-shadow { animation-duration: 1.25s !important; }
   }
   @media print {
