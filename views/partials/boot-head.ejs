@@ -14,23 +14,15 @@
   #workspaceBootLoader .workspace-loading-inner { display: grid; justify-items: center; gap: 8px; font: 680 13px/1.4 system-ui, sans-serif; letter-spacing: .06em; }
   #workspaceBootLoader .walking-elephant { display: block; width: 112px; height: 84px; }
   #workspaceBootLoader svg { display: block; width: 100%; height: 100%; overflow: visible; }
-  #workspaceBootLoader .elephant-body,
-  #workspaceBootLoader .elephant-leg { fill: #07513d; }
+  #workspaceBootLoader .elephant-body { fill: #07513d; }
   #workspaceBootLoader .elephant-eye { fill: #fff; }
-  #workspaceBootLoader .elephant-ear { fill: none; stroke: #fff; stroke-width: 6; stroke-linecap: round; }
-  #workspaceBootLoader .elephant-tail { fill: none; stroke: #07513d; stroke-width: 6; stroke-linecap: round; }
+  #workspaceBootLoader .elephant-ear { fill: none; stroke: #fff; stroke-width: 6.5; stroke-linecap: butt; }
   #workspaceBootLoader .elephant-shadow { fill: rgba(7,81,61,.14); animation: boot-elephant-shadow .62s ease-in-out infinite; transform-origin: center; }
-  #workspaceBootLoader .elephant-figure { animation: boot-elephant-body .62s ease-in-out infinite; transform-origin: 50% 85%; }
-  #workspaceBootLoader .elephant-leg { transform-box: fill-box; transform-origin: center top; }
-  #workspaceBootLoader .elephant-leg-a { animation: boot-elephant-leg-a .62s ease-in-out infinite; }
-  #workspaceBootLoader .elephant-leg-b { animation: boot-elephant-leg-b .62s ease-in-out infinite; }
-  @keyframes boot-elephant-body { 0%,100%{transform:translateY(0) rotate(-.7deg)} 50%{transform:translateY(-5px) rotate(.7deg)} }
-  @keyframes boot-elephant-leg-a { 0%,100%{transform:translate(-3px,0) rotate(5deg)} 50%{transform:translate(4px,3px) rotate(-6deg)} }
-  @keyframes boot-elephant-leg-b { 0%,100%{transform:translate(4px,3px) rotate(-6deg)} 50%{transform:translate(-3px,0) rotate(5deg)} }
+  #workspaceBootLoader .elephant-figure { animation: boot-elephant-body .72s ease-in-out infinite; transform-origin: 50% 92%; }
+  @keyframes boot-elephant-body { 0%,100%{transform:translate(-1px,0) rotate(-.6deg)} 50%{transform:translate(1px,-5px) rotate(.6deg)} }
   @keyframes boot-elephant-shadow { 0%,100%{transform:scaleX(1);opacity:.8} 50%{transform:scaleX(.82);opacity:.48} }
   @media (prefers-reduced-motion: reduce) {
     #workspaceBootLoader .elephant-figure,
-    #workspaceBootLoader .elephant-leg,
     #workspaceBootLoader .elephant-shadow { animation-duration: 1.25s !important; }
   }
   @media print {
