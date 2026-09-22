@@ -14,6 +14,22 @@
     .modal-mask.show { display:flex; }
     .modal { background:rgba(250,255,252,.96); border-radius:28px 8px 28px 8px; padding:30px; width:560px; max-width:100%; max-height:90vh; overflow:auto; box-shadow:0 28px 80px rgba(8,70,52,.2); }
     .modal h3 { margin-bottom:22px; font-size:24px; }
+    .brand-modal { width:min(760px,100%); }
+    .brand-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+    .brand-factory-picker { margin-top:18px; padding:18px; border:1px solid rgba(15,105,79,.2); border-radius:20px 8px 20px 8px; background:rgba(230,248,241,.72); }
+    .brand-factory-picker-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:12px; }
+    .brand-factory-picker-head strong { color:#0b4e3c; font-size:17px; }
+    .brand-factory-count { color:#28705c; font-size:14px; font-weight:700; }
+    .brand-factory-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; max-height:280px; overflow:auto; padding:2px; }
+    .brand-factory-option { display:flex; align-items:center; gap:11px; min-height:52px; padding:12px 14px; border:1px solid rgba(15,105,79,.18); border-radius:15px 5px 15px 5px; background:rgba(255,255,255,.82); cursor:pointer; transition:.18s ease; }
+    .brand-factory-option:hover { border-color:rgba(15,105,79,.45); transform:translateY(-1px); }
+    .brand-factory-option:has(input:checked) { border-color:#14815f; background:#e4f7ee; box-shadow:inset 4px 0 0 #14815f; }
+    .brand-factory-option input { width:19px; height:19px; accent-color:#14815f; }
+    .brand-factory-option span { color:#174b3d; font-size:15px; font-weight:700; }
+    .brand-factory-empty { grid-column:1/-1; padding:24px; color:#52776c; text-align:center; }
+    .brand-factory-list { display:flex; flex-wrap:wrap; gap:6px; min-width:180px; }
+    .brand-factory-pill { display:inline-flex; align-items:center; min-height:30px; padding:5px 11px; border-radius:999px; background:#e4f5ee; color:#126449; font-size:14px; font-weight:700; white-space:nowrap; }
+    @media (max-width:760px) { .brand-form-grid,.brand-factory-grid { grid-template-columns:1fr; } .brand-modal { padding:22px; } }
   </style>
   <link rel="stylesheet" href="/css/clawmaster.css?v=20260903a">
 </head>
@@ -76,11 +92,7 @@
     <section class="card mt-16 management-section management-brands" id="brandSection">
       <header class="management-section-head">
         <h2>品牌</h2>
-        <div class="modal-actions">
-          <input type="text" id="brandName" class="form-control compact-150-control" placeholder="品牌名称">
-          <input type="text" id="brandContact" class="form-control compact-150-control" placeholder="联系人（选填）">
-          <button id="createBrandBtn" class="btn btn-primary btn-sm" type="button"><%- icon('plus') %> 新建品牌</button>
-        </div>
+        <button id="createBrandBtn" class="btn btn-primary btn-sm" type="button"><%- icon('plus') %> 新建品牌</button>
       </header>
       <div class="table-wrap"><table class="table management-table">
         <thead>
@@ -253,8 +265,40 @@
     </div>
   </div>
 
+  <% if (user.role === 'admin') { %>
+  <div class="modal-mask" id="brandMask" aria-hidden="true">
+    <div class="modal brand-modal" role="dialog" aria-modal="true" aria-labelledby="brandModalTitle">
+      <h3 id="brandModalTitle">新建品牌</h3>
+      <div class="brand-form-grid">
+        <div class="form-group">
+          <label for="brandFormName">品牌名称</label>
+          <input type="text" id="brandFormName" class="form-control" maxlength="80" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="brandFormContact">联系人</label>
+          <input type="text" id="brandFormContact" class="form-control" maxlength="80" autocomplete="off">
+        </div>
+      </div>
+      <div class="brand-factory-picker">
+        <div class="brand-factory-picker-head">
+          <strong>支持的工厂（可多选）</strong>
+          <span id="brandFactoryCount" class="brand-factory-count">已选 0 家</span>
+        </div>
+        <div id="brandFactoryOptions" class="brand-factory-grid"></div>
+      </div>
+      <div class="form-modal-actions">
+        <button id="closeBrandModalBtn" class="btn btn-outline" type="button">取消</button>
+        <button id="saveBrandBtn" class="btn btn-primary" type="button">保存品牌</button>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
   <script nonce="<%= cspNonce %>">
     let editingId = null;
+    let editingBrandId = null;
+    let brandDirectory = [];
+    let factoryDirectory = [];
     const passwordIsValid = value => { const password = String(value || ''); return password.length >= 12 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /[0-9]/.test(password) && /[^A-Za-z0-9\s]/.test(password); };
     function toast(msg, type) {
       const t = document.createElement('div');
@@ -397,81 +441,120 @@
     }
 
     // ===== 品牌管理（平台管理员） =====
+    function brandFactoryMarkup(factories) {
+      if (!factories || !factories.length) return '<span class="secondary-text">暂无关联</span>';
+      return '<div class="brand-factory-list">' + factories.map(factory =>
+        '<span class="brand-factory-pill">' + esc(factory.name) + '</span>'
+      ).join('') + '</div>';
+    }
+    function updateBrandFactoryCount() {
+      const count = document.querySelectorAll('.brand-factory-select:checked').length;
+      const target = document.getElementById('brandFactoryCount');
+      if (target) target.textContent = '已选 ' + count + ' 家';
+    }
+    function renderBrandFactoryOptions(selectedIds) {
+      const wrap = document.getElementById('brandFactoryOptions');
+      if (!wrap) return;
+      const selected = new Set((selectedIds || []).map(Number));
+      if (!factoryDirectory.length) {
+        wrap.innerHTML = '<div class="brand-factory-empty">暂无工厂，可先在下方新建工厂</div>';
+        updateBrandFactoryCount();
+        return;
+      }
+      wrap.innerHTML = factoryDirectory.map(factory => `
+        <label class="brand-factory-option">
+          <input type="checkbox" class="brand-factory-select" value="${Number(factory.id)}" ${selected.has(Number(factory.id)) ? 'checked' : ''}>
+          <span>${esc(factory.name)}</span>
+        </label>`).join('');
+      wrap.querySelectorAll('.brand-factory-select').forEach(input => input.addEventListener('change', updateBrandFactoryCount));
+      updateBrandFactoryCount();
+    }
+    function openBrandModal(brand) {
+      editingBrandId = brand ? Number(brand.id) : null;
+      document.getElementById('brandModalTitle').textContent = brand ? '编辑品牌' : '新建品牌';
+      document.getElementById('brandFormName').value = brand ? (brand.name || '') : '';
+      document.getElementById('brandFormContact').value = brand ? (brand.contact || '') : '';
+      renderBrandFactoryOptions(brand ? brand.factory_ids : []);
+      const mask = document.getElementById('brandMask');
+      mask.classList.add('show');
+      mask.setAttribute('aria-hidden', 'false');
+      setTimeout(() => document.getElementById('brandFormName').focus(), 0);
+    }
+    function closeBrandModal() {
+      const mask = document.getElementById('brandMask');
+      if (!mask) return;
+      mask.classList.remove('show');
+      mask.setAttribute('aria-hidden', 'true');
+      editingBrandId = null;
+    }
     async function loadBrands() {
       const body = document.getElementById('brandBody');
       if (!body) return;
       try {
-        const res = await fetch('/api/brands');
-        const d = await res.json();
-        if (!d.success) { body.innerHTML = '<tr><td colspan="9" class="text-center muted-text">加载失败</td></tr>'; return; }
-        if (!d.brands.length) { body.innerHTML = '<tr><td colspan="9" class="text-center muted-text">暂无品牌，点击右上角新建</td></tr>'; return; }
-        body.innerHTML = d.brands.map(b => `
+        const [brandResponse, factoryResponse] = await Promise.all([fetch('/api/brands'), fetch('/api/factories')]);
+        const [brandData, factoryData] = await Promise.all([brandResponse.json(), factoryResponse.json()]);
+        if (!brandData.success || !factoryData.success) throw new Error('LOAD_FAILED');
+        brandDirectory = brandData.brands || [];
+        factoryDirectory = factoryData.factories || [];
+        if (!brandDirectory.length) {
+          body.innerHTML = '<tr><td colspan="9" class="text-center muted-text">暂无品牌，点击右上角新建</td></tr>';
+          return;
+        }
+        body.innerHTML = brandDirectory.map(brand => `
           <tr>
-            <td class="font-semibold">${esc(b.name)}</td>
-            <td>${esc(b.contact || '-')}</td>
-            <td>${Number(b.product_count) || 0}</td>
-            <td>${Number(b.factory_count) || 0}</td>
-            <td>${Number(b.distributor_count) || 0}</td>
-            <td>${Number(b.user_count) || 0}</td>
-            <td>${b.enabled ? '<span class="tag tag-green">启用</span>' : '<span class="tag tag-red">停用</span>'}</td>
-            <td class="small-text secondary-text">${esc(b.created_at || '-')}</td>
+            <td class="font-semibold">${esc(brand.name)}</td>
+            <td>${esc(brand.contact || '-')}</td>
+            <td>${Number(brand.product_count) || 0}</td>
+            <td>${brandFactoryMarkup(brand.factories)}</td>
+            <td>${Number(brand.distributor_count) || 0}</td>
+            <td>${Number(brand.user_count) || 0}</td>
+            <td>${brand.enabled ? '<span class="tag tag-green">启用</span>' : '<span class="tag tag-red">停用</span>'}</td>
+            <td class="small-text secondary-text">${esc(brand.created_at || '-')}</td>
             <td class="no-wrap">
-              <button class="btn btn-outline btn-sm rename-brand-btn" type="button" data-brand-id="${Number(b.id)}" data-brand-name="${esc(b.name || '')}">改名</button>
-              <button class="btn btn-outline btn-sm toggle-brand-btn ${b.enabled ? 'warning-action' : ''}" type="button" data-brand-id="${Number(b.id)}" data-brand-enabled="${b.enabled ? 0 : 1}">${b.enabled ? '停用' : '启用'}</button>
-              <button class="btn btn-outline btn-sm delete-brand-btn danger-action" type="button" data-brand-id="${Number(b.id)}" data-brand-name="${esc(b.name || '')}">删除</button>
+              <button class="btn btn-outline btn-sm edit-brand-btn" type="button" data-brand-id="${Number(brand.id)}">编辑</button>
+              <button class="btn btn-outline btn-sm toggle-brand-btn ${brand.enabled ? 'warning-action' : ''}" type="button" data-brand-id="${Number(brand.id)}" data-brand-enabled="${brand.enabled ? 0 : 1}">${brand.enabled ? '停用' : '启用'}</button>
+              <button class="btn btn-outline btn-sm delete-brand-btn danger-action" type="button" data-brand-id="${Number(brand.id)}" data-brand-name="${esc(brand.name || '')}">删除</button>
             </td>
           </tr>`).join('');
-        body.querySelectorAll('.rename-brand-btn').forEach(button => {
-          button.addEventListener('click', () => renameBrand(Number(button.dataset.brandId), button.dataset.brandName));
-        });
-        body.querySelectorAll('.toggle-brand-btn').forEach(button => {
-          button.addEventListener('click', () => toggleBrand(Number(button.dataset.brandId), Number(button.dataset.brandEnabled)));
-        });
-        body.querySelectorAll('.delete-brand-btn').forEach(button => {
-          button.addEventListener('click', () => deleteBrand(Number(button.dataset.brandId), button.dataset.brandName));
-        });
-      } catch (e) {
-        body.innerHTML = '<tr><td colspan="9" class="text-center muted-text">加载失败</td></tr>';
+        body.querySelectorAll('.edit-brand-btn').forEach(button => button.addEventListener('click', () =>
+          openBrandModal(brandDirectory.find(brand => Number(brand.id) === Number(button.dataset.brandId)))));
+        body.querySelectorAll('.toggle-brand-btn').forEach(button => button.addEventListener('click', () =>
+          toggleBrand(Number(button.dataset.brandId), Number(button.dataset.brandEnabled))));
+        body.querySelectorAll('.delete-brand-btn').forEach(button => button.addEventListener('click', () =>
+          deleteBrand(Number(button.dataset.brandId), button.dataset.brandName)));
+      } catch (error) {
+        body.innerHTML = '<tr><td colspan="9" class="text-center muted-text">加载失败，请刷新重试</td></tr>';
       }
     }
-    async function createBrand() {
-      const name = document.getElementById('brandName').value.trim();
-      if (!name) { toast('请输入品牌名称', 'error'); return; }
-      const res = await fetch('/api/brands', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ name, contact: document.getElementById('brandContact').value.trim() })
+    async function saveBrand() {
+      const name = document.getElementById('brandFormName').value.trim();
+      if (!name) return toast('请输入品牌名称', 'error');
+      const wasEditing = editingBrandId !== null;
+      const factory_ids = Array.from(document.querySelectorAll('.brand-factory-select:checked')).map(input => Number(input.value));
+      const response = await fetch(editingBrandId ? '/api/brands/' + editingBrandId : '/api/brands', {
+        method: editingBrandId ? 'PUT' : 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ name, contact: document.getElementById('brandFormContact').value.trim(), factory_ids })
       });
-      const d = await res.json();
-      if (d.success) { toast('品牌已创建，刷新页面即可在账号/邀请码中绑定该品牌'); setTimeout(() => location.reload(), 800); }
-      else toast(d.msg || '创建失败', 'error');
-    }
-    async function renameBrand(id, oldName) {
-      const name = prompt('修改品牌名称：', oldName);
-      if (!name || !name.trim() || name.trim() === oldName) return;
-      const res = await fetch('/api/brands/' + id, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ name: name.trim() })
-      });
-      const d = await res.json();
-      if (d.success) { toast('已改名'); setTimeout(() => location.reload(), 500); }
-      else toast(d.msg || '操作失败', 'error');
+      const data = await response.json();
+      if (!data.success) return toast(data.msg || '保存失败', 'error');
+      closeBrandModal();
+      toast(wasEditing ? '品牌已更新' : '品牌已创建');
+      await Promise.all([loadBrands(), loadFactories()]);
     }
     async function toggleBrand(id, enabled) {
-      if (!confirm(enabled ? '停用后该品牌所有账号将无法登录（数据保留），确定停用？' : '确定重新启用该品牌？')) return;
-      const res = await fetch('/api/brands/' + id, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ enabled: !!enabled })
-      });
-      const d = await res.json();
-      if (d.success) { toast('已' + (enabled ? '启用' : '停用')); setTimeout(() => location.reload(), 500); }
-      else toast(d.msg || '操作失败', 'error');
+      if (!confirm(enabled ? '确定重新启用该品牌？' : '停用后该品牌账号将无法登录，确定停用？')) return;
+      const response = await fetch('/api/brands/' + id, { method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ enabled:!!enabled }) });
+      const data = await response.json();
+      if (data.success) { toast(data.msg || '已更新'); await loadBrands(); }
+      else toast(data.msg || '操作失败', 'error');
     }
     async function deleteBrand(id, name) {
       if (!confirm('确定删除空品牌「' + name + '」吗？已有账号或业务历史的品牌不会被删除，只能停用。')) return;
-      const res = await fetch('/api/brands/' + id, { method: 'DELETE' });
-      const d = await res.json();
-      if (d.success) { toast('品牌已删除'); setTimeout(() => location.reload(), 500); }
-      else toast(d.msg || '删除失败', 'error');
+      const response = await fetch('/api/brands/' + id, { method:'DELETE' });
+      const data = await response.json();
+      if (data.success) { toast('品牌已删除'); await loadBrands(); }
+      else toast(data.msg || '删除失败', 'error');
     }
     loadBrands();
     loadFactories();
@@ -484,13 +567,14 @@
         const res = await fetch('/api/factories');
         const d = await res.json();
         if (!d.success) { body.innerHTML = '<tr><td colspan="7" class="text-center muted-text">加载失败</td></tr>'; return; }
-        if (!d.factories.length) { body.innerHTML = '<tr><td colspan="7" class="text-center muted-text">暂无工厂，点击右上角新建</td></tr>'; return; }
-        body.innerHTML = d.factories.map(f => `
+        factoryDirectory = d.factories || [];
+        if (!factoryDirectory.length) { body.innerHTML = '<tr><td colspan="7" class="text-center muted-text">暂无工厂，点击右上角新建</td></tr>'; return; }
+        body.innerHTML = factoryDirectory.map(f => `
           <tr>
             <td>${Number(f.id)}</td>
             <td class="font-semibold">${esc(f.name)}</td>
             <td>${esc(f.contact || '-')}</td>
-            <td>${esc(f.brand_name || '-')}</td>
+            <td>${esc(f.brand_names || f.brand_name || '-')}</td>
             <td id="fc-${f.id}">…</td>
             <td class="small-text secondary-text">${esc(f.created_at || '-')}</td>
             <td class="no-wrap">
@@ -526,7 +610,7 @@
         body: JSON.stringify({ name: name.trim(), contact: contact.trim(), brand_id: brand_id })
       });
       const d = await res.json();
-      if (d.success) { toast('工厂已创建'); loadFactories(); }
+      if (d.success) { toast('工厂已创建'); await Promise.all([loadFactories(), loadBrands()]); }
       else toast(d.msg || '创建失败', 'error');
     }
     async function deleteFactory(id, name) {
@@ -608,7 +692,13 @@
       }
     })();
     const createBrandButton = document.getElementById('createBrandBtn');
-    if (createBrandButton) createBrandButton.addEventListener('click', createBrand);
+    if (createBrandButton) createBrandButton.addEventListener('click', () => openBrandModal(null));
+    const closeBrandModalButton = document.getElementById('closeBrandModalBtn');
+    if (closeBrandModalButton) closeBrandModalButton.addEventListener('click', closeBrandModal);
+    const saveBrandButton = document.getElementById('saveBrandBtn');
+    if (saveBrandButton) saveBrandButton.addEventListener('click', saveBrand);
+    const brandMask = document.getElementById('brandMask');
+    if (brandMask) brandMask.addEventListener('click', event => { if (event.target === brandMask) closeBrandModal(); });
     document.querySelectorAll('.edit-user-btn').forEach(button => {
       button.addEventListener('click', () => openEdit(Number(button.dataset.userId)));
     });

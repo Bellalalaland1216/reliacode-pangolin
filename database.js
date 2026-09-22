@@ -707,6 +707,22 @@ function initDatabase() {
   db.prepare(`INSERT OR IGNORE INTO product_factories (product_id, factory_id)
     SELECT id, factory_id FROM products WHERE factory_id IS NOT NULL`).run();
 
+  // 工厂可同时服务多个品牌。factories.brand_id 继续保留为兼容旧接口的主品牌，
+  // 新增/编辑品牌与权限判断以本关联表为准。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS factory_brands (
+      factory_id INTEGER NOT NULL,
+      brand_id INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (factory_id, brand_id),
+      FOREIGN KEY (factory_id) REFERENCES factories(id) ON DELETE CASCADE,
+      FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_factory_brands_brand ON factory_brands(brand_id, factory_id);
+  `);
+  db.prepare(`INSERT OR IGNORE INTO factory_brands (factory_id, brand_id)
+    SELECT id, brand_id FROM factories WHERE brand_id IS NOT NULL`).run();
+
   console.log('[DB] 数据库初始化完成');
 }
 
