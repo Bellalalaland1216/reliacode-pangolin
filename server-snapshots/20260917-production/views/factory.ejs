@@ -14,6 +14,12 @@
       border-radius:8px; margin-bottom:12px;
     }
     .big-idle, .big-packing, .big-full, .big-error, .big-select { background:#fff; color:#000; border:1px solid #000; }
+    .receipt-confirm-panel { display:flex; align-items:center; justify-content:space-between; gap:18px; margin:16px 0; padding:18px 20px; border:1px solid #82bca9; border-radius:18px; background:#e9f8f1; }
+    .receipt-confirm-panel.is-hidden { display:none; }
+    .receipt-confirm-copy { display:flex; flex-direction:column; gap:4px; color:#0b5f47; }
+    .receipt-confirm-copy strong { font-size:18px; }
+    .receipt-confirm-copy span { font-size:14px; }
+    @media (max-width:700px) { .receipt-confirm-panel { align-items:stretch; flex-direction:column; } }
   </style>
   <link rel="stylesheet" href="/css/clawmaster.css?v=20260917-hardening-v2">
 </head>
@@ -25,7 +31,7 @@
       <div>
         <span class="eyebrow">现场作业</span>
         <h1>工厂装箱</h1>
-        <p>先确认产品和批次，再连续扫描箱码与子码。</p>
+        <p>先选择品牌、工厂、产品和批次，再连续扫描箱码与子码并确认入库。</p>
       </div>
       <form method="POST" action="/logout" class="page-heading-action">
         <button type="submit" class="btn btn-outline btn-sm">退出登录</button>
@@ -35,8 +41,8 @@
       <details class="workflow-tools">
         <summary>查看连续扫码说明</summary>
         <div class="workflow-tools-body"><p class="section-help mb-0">
-        一个框连续扫：<strong>扫箱码（B开头）</strong> → <strong>选产品+箱规</strong>（第一箱，之后自动沿用） → <strong>逐个扫子码（S开头）</strong>自动绑定 → 扫满自动完成，扫下一个箱码开始新一箱。产品不符 / 重复扫 / 多扫都会自动拦截。<br>
-        点<strong>「连续扫码」</strong>后摄像头保持常开：子码一个接一个扫，中途不用再点按钮；本箱扫满后直接把摄像头对准下一个箱码即可开新箱。
+        一个框连续扫：<strong>选择品牌和工厂</strong> → <strong>选择产品、箱规、批次</strong> → <strong>扫箱码（B开头）</strong> → <strong>逐个扫子码（S开头）</strong>自动绑定 → 扫满后<strong>确认入库</strong>。产品不符、重复扫和多扫都会自动拦截。<br>
+        点<strong>「连续扫码」</strong>后摄像头保持常开；本箱扫满会暂停并等待确认入库，确认后再扫描下一箱。
         </p></div>
       </details>
 
@@ -47,8 +53,19 @@
         <span id="productPanelBox" class="product-panel-code"></span>
         <div class="product-selection-grid">
           <div class="form-group mb-0">
+            <label class="text-13" for="selBrand">品牌</label>
+            <select id="selBrand" class="form-control" <%= packingRole === 'admin' ? '' : 'disabled' %>>
+              <option value="">请选择品牌</option>
+              <% brands.forEach(item => { %><option value="<%= item.id %>"><%= item.name %></option><% }); %>
+            </select>
+          </div>
+          <div class="form-group mb-0">
+            <label class="text-13" for="selFactory">本次实际生产工厂</label>
+            <select id="selFactory" class="form-control"><option value="">请先选择品牌</option></select>
+          </div>
+          <div class="form-group mb-0">
             <label class="text-13" for="selProduct">产品</label>
-            <select id="selProduct" class="form-control"><option value="">加载中...</option></select>
+            <select id="selProduct" class="form-control"><option value="">请先选择工厂</option></select>
           </div>
           <div class="form-group mb-0">
             <label class="text-13" for="selBoxSize">箱规（每箱几个）</label>
@@ -58,15 +75,6 @@
             <label class="text-13" for="selBatch">批次号 <span class="required-mark">*</span></label>
             <input type="text" id="selBatch" class="form-control" placeholder="必填，如：20260829">
           </div>
-          <% if (user.role !== 'factory') { %>
-          <div class="form-group mb-0">
-            <label class="text-13" for="selOperationFactory">本次实际生产工厂 <span class="required-mark">*</span></label>
-            <select id="selOperationFactory" class="form-control">
-              <option value="">请选择实际生产工厂</option>
-              <% factories.forEach(factory => { %><option value="<%= factory.id %>"><%= factory.name %></option><% }); %>
-            </select>
-          </div>
-          <% } %>
         </div>
         <div class="flex-actions-wrap">
           <button id="confirmProductBtn" class="btn btn-primary" type="button"><%- icon('check') %> 确认并开始扫码</button>
@@ -163,6 +171,14 @@
           <span id="progressText" class="progress-text">0 / 0</span>
         </div>
         <progress id="progressBar" class="packing-progress" value="0" max="1">0%</progress>
+
+        <div id="confirmReceiptPanel" class="receipt-confirm-panel is-hidden" aria-live="polite">
+          <div class="receipt-confirm-copy">
+            <strong>本箱已扫码完成</strong>
+            <span id="confirmReceiptHint">核对数量后确认入库</span>
+          </div>
+          <button id="confirmReceiptBtn" class="btn btn-primary" type="button"><%- icon('check') %> 确认入库</button>
+        </div>
 
         <!-- 已绑子码列表 -->
         <div class="font-bold mb-8">已绑子码 (<span id="boundCount">0</span>)</div>
@@ -352,11 +368,12 @@
     let cancelStockKind = 'boxed'; // boxed=箱码/装箱子码；nobox=无箱码已入库子码
     let noBoxMode = false;         // 无箱码入库模式开关
     let noBoxInCount = 0;          // 本次会话无箱码入库数量
-    const operationFactorySelect = document.getElementById('selOperationFactory');
-    const operationFactoryId = () => operationFactorySelect ? (parseInt(operationFactorySelect.value) || null) : null;
-    const withOperationFactory = payload => operationFactorySelect
-      ? { ...payload, operation_factory_id: operationFactoryId() }
-      : payload;
+    const packingRole = <%- JSON.stringify(packingRole) %>;
+    const packingFactories = <%- JSON.stringify(factories) %>;
+    const operationFactorySelect = document.getElementById('selFactory');
+    const selectedBrandId = () => parseInt(document.getElementById('selBrand').value) || null;
+    const operationFactoryId = () => parseInt(operationFactorySelect.value) || null;
+    const withOperationFactory = payload => ({ ...payload, brand_id: selectedBrandId(), factory_id: operationFactoryId(), operation_factory_id: operationFactoryId(), factory_id: operationFactoryId(), brand_id: selectedBrandId() });
 
     // 沿用上一箱的产品+箱规（刷新页面也不丢）
     function getLastPack() {
@@ -372,39 +389,56 @@
     updateReadyState();
     setBigStatus('请先选择产品、箱规、批次号并确认后开始装箱', 'big-select', 'cart');
 
-    // 加载本厂可选产品
+    function productMatchesSelection(product) {
+      const brandId = selectedBrandId();
+      const factoryId = operationFactoryId();
+      return !!brandId && !!factoryId && Number(product.brand_id) === brandId && product.factory_ids.includes(factoryId);
+    }
+    function renderProductOptions(selectedId) {
+      const sel = document.getElementById('selProduct');
+      const options = products.filter(productMatchesSelection);
+      sel.innerHTML = '<option value="">' + (operationFactoryId() ? '请选择产品' : '请先选择工厂') + '</option>' + options.map(p =>
+        `<option value="${Number(p.id)}">${escapeHtml(p.name)}${p.spec ? ' (' + escapeHtml(p.spec) + ')' : ''}${p.box_size ? ' · 默认箱规' + Number(p.box_size) : ''}</option>`
+      ).join('');
+      if (selectedId && options.some(product => Number(product.id) === Number(selectedId))) sel.value = String(selectedId);
+    }
+    function syncFactoryOptions(preferredId) {
+      const brandId = selectedBrandId();
+      const allowed = packingFactories.filter(factory => (factory.brand_ids || [factory.brand_id]).map(Number).includes(Number(brandId)));
+      operationFactorySelect.innerHTML = '<option value="">' + (brandId ? '请选择工厂' : '请先选择品牌') + '</option>' + allowed.map(factory =>
+        `<option value="${Number(factory.id)}">${escapeHtml(factory.name)}</option>`).join('');
+      const desired = Number(preferredId) || 0;
+      if (desired && allowed.some(factory => Number(factory.id) === desired)) operationFactorySelect.value = String(desired);
+      else if (allowed.length === 1) operationFactorySelect.value = String(allowed[0].id);
+      renderProductOptions();
+    }
+    function updateOperationFactoryOptions(productId, selectedId) {
+      if (selectedId) syncFactoryOptions(selectedId);
+      renderProductOptions(productId);
+    }
+
+    // 加载当前账号可见产品，并按品牌和工厂联动筛选。
     (async function loadProducts() {
       try {
         const res = await fetch('/api/products');
         const data = await res.json();
         products = (data.products || []).map(p => ({
-          id: p.id, name: p.name, spec: p.spec || '', box_size: p.box_size || 0, batch_no: p.batch_no || '',
-          factory_ids: Array.isArray(p.factory_ids) ? p.factory_ids.map(Number) : []
+          id: p.id, name: p.name, spec: p.spec || '', box_size: p.box_size || 0, batch_no: p.batch_no || '', brand_id: p.brand_id,
+          factory_ids: Array.isArray(p.factory_ids) ? p.factory_ids.map(Number) : (p.factory_id ? [Number(p.factory_id)] : [])
         }));
-        renderProductOptions();
+        const last = getLastPack();
+        const brandSelect = document.getElementById('selBrand');
+        if (last?.brand_id) brandSelect.value = String(last.brand_id);
+        if (!brandSelect.value && brandSelect.options.length === 2) brandSelect.selectedIndex = 1;
+        syncFactoryOptions(last?.operation_factory_id || last?.factory_id);
+        renderProductOptions(last?.id);
       } catch (e) {
         products = [];
+        renderProductOptions();
       }
     })();
-
-    function renderProductOptions(selectedId) {
-      const sel = document.getElementById('selProduct');
-      sel.innerHTML = '<option value="">请选择产品</option>' + products.map(p =>
-        `<option value="${Number(p.id)}">${escapeHtml(p.name)}${p.spec ? ' (' + escapeHtml(p.spec) + ')' : ''}${p.box_size ? ' · 默认箱规' + Number(p.box_size) : ''}</option>`
-      ).join('');
-      if (selectedId) sel.value = String(selectedId);
-    }
-    function updateOperationFactoryOptions(productId, selectedId) {
-      if (!operationFactorySelect) return;
-      const product = products.find(row => row.id === Number(productId));
-      const allowed = new Set((product?.factory_ids || []).map(Number));
-      Array.from(operationFactorySelect.options).forEach(option => {
-        if (!option.value) return;
-        option.disabled = !allowed.has(Number(option.value));
-      });
-      const desired = Number(selectedId) || Number(operationFactorySelect.value) || 0;
-      operationFactorySelect.value = allowed.has(desired) ? String(desired) : '';
-    }
+    document.getElementById('selBrand').addEventListener('change', () => { syncFactoryOptions(); packingReady = false; updateReadyState(); });
+    operationFactorySelect.addEventListener('change', () => { renderProductOptions(); packingReady = false; updateReadyState(); loadPackRecords(); loadPackSummary(); });
 
     function setBigStatus(text, cls, iconName) {
       const el = document.getElementById('bigStatus');
@@ -733,7 +767,8 @@
         if (currentBox) {
           const bound = parseInt(document.getElementById('boundCount').textContent) || 0;
           if (boxSize > 0 && bound >= boxSize) {
-            setBigStatus(`本箱已完成（${bound}/${boxSize}），扫下一个箱码开始新箱`, 'big-full', 'check');
+            setReceiptConfirmationState(true, `已扫 ${bound}/${boxSize}，请核对后确认入库`);
+            setBigStatus(`本箱已扫满（${bound}/${boxSize}），请点击确认入库`, 'big-full', 'check');
           } else {
             setBigStatus(`正在装箱：${currentBox.box_code}（${bound}/${boxSize || '?'}）`, 'big-packing', 'box');
           }
@@ -814,12 +849,6 @@
       packingReady = false;
       updateReadyState();
     }));
-    if (operationFactorySelect) operationFactorySelect.addEventListener('change', () => {
-      packingReady = false;
-      updateReadyState();
-      loadPackRecords();
-      loadPackSummary();
-    });
 
     // 确认产品+箱规
     async function confirmProduct() {
@@ -859,7 +888,7 @@
 
       // 尚未扫码（无当前箱）：仅记录“预选”产品+箱规，供后续扫码自动沿用
       if (!currentBox) {
-        setLastPack({ id: productId, name: p ? p.name : '', box_size: size, batch_no: batch, operation_factory_id: operationFactoryId() });
+        setLastPack({ id: productId, name: p ? p.name : '', box_size: size, batch_no: batch, operation_factory_id: operationFactoryId(), factory_id: operationFactoryId(), brand_id: selectedBrandId() });
         packingReady = true;
         updateReadyState();
         playBeep('item');
@@ -881,7 +910,7 @@
       packingReady = true;
       updateReadyState();
 
-      setLastPack({ id: productId, name: p ? p.name : '', box_size: size, batch_no: batch, operation_factory_id: operationFactoryId() });
+      setLastPack({ id: productId, name: p ? p.name : '', box_size: size, batch_no: batch, operation_factory_id: operationFactoryId(), factory_id: operationFactoryId(), brand_id: selectedBrandId() });
       // 重新拉取箱信息（此时已带产品）；hideProductPanel 会自动恢复连续扫码
       await startPacking(currentBox.box_code, true);
       hideProductPanel();
@@ -908,7 +937,7 @@
     async function startPacking(boxCode, isRefresh) {
       const res = await fetch('/api/factory/pack/start', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ box_code: boxCode })
+        body: JSON.stringify(withOperationFactory({ box_code: boxCode }))
       });
       const data = await res.json();
       if (!data.success) return flashError(data.msg || '箱码不存在');
@@ -927,7 +956,7 @@
         const preBatch = document.getElementById('selBatch').value.trim();
         const last = getLastPack();
         const chosen = (preProductId && preSize && preSize > 0)
-          ? { id: preProductId, box_size: preSize, batch_no: preBatch, operation_factory_id: operationFactoryId() }
+          ? { id: preProductId, box_size: preSize, batch_no: preBatch, operation_factory_id: operationFactoryId(), factory_id: operationFactoryId(), brand_id: selectedBrandId() }
           : (last && last.id ? last : null);
         if (chosen) updateOperationFactoryOptions(chosen.id, chosen.operation_factory_id);
         if (chosen && !isRefresh) {
@@ -972,14 +1001,18 @@
 
       if (data.bound_count > 0) {
         toast(`该箱已有 ${data.bound_count} 个子码，继续扫码即可`, 'success');
-        if (boxSize > 0 && data.bound_count >= boxSize) {
-          setBigStatus(`该箱已装满（${data.bound_count}/${boxSize}），扫下一个箱码开始新箱`, 'big-full', 'check');
-          stat.boxes = stat.boxes + 1;
-          document.getElementById('statBoxes').textContent = stat.boxes;
+        if (data.receipt_confirmed) {
+          setReceiptConfirmationState(false);
+          setBigStatus(`该箱已确认入库（${data.bound_count}/${boxSize || data.bound_count}），请扫描下一箱`, 'big-full', 'check');
+        } else if (boxSize > 0 && data.bound_count >= boxSize) {
+          setReceiptConfirmationState(true, `已扫 ${data.bound_count}/${boxSize}，请核对后确认入库`);
+          setBigStatus(`本箱已扫满（${data.bound_count}/${boxSize}），请点击确认入库`, 'big-full', 'check');
         } else {
+          setReceiptConfirmationState(false);
           setBigStatus(`继续装箱：${currentBox.product_name}（${data.bound_count}/${boxSize || '?'}）`, 'big-packing', 'box');
         }
       } else {
+        setReceiptConfirmationState(false);
         setBigStatus(boxSize > 0
           ? `开始装箱：${currentBox.product_name}，请扫 ${boxSize} 个子码`
           : `开始装箱：${currentBox.product_name}（未设箱规，请先在下方填写）`, 'big-packing', 'box');
@@ -1021,12 +1054,12 @@
 
       if (data.full) {
         currentBoxCompleted = true;
-        stat.boxes++;
-        document.getElementById('statBoxes').textContent = stat.boxes;
-        setBigStatus(`本箱装箱完成（${data.bound_count}/${data.box_size}）！扫下一个箱码开始新箱`, 'big-full', 'check');
-        toast(`本箱完成！共 ${data.bound_count} 个，扫下一个箱码继续`, 'success');
-        refreshPackSummary();
+        if (scanning) { stopScanner(); scanning = false; }
+        setReceiptConfirmationState(true, `已扫 ${data.bound_count}/${data.box_size}，请核对后确认入库`);
+        setBigStatus(`本箱已扫满（${data.bound_count}/${data.box_size}），请点击确认入库`, 'big-full', 'check');
+        toast('扫码完成，请确认入库', 'success');
       } else {
+        setReceiptConfirmationState(false);
         setBigStatus(`正在装箱：${currentBox.product_name}（${data.bound_count}/${data.box_size || '?'}）`, 'big-packing', 'box');
         toast(`绑定成功 (${data.bound_count}/${data.box_size || '?'})`, 'success');
       }
@@ -1067,6 +1100,38 @@
       scanInput.focus();
     }
 
+    function setReceiptConfirmationState(visible, message) {
+      const panel = document.getElementById('confirmReceiptPanel');
+      panel.classList.toggle('is-hidden', !visible);
+      if (message) document.getElementById('confirmReceiptHint').textContent = message;
+    }
+    async function confirmReceipt() {
+      if (!currentBox) return toast('请先扫描箱码', 'error');
+      const button = document.getElementById('confirmReceiptBtn');
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/factory/pack/confirm', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(withOperationFactory({ box_code:currentBox.box_code }))
+        });
+        const data = await response.json();
+        if (!data.success) return flashError(data.msg || '确认入库失败');
+        stat.boxes++;
+        document.getElementById('statBoxes').textContent = stat.boxes;
+        setReceiptConfirmationState(false);
+        setBigStatus(`确认入库成功：${data.box_code}（${data.item_count}/${data.box_size}）`, 'big-full', 'check');
+        toast('确认入库成功，请扫描下一箱', 'success');
+        await Promise.all([loadPackRecords(), refreshPackSummary()]);
+        currentBox = null;
+        currentBoxCompleted = false;
+        boxSize = 0;
+        document.getElementById('boxPanel').classList.add('is-hidden');
+        scanInput.focus();
+      } finally {
+        button.disabled = false;
+      }
+    }
+
     function updateItemList(items) {
       const list = document.getElementById('itemList');
       document.getElementById('boundCount').textContent = items.length;
@@ -1102,7 +1167,7 @@
         document.getElementById('prBoxCount').textContent = st.box_count ?? 0;
         document.getElementById('prErrorCount').textContent = st.error_count ?? 0;
         const records = data.records || [];
-        const actionText = { nobox: '无箱码入库', nobox_cancel: '取消无箱码入库', bind: '绑定子码', box_full: '装箱完成', error: '扫码失败' };
+        const actionText = { nobox: '无箱码入库', nobox_cancel: '取消无箱码入库', bind: '绑定子码', box_full: '装箱完成', receipt_confirm: '确认入库', error: '扫码失败' };
         list.innerHTML = records.length ? records.map(row => `
           <tr>
             <td class="small-text">${escapeHtml(row.created_at || '-')}</td>
@@ -1220,6 +1285,7 @@
     document.getElementById('confirmProductBtn').addEventListener('click', confirmProduct);
     document.getElementById('cancelProductBtn').addEventListener('click', cancelProductEdits);
     document.getElementById('applyBoxSizeBtn').addEventListener('click', applyBoxSize);
+    document.getElementById('confirmReceiptBtn').addEventListener('click', confirmReceipt);
     document.getElementById('changeProductBtn').addEventListener('click', changeProduct);
   </script>
 </body>

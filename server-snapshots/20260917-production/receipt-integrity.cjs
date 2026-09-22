@@ -7,11 +7,15 @@ module.exports = function receiptIntegrity(db) {
       const cols = db.pragma(`table_info(${table})`).map(c => c.name);
       if (!cols.includes('receipt_factory_id')) db.exec(`ALTER TABLE ${table} ADD COLUMN receipt_factory_id INTEGER`);
     }
+    const boxCols = db.pragma('table_info(boxes)').map(c => c.name);
+    if (!boxCols.includes('receipt_confirmed_at')) db.exec('ALTER TABLE boxes ADD COLUMN receipt_confirmed_at TEXT');
+    if (!boxCols.includes('receipt_confirmed_by')) db.exec('ALTER TABLE boxes ADD COLUMN receipt_confirmed_by INTEGER');
     const cols = db.pragma('table_info(pack_records)').map(c => c.name);
     if (!cols.includes('product_id')) db.exec('ALTER TABLE pack_records ADD COLUMN product_id INTEGER');
     if (!cols.includes('batch_no')) db.exec('ALTER TABLE pack_records ADD COLUMN batch_no TEXT');
     db.exec(`CREATE INDEX IF NOT EXISTS idx_pack_item_history ON pack_records(item_code,id);
-      CREATE INDEX IF NOT EXISTS idx_pack_receipt_scope ON pack_records(brand_id,receipt_factory_id,id);`);
+      CREATE INDEX IF NOT EXISTS idx_pack_receipt_scope ON pack_records(brand_id,receipt_factory_id,id);
+      CREATE INDEX IF NOT EXISTS idx_boxes_receipt_confirmed ON boxes(receipt_confirmed_at,receipt_factory_id);`);
     db.exec('CREATE TABLE IF NOT EXISTS receipt_schema_migrations (version TEXT PRIMARY KEY)');
     // Freeze current receipt ownership once. Do not change historical product/brand/batch values.
     if (!db.prepare('SELECT 1 FROM receipt_schema_migrations WHERE version=?').get('20260917-owner-v1')) db.exec(`UPDATE items SET receipt_factory_id=COALESCE(
@@ -28,6 +32,14 @@ module.exports = function receiptIntegrity(db) {
        AND EXISTS(SELECT 1 FROM items i WHERE i.item_code=pack_records.item_code AND i.boxed_at IS NOT NULL
          AND datetime(i.boxed_at)=datetime(pack_records.created_at));
       INSERT INTO receipt_schema_migrations(version) VALUES('20260917-owner-v1');`);
+    // Existing bound boxes were considered inbound before the explicit confirmation step existed.
+    // Mark them once so deployment does not hide or block historical stock.
+    if (!db.prepare('SELECT 1 FROM receipt_schema_migrations WHERE version=?').get('20260922-confirm-v1')) db.exec(`
+      UPDATE boxes SET receipt_confirmed_at=COALESCE(
+        (SELECT MAX(i.boxed_at) FROM items i WHERE i.box_id=boxes.id), created_at)
+      WHERE receipt_confirmed_at IS NULL AND EXISTS(SELECT 1 FROM items i WHERE i.box_id=boxes.id);
+      INSERT INTO receipt_schema_migrations(version) VALUES('20260922-confirm-v1');
+    `);
     for (const table of ['items', 'boxes']) {
       for (const event of ['INSERT', 'UPDATE OF product_id,brand_id,batch_no' + (table === 'items' ? ',box_id' : '')]) {
         const suffix = event.startsWith('INSERT') ? 'insert' : 'update';
@@ -70,7 +82,7 @@ module.exports = function receiptIntegrity(db) {
         return res.status(status).json(body);
       } catch (error) {
         const conflict = /RECEIPT_.*CONFLICT/.test(error.message);
-        console.error(JSON.stringify({ event: 'receipt_transaction_rolled_back', code: error.code || 'ERROR', requestId: req.requestId }));
+        console.error(JSON.stringify({ event: 'receipt_transaction_rolled_back', code: error.code || 'ERROR', requestId: req.requestId, message: error.message }));
         return res.status(conflict ? 409 : 500).json({ success: false,
           code: conflict ? 'RECEIPT_DATA_CONFLICT' : 'RECEIPT_WRITE_FAILED',
           msg: conflict ? '商品、品牌或批次存在冲突，本次未修改，请核对码的原始资料' : '保存失败，本次操作已回滚，请核对记录后重试' });

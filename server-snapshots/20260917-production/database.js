@@ -693,6 +693,22 @@ function initDatabase() {
     }
   }
 
+  // 工厂可同时服务多个品牌。factories.brand_id 继续保留为兼容旧接口的主品牌，
+  // 新增/编辑品牌与权限判断以本关联表为准。
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS factory_brands (
+      factory_id INTEGER NOT NULL,
+      brand_id INTEGER NOT NULL,
+      created_at TEXT DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (factory_id, brand_id),
+      FOREIGN KEY (factory_id) REFERENCES factories(id) ON DELETE CASCADE,
+      FOREIGN KEY (brand_id) REFERENCES brands(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_factory_brands_brand ON factory_brands(brand_id, factory_id);
+  `);
+  db.prepare(`INSERT OR IGNORE INTO factory_brands (factory_id, brand_id)
+    SELECT id, brand_id FROM factories WHERE brand_id IS NOT NULL`).run();
+
   // 产品可由同一品牌下的多个工厂共同生产。保留 products.factory_id 作为
   // 旧客户端兼容的“主工厂”，实际授权与展示以本关联表为准。
   db.exec(`
@@ -711,14 +727,22 @@ function initDatabase() {
       BEFORE INSERT ON product_factories
       WHEN NOT EXISTS (
         SELECT 1 FROM products p JOIN factories f ON f.id=NEW.factory_id
-        WHERE p.id=NEW.product_id AND p.brand_id IS NOT NULL AND f.brand_id IS NOT NULL AND p.brand_id=f.brand_id
+        WHERE p.id=NEW.product_id AND p.brand_id IS NOT NULL AND (
+          p.brand_id=f.brand_id OR EXISTS (
+            SELECT 1 FROM factory_brands fb WHERE fb.factory_id=f.id AND fb.brand_id=p.brand_id
+          )
+        )
       )
       BEGIN SELECT RAISE(ABORT, 'PRODUCT_FACTORY_BRAND_CONFLICT'); END;
     CREATE TRIGGER product_factories_brand_guard_update
       BEFORE UPDATE OF product_id, factory_id ON product_factories
       WHEN NOT EXISTS (
         SELECT 1 FROM products p JOIN factories f ON f.id=NEW.factory_id
-        WHERE p.id=NEW.product_id AND p.brand_id IS NOT NULL AND f.brand_id IS NOT NULL AND p.brand_id=f.brand_id
+        WHERE p.id=NEW.product_id AND p.brand_id IS NOT NULL AND (
+          p.brand_id=f.brand_id OR EXISTS (
+            SELECT 1 FROM factory_brands fb WHERE fb.factory_id=f.id AND fb.brand_id=p.brand_id
+          )
+        )
       )
       BEGIN SELECT RAISE(ABORT, 'PRODUCT_FACTORY_BRAND_CONFLICT'); END;
   `);
