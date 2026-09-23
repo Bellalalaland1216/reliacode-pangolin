@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/css/style.css?v=20260901c">
   <link rel="stylesheet" href="/css/clawmaster.css?v=20260903a">
 </head>
-<body>
+<body class="profile-page-body <%= user.role === 'AUDIT_VIEWER' ? 'is-readonly-profile' : '' %>">
   <%- include('partials/boot-loader') %>
   <%- include('partials/nav', { active: 'profile' }) %>
 
@@ -18,7 +18,7 @@
     <section class="profile-identity" aria-labelledby="profileTitle">
       <div class="profile-avatar"><%= (user.display_name || user.username).slice(0,1).toUpperCase() %></div>
       <div>
-        <h1 id="profileTitle"><%= user.display_name %></h1>
+        <h1 id="profileTitle"><%= user.role === 'AUDIT_VIEWER' ? '只读体验账号' : user.display_name %></h1>
         <dl class="profile-facts">
           <div><dt>登录账号</dt><dd><%= user.username %></dd></div>
           <div><dt>账号角色</dt><dd><%= roleNames[user.role] || user.role %></dd></div>
@@ -26,6 +26,18 @@
       </div>
     </section>
 
+    <% if (user.role === 'AUDIT_VIEWER') { %>
+    <section class="profile-password-panel profile-access-panel" aria-labelledby="accessTitle">
+      <header class="profile-password-head">
+        <div><h2 id="accessTitle">账号权限</h2><p>体验账号用于查看平台当前的业务数据和页面效果。</p></div>
+        <span class="profile-readonly-badge">只读</span>
+      </header>
+      <div class="profile-access-grid">
+        <div><%- icon('check') %><span><strong>可以查看</strong><small>业务数据、扫码日志、预警和品牌信息</small></span></div>
+        <div><%- icon('lock') %><span><strong>操作受限</strong><small>新增、修改、删除和数据库备份需要管理员账号</small></span></div>
+      </div>
+    </section>
+    <% } else { %>
     <section class="profile-password-panel" aria-labelledby="passwordTitle">
       <header class="profile-password-head">
         <h2 id="passwordTitle">修改密码</h2>
@@ -59,8 +71,10 @@
         <button class="btn btn-primary" id="changePwdBtn" type="button">保存新密码</button>
       </div>
     </section>
+    <% } %>
   </main>
 
+  <% if (user.role !== 'AUDIT_VIEWER') { %>
   <script nonce="<%= cspNonce %>">
     function toast(msg, type) {
       const t = document.createElement('div');
@@ -147,5 +161,6 @@
     });
     document.getElementById('changePwdBtn').addEventListener('click', changePwd);
   </script>
+  <% } %>
 </body>
 </html>

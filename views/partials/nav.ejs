@@ -6,7 +6,7 @@
   const roleText = { AUDIT_VIEWER: '只读体验账号', member: '普通用户', admin: '平台管理员', brand: '品牌管理员', brand_staff: '品牌工作账号', factory: '工厂', warehouse: '品牌方', distributor: '代理商' };
 %>
 <link rel="stylesheet" href="/css/workflow-layout.css?v=20260920-interaction-v5">
-<link rel="stylesheet" href="/css/woodland-admin.css?v=20260920-elephant-v9">
+<link rel="stylesheet" href="/css/woodland-admin.css?v=20260923-ui-v10">
 <script src="/js/workspace-ui.js?v=20260920-elephant-v9"></script>
 <header class="topbar">
   <div class="topbar-inner">
@@ -33,6 +33,15 @@
 
     <% if (u) { %>
       <div class="topbar-right">
+        <% if (u.role === 'AUDIT_VIEWER') { %>
+        <details class="readonly-mode">
+          <summary aria-label="查看只读体验账号权限说明">只读模式</summary>
+          <div id="readonlyAccountNotice" class="readonly-mode-popover" role="status">
+            <strong>当前为只读体验账号</strong>
+            <span>可以查看业务数据；新增、修改、删除和数据库备份仅限独立管理员账号。</span>
+          </div>
+        </details>
+        <% } %>
         <details class="company-suite desktop-only">
           <summary aria-label="打开 ClawMaster 平台切换器">切换平台</summary>
           <div class="company-suite-menu">
@@ -55,10 +64,7 @@
   </div>
 </header>
 <% if (u && u.role === 'AUDIT_VIEWER') { %>
-<div id="readonlyAccountNotice" class="readonly-account-notice" role="status">只读体验账号 · 可查看业务数据，不能新增、修改、删除或下载数据库备份。需要操作时请使用独立管理员账号。</div>
-<script nonce="<%= cspNonce %>" src="/js/readonly-ui.js?v=20260917-flow" defer></script>
-<style nonce="<%= cspNonce %>">[data-readonly-blocked]{opacity:.55;cursor:not-allowed!important}.readonly-account-notice{overflow-wrap:anywhere}</style>
-<style nonce="<%= cspNonce %>">.readonly-account-notice{margin:12px auto;padding:12px 16px;max-width:1200px;border:1px solid #d9ded8;border-radius:8px;background:#f5f6f3;color:#161a17;font:14px/1.6 system-ui;box-sizing:border-box}@media(max-width:768px){.readonly-account-notice{margin:12px 16px}}</style>
+<script nonce="<%= cspNonce %>" src="/js/readonly-ui.js?v=20260923-ui-v2" defer></script>
 <% } %>
 
 <%- include('bottom-nav', { active: active, alertsUnread: alertsUnread }) %>
