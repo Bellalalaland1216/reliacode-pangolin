@@ -90,8 +90,7 @@ body::before {
 .topnav a:hover::after,
 .topnav a.active::after { right: 0; left: 0; }
 .tn-badge,
-.bn-badge,
-.app-badge::after { background: var(--wood-danger) !important; }
+.bn-badge { background: var(--wood-danger) !important; }
 .topbar-right { gap: 12px !important; }
 .avatar-circle {
   color: var(--wood-green-dark) !important;
@@ -299,6 +298,27 @@ body::before {
   transform: none !important;
 }
 .app-tile .app-icon .ui-icon { width: 21px !important; height: 21px !important; color: currentColor !important; }
+.app-tile .app-icon { position: relative; overflow: visible; }
+.app-tile .app-badge {
+  position: absolute !important;
+  top: -8px;
+  right: -8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  color: #fff;
+  background: var(--wood-danger) !important;
+  border: 2px solid #effaf5;
+  border-radius: 999px;
+  box-shadow: 0 4px 10px rgba(129, 43, 43, .18);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+.app-tile .app-badge::after { content: none !important; display: none !important; }
 .app-tile .app-label { color: inherit !important; font-size: 14px !important; font-weight: 650 !important; }
 .app-tile .app-desc { margin: 0 !important; font-size: 11px !important; }
 
@@ -1471,6 +1491,9 @@ main.users-page > section.management-invitations.card { border: 1px dashed #7fb6
   .verify-input-row .btn,
   .codes-query-row .btn { width: 100%; }
   .shipment-records-module .form-group { width: 100%; margin-right: 0 !important; }
+  /* 发货明细共 10 列：手机上靠横向滑动看全，避免右侧列被整页裁掉。 */
+  .shipment-records-module .ship-detail-scroll { margin-inline: -16px; padding-inline: 16px; }
+  .shipment-records-module .ship-detail-scroll > #shipTable { min-width: 820px; }
   .inline-control-row { width: 100%; flex-wrap: wrap; }
   .inline-control-row .compact-select { flex: 1; min-width: 0; }
 }

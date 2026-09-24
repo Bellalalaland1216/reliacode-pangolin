@@ -1,0 +1,29 @@
+<% const backButtonFixed = typeof fixed !== 'undefined' && fixed; %>
+<button type="button" id="globalPageBack" class="global-page-back<%= backButtonFixed ? ' is-fixed' : '' %>" aria-label="返回上一页" title="返回上一页">
+  <svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true">
+    <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</button>
+<style nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+  .global-page-back{display:inline-grid;place-items:center;flex:0 0 40px;width:40px;height:40px;margin-right:10px;padding:0;border:1px solid #d9ded8;border-radius:8px;background:#fff;color:#161a17;cursor:pointer;transition:background-color .15s,border-color .15s}
+  .global-page-back:hover{background:#f5f6f3;border-color:#aeb7b0}
+  .global-page-back:focus-visible{outline:3px solid #2f6b4f;outline-offset:2px}
+  .global-page-back.is-fixed{position:fixed;z-index:10050;top:12px;left:12px;margin:0;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+</style>
+<script nonce="<%= typeof cspNonce !== 'undefined' ? cspNonce : '' %>">
+  (function(){
+    const button=document.getElementById('globalPageBack');
+    if(!button)return;
+    button.addEventListener('click',function(){
+      if(window.history.length>1){window.history.back();return;}
+      const path=window.location.pathname.replace(/\/$/,'')||'/';
+      const fallback={
+        '/admin/business':'/','/generate':'/admin/business','/downloads':'/admin/business','/codes':'/admin/business',
+        '/users':'/admin/business','/distributors':'/admin/business','/logs':'/admin/business','/settings':'/admin/business',
+        '/factory':'/profile','/warehouse':'/profile','/profile':'/','/admin/me':'/','/alerts':'/','/brand-check':'/',
+        '/portal':'/','/member':'/','/login':'/','/register':'/','/verify':'/','/print':'/generate'
+      };
+      window.location.assign(fallback[path]||'/');
+    });
+  })();
+</script>

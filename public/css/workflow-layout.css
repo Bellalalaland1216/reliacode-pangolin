@@ -511,3 +511,13 @@ body {
     transition-duration: .01ms !important;
   }
 }
+
+/* ==== 2026-09-21 品牌方发货 / 工厂管理（CSP 禁止内联样式，统一用类） ==== */
+.ship-query-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 14px; }
+.ship-query-grid .form-group { margin-bottom: 0; }
+.ship-query-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0 4px; }
+.scanner-manual { display: flex; gap: 8px; padding: 10px 16px; background: rgba(0, 0, 0, .55); }
+.scanner-manual .form-control { flex: 1 1 auto; }
+.scanner-actions { display: flex; gap: 8px; justify-content: center; padding: 8px; }
+.factory-brand-box { max-height: 220px; overflow: auto; padding: 4px 2px; }
+.factory-brand-option { display: flex; align-items: center; gap: 6px; margin: 4px 0; }

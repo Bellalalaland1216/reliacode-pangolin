@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ClawMaster / 首页 - <%= brand %></title>
   <link rel="stylesheet" href="/css/style.css?v=20260901c">
-  <link rel="stylesheet" href="/css/clawmaster.css?v=20260903a">
+  <link rel="stylesheet" href="/css/clawmaster.css?v=20260917-hardening-v2">
 </head>
 <body>
   <%- include('partials/boot-loader') %>
@@ -15,6 +15,7 @@
   <div class="container">
     <div class="page-header">
       <h1>首页</h1>
+      <p>先看经营与扫码数据，再处理今天的工作。</p>
     </div>
 
     <!-- 数据概览 -->
@@ -70,30 +71,49 @@
       </div>
     </div>
 
-    <!-- 快捷功能入口（App 图标网格） -->
+    <!-- 操作入口位于数据看板之后，首屏优先呈现经营信息 -->
     </div>
 
-    <div class="section-title">快捷功能</div>
+    <section class="home-primary-actions" aria-labelledby="homePrimaryActionsTitle">
+      <div class="section-title" id="homePrimaryActionsTitle">常用操作</div>
+      <div class="app-grid">
+        <a href="/factory" class="app-tile">
+          <span class="app-icon teal"><%- icon('box') %></span>
+          <span class="app-label">工厂装箱</span>
+        </a>
+        <a href="/warehouse" class="app-tile">
+          <span class="app-icon green"><%- icon('truck') %></span>
+          <span class="app-label">品牌发货</span>
+        </a>
+        <a href="/downloads" class="app-tile">
+          <span class="app-icon purple"><%- icon('download') %></span>
+          <span class="app-label">生产码包</span>
+        </a>
+        <a href="/generate#generate" class="app-tile">
+          <span class="app-icon purple"><%- icon('plus') %></span>
+          <span class="app-label">普通生码</span>
+        </a>
+        <a href="/codes" class="app-tile">
+          <span class="app-icon red"><%- icon('database') %></span>
+          <span class="app-label">码档案</span>
+        </a>
+        <a href="/brand-check" class="app-tile">
+          <span class="app-icon orange"><%- icon('search') %></span>
+          <span class="app-label">扫码查验</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- 低频管理入口 -->
+    <div class="section-title">管理工具</div>
     <div class="app-grid">
       <a href="/admin/business" class="app-tile">
         <span class="app-icon blue"><%- icon('grid') %></span>
         <span class="app-label">业务中心</span>
       </a>
-      <a href="/generate" class="app-tile">
-        <span class="app-icon purple"><%- icon('plus') %></span>
-        <span class="app-label">生成码</span>
-      </a>
-      <a href="/codes" class="app-tile">
-        <span class="app-icon red"><%- icon('database') %></span>
-        <span class="app-label">码查询</span>
-      </a>
-      <a href="/factory" class="app-tile">
-        <span class="app-icon teal"><%- icon('box') %></span>
-        <span class="app-label">工厂装箱</span>
-      </a>
-      <a href="/warehouse" class="app-tile">
-        <span class="app-icon green"><%- icon('truck') %></span>
-        <span class="app-label">品牌发货</span>
+      <a href="/generate#products" class="app-tile">
+        <span class="app-icon purple"><%- icon('tag') %></span>
+        <span class="app-label">产品档案</span>
       </a>
       <a href="/distributors" class="app-tile">
         <span class="app-icon orange"><%- icon('handshake') %></span>
@@ -102,7 +122,7 @@
       <a href="/alerts" class="app-tile">
         <span class="app-icon red">
           <%- icon('bell') %>
-          <% if (alertsUnread > 0) { %><span class="app-badge" data-count="<%= alertsUnread %>"></span><% } %>
+          <% if (alertsUnread > 0) { %><span class="app-badge" aria-label="<%= alertsUnread %> 条未处理预警"><%= alertsUnread > 99 ? '99+' : alertsUnread %></span><% } %>
         </span>
         <span class="app-label">预警中心</span>
       </a>
